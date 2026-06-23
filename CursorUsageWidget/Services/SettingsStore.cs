@@ -6,9 +6,7 @@ namespace CursorUsageWidget.Services;
 
 public static class SettingsStore
 {
-    private static readonly string SettingsDir = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "cursor-usage-widget");
+    private static readonly string SettingsDir = PlatformPaths.SettingsDirectory;
 
     private static readonly string SettingsPath = Path.Combine(SettingsDir, "settings.json");
 

@@ -56,7 +56,7 @@ https://dotnet.microsoft.com/download/dotnet/8.0
 }
 
 function Get-BuiltExePath {
-    Join-Path $PSScriptRoot 'CursorUsageWidget\bin\Release\net8.0-windows\CursorUsageWidget.exe'
+    Join-Path $PSScriptRoot 'CursorUsageWidget\bin\Release\net8.0\CursorUsageWidget.exe'
 }
 
 if (-not (Test-DotNetSdk)) {
@@ -64,18 +64,17 @@ if (-not (Test-DotNetSdk)) {
 }
 
 $exePath = Get-BuiltExePath
-$projectFile = Join-Path $PSScriptRoot 'CursorUsageWidget\CursorUsageWidget.csproj'
 
 if (-not (Test-Path $exePath)) {
     Write-Step 'First run: building Cursor Usage Widget...'
-    dotnet build $projectFile -c Release --nologo -v q
+    dotnet build CursorUsageWidget.sln -c Release --nologo -v q
     if ($LASTEXITCODE -ne 0) {
         throw "Build failed (exit code $LASTEXITCODE)."
     }
 }
 else {
     Write-Step 'Rebuilding to pick up any changes...'
-    dotnet build $projectFile -c Release --nologo -v q
+    dotnet build CursorUsageWidget.sln -c Release --nologo -v q
     if ($LASTEXITCODE -ne 0) {
         throw "Build failed (exit code $LASTEXITCODE)."
     }

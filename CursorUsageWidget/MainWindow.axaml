@@ -1,16 +1,17 @@
-<Window x:Class="CursorUsageWidget.MainWindow"
-        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+<Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="CursorUsageWidget.MainWindow"
         Title="Cursor Usage"
         Width="230"
         SizeToContent="Height"
-        WindowStyle="None"
-        AllowsTransparency="True"
+        ExtendClientAreaChromeHints="NoChrome"
+        ExtendClientAreaToDecorationsHint="True"
+        TransparencyLevelHint="Transparent"
         Background="Transparent"
-        ResizeMode="NoResize"
+        CanResize="False"
         ShowInTaskbar="False"
         Topmost="True"
-        MouseLeftButtonDown="Window_MouseLeftButtonDown">
+        PointerPressed="Window_PointerPressed">
     <Border x:Name="PillBorder"
             CornerRadius="10"
             Background="#E6181818"
@@ -33,19 +34,12 @@
                            Margin="0,0,7,0"
                            VerticalAlignment="Center" />
                 <TextBlock Text="Deez Fuel Guage"
-                           FontFamily="Bahnschrift SemiBold, Bahnschrift, Segoe UI Semibold, Segoe UI, sans-serif"
+                           FontFamily="Segoe UI Semibold, Segoe UI, sans-serif"
                            FontSize="13"
                            FontWeight="SemiBold"
                            LineHeight="18"
                            Foreground="#FF00E5FF"
-                           VerticalAlignment="Center">
-                    <TextBlock.Effect>
-                        <DropShadowEffect Color="#FF00E5FF"
-                                          BlurRadius="8"
-                                          ShadowDepth="0"
-                                          Opacity="0.55" />
-                    </TextBlock.Effect>
-                </TextBlock>
+                           VerticalAlignment="Center" />
             </StackPanel>
             <TextBlock x:Name="PercentText"
                        Text="..."
@@ -62,7 +56,7 @@
                            Grid.Column="0"
                            VerticalAlignment="Center"
                            Margin="0,0,8,0"
-                           FontFamily="Bahnschrift, Segoe UI Semibold, Segoe UI, sans-serif"
+                           FontFamily="Segoe UI Semibold, Segoe UI, sans-serif"
                            FontSize="11"
                            FontWeight="SemiBold"
                            Foreground="#FFB0B0B0" />
@@ -83,28 +77,35 @@
                        FontSize="11"
                        LineHeight="15"
                        Foreground="#FFB0B0B0" />
-            <TextBlock FontSize="8.5"
-                       LineHeight="12"
-                       Foreground="#44FFFFFF"
-                       Margin="0,9,0,0"
-                       HorizontalAlignment="Center"
-                       TextAlignment="Center"
-                       TextWrapping="Wrap">
-                <Run Text="built by " />
-                <Hyperlink NavigateUri="https://deac.online"
-                           RequestNavigate="FooterLink_RequestNavigate"
+            <StackPanel Orientation="Horizontal"
+                        Margin="0,9,0,0"
+                        HorizontalAlignment="Center"
+                        Spacing="0">
+                <TextBlock Text="built by "
+                           FontSize="8.5"
+                           LineHeight="12"
+                           Foreground="#44FFFFFF"
+                           VerticalAlignment="Center" />
+                <TextBlock Text="deac.online"
+                           FontSize="8.5"
+                           LineHeight="12"
                            Foreground="#55AAAAAA"
-                           TextDecorations="None">
-                    deac.online
-                </Hyperlink>
-                <Run Text=" @ " />
-                <Hyperlink NavigateUri="https://worldbuild.io"
-                           RequestNavigate="FooterLink_RequestNavigate"
+                           Cursor="Hand"
+                           VerticalAlignment="Center"
+                           PointerPressed="DeacLink_PointerPressed" />
+                <TextBlock Text=" @ "
+                           FontSize="8.5"
+                           LineHeight="12"
+                           Foreground="#44FFFFFF"
+                           VerticalAlignment="Center" />
+                <TextBlock Text="worldbuild.io"
+                           FontSize="8.5"
+                           LineHeight="12"
                            Foreground="#55AAAAAA"
-                           TextDecorations="None">
-                    worldbuild.io
-                </Hyperlink>
-            </TextBlock>
+                           Cursor="Hand"
+                           VerticalAlignment="Center"
+                           PointerPressed="WorldbuildLink_PointerPressed" />
+            </StackPanel>
         </StackPanel>
     </Border>
 </Window>

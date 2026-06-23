@@ -1,10 +1,10 @@
 using System.Diagnostics;
-using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Navigation;
-using System.Windows.Threading;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Input;
+using Avalonia.Interactivity;
+using Avalonia.Media;
+using Avalonia.Threading;
 using CursorUsageWidget.Models;
 using CursorUsageWidget.Services;
 
@@ -21,9 +21,10 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
+        SystemDecorations = SystemDecorations.None;
+
         var settings = SettingsStore.Load();
-        Left = settings.Left;
-        Top = settings.Top;
+        Position = new PixelPoint((int)settings.Left, (int)settings.Top);
 
         _pollTimer = new DispatcherTimer
         {
@@ -32,32 +33,43 @@ public partial class MainWindow : Window
         _pollTimer.Tick += async (_, _) => await RefreshAsync();
         _pollTimer.Start();
 
-        Loaded += async (_, _) => await RefreshAsync();
+        Opened += async (_, _) => await RefreshAsync();
         SizeChanged += (_, _) => UpdateProgressWidth(_lastPercentUsed);
-        LocationChanged += (_, _) => SavePosition();
+        PositionChanged += (_, _) => SavePosition();
         Closing += (_, _) => SavePosition();
     }
 
-    private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    private void Window_PointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (e.ChangedButton == MouseButton.Left)
-            DragMove();
+        if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+            BeginMoveDrag(e);
     }
 
-    private async void RefreshMenuItem_Click(object sender, RoutedEventArgs e)
+    private async void RefreshMenuItem_Click(object? sender, RoutedEventArgs e)
     {
         await RefreshAsync();
     }
 
-    private void QuitMenuItem_Click(object sender, RoutedEventArgs e)
+    private void QuitMenuItem_Click(object? sender, RoutedEventArgs e)
     {
         Close();
     }
 
-    private void FooterLink_RequestNavigate(object sender, RequestNavigateEventArgs e)
+    private void DeacLink_PointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        Process.Start(new ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true });
+        OpenUrl("https://deac.online");
         e.Handled = true;
+    }
+
+    private void WorldbuildLink_PointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        OpenUrl("https://worldbuild.io");
+        e.Handled = true;
+    }
+
+    private static void OpenUrl(string url)
+    {
+        Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
     }
 
     private async Task RefreshAsync()
@@ -108,7 +120,7 @@ public partial class MainWindow : Window
 
     private void UpdateProgressWidth(double percentUsed)
     {
-        var trackWidth = ProgressTrack.ActualWidth;
+        var trackWidth = ProgressTrack.Bounds.Width;
         if (trackWidth <= 0)
             return;
 
@@ -128,8 +140,8 @@ public partial class MainWindow : Window
     {
         SettingsStore.Save(new WidgetSettings
         {
-            Left = Left,
-            Top = Top
+            Left = Position.X,
+            Top = Position.Y
         });
     }
 

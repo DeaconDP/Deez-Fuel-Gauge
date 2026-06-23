@@ -15,9 +15,13 @@ concurrency:
 
 jobs:
   test:
-    name: test
-    runs-on: windows-latest
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
 
     steps:
       - name: Check out repository
@@ -33,3 +37,6 @@ jobs:
 
       - name: Build
         run: dotnet build CursorUsageWidget.sln -c Release --no-restore
+
+      - name: Test
+        run: dotnet test CursorUsageWidget.sln -c Release --no-build
