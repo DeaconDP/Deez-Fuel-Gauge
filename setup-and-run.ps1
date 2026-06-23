@@ -39,7 +39,7 @@ function Install-DotNetSdk {
         throw @"
 .NET 8 SDK (or newer) is required but was not found, and winget is not available.
 
-Install the SDK manually, then run this script again:
+Install the SDK from the page that opens, then double-click setup-and-run.bat again:
 https://dotnet.microsoft.com/download/dotnet/8.0
 "@
     }

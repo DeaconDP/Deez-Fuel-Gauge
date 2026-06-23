@@ -12,46 +12,18 @@ Runs on **Windows 10/11** and **macOS**.
 
 ## One-click setup & run
 
-**Windows:** double-click **`setup-and-run.bat`** in this folder.
+Double-click the launcher for your platform:
 
-**macOS:** in Terminal, run:
+| Platform | File |
+|----------|------|
+| Windows | **`setup-and-run.bat`** |
+| macOS | **`setup-and-run.app`** |
 
-```bash
-chmod +x setup-and-run.sh
-./setup-and-run.sh
-```
+On first run it builds the widget and launches it. Later runs rebuild and start the widget.
 
-On first run the script builds the widget and launches it. Later runs rebuild and start the widget.
-
-On Windows, `setup-and-run.bat` can install the .NET 8 SDK via winget if needed.
-
-## Build & run (manual)
-
-```bash
-cd cursor-usage-widget
-dotnet build
-dotnet run --project CursorUsageWidget
-```
-
-## Publish (single executable)
-
-**Windows:**
-
-```powershell
-dotnet publish CursorUsageWidget -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true
-```
-
-Output: `CursorUsageWidget/bin/Release/net8.0/win-x64/publish/CursorUsageWidget.exe`
-
-**macOS (Apple Silicon):**
-
-```bash
-dotnet publish CursorUsageWidget -c Release -r osx-arm64 --self-contained false -p:PublishSingleFile=true
-```
-
-Output: `CursorUsageWidget/bin/Release/net8.0/osx-arm64/publish/CursorUsageWidget`
-
-**macOS (Intel):** use `-r osx-x64` instead of `osx-arm64`.
+- **Windows:** if .NET 8 is missing, the launcher can install it via winget.
+- **macOS:** if .NET 8 is missing, the launcher opens the official download page in your browser.
+- **macOS:** if macOS blocks the launcher the first time, right-click **`setup-and-run.app`** and choose **Open**.
 
 ## Usage
 
@@ -71,15 +43,15 @@ Output: `CursorUsageWidget/bin/Release/net8.0/osx-arm64/publish/CursorUsageWidge
 
 **Windows**
 
-1. Publish or build the executable.
+1. Build the widget once using **`setup-and-run.bat`**.
 2. Press `Win+R`, type `shell:startup`, press Enter.
-3. Create a shortcut to `CursorUsageWidget.exe` in that folder.
+3. Create a shortcut to `CursorUsageWidget\bin\Release\net8.0\CursorUsageWidget.exe` in that folder.
 
 **macOS**
 
-1. Publish or build the app.
+1. Build the widget once using **`setup-and-run.app`**.
 2. Open **System Settings → General → Login Items**.
-3. Add `CursorUsageWidget` (or a shell script that runs it).
+3. Add `CursorUsageWidget/bin/Release/net8.0/CursorUsageWidget`.
 
 ## How it works
 
