@@ -2,48 +2,33 @@
 
 A lightweight, draggable Windows overlay that shows how much of your Cursor included usage cap you've used.
 
-## Install
-
-Download **`cursor-usage-widget-win-Setup.exe`** from the [latest release](https://github.com/USER/cursor-usage-widget/releases/latest) and run it.
-
-The installer is also committed in [`Releases/`](Releases/) (tracked with Git LFS). If you clone the repo to get the installer directly, install [Git LFS](https://git-lfs.com/) first:
-
-```powershell
-git lfs install
-git clone https://github.com/USER/cursor-usage-widget.git
-```
-
 ## Requirements
 
 - Windows 10/11
+- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
 - Cursor IDE logged in on the same Windows profile
 
-Developers also need the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0).
+## One-click setup & run
 
-## Build & run
+Double-click **`setup-and-run.bat`** in this folder.
+
+On first run it will install the .NET 8 SDK via winget if needed, build the widget, and launch it. Later runs rebuild and start the widget.
+
+## Build & run (manual)
 
 ```powershell
+cd C:\Projects\Cursor\cursor-usage-widget
 dotnet build
 dotnet run --project CursorUsageWidget
 ```
 
-## Build installer (Setup.exe)
+## Publish (single exe)
 
 ```powershell
-.\scripts\build-release.ps1
+dotnet publish CursorUsageWidget -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true
 ```
 
-This publishes a self-contained app and packages it with [Velopack](https://docs.velopack.io/) into `Releases/`:
-
-- `cursor-usage-widget-win-Setup.exe` — Windows installer
-- `cursor-usage-widget-1.0.0-full.nupkg` — full update package
-- `cursor-usage-widget-win-Portable.zip` — portable build
-
-Pass an explicit version if needed:
-
-```powershell
-.\scripts\build-release.ps1 -Version 1.0.1
-```
+The executable will be at `CursorUsageWidget\bin\Release\net8.0-windows\win-x64\publish\CursorUsageWidget.exe`.
 
 ## Usage
 
@@ -54,7 +39,7 @@ Pass an explicit version if needed:
 
 ## Optional: run at Windows startup
 
-1. Install via Setup.exe (or build the app).
+1. Publish or build the exe.
 2. Press `Win+R`, type `shell:startup`, press Enter.
 3. Create a shortcut to `CursorUsageWidget.exe` in that folder.
 
@@ -70,7 +55,3 @@ Pass an explicit version if needed:
 - Uses **undocumented** Cursor endpoints that may change or break without notice.
 - Not affiliated with or endorsed by Cursor.
 - Your access token is read locally and sent only to `api2.cursor.sh` over HTTPS. It is never stored by this widget.
-
-## License
-
-MIT — see [LICENSE](LICENSE).

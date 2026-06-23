@@ -1,3 +1,0 @@
-Releases/*.exe filter=lfs diff=lfs merge=lfs -text
-Releases/*.nupkg filter=lfs diff=lfs merge=lfs -text
-Releases/*.zip filter=lfs diff=lfs merge=lfs -text

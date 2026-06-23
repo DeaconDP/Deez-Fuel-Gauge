@@ -9,8 +9,6 @@
     <ApplicationIcon />
     <RootNamespace>CursorUsageWidget</RootNamespace>
     <AssemblyName>CursorUsageWidget</AssemblyName>
-    <Version>1.0.0</Version>
-    <StartupObject>CursorUsageWidget.Program</StartupObject>
   </PropertyGroup>
 
   <ItemGroup>
