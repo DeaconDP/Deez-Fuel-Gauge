@@ -1,0 +1,64 @@
+#!/bin/bash
+
+APP_BUNDLE="$(cd "$(dirname "$0")/../.." && pwd)"
+REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+LOG_DIR="$HOME/Library/Logs/CursorUsageWidget"
+LOG_FILE="$LOG_DIR/setup.log"
+NATIVE_LAUNCHER="$(dirname "$0")/setup-and-run-native"
+
+mkdir -p "$LOG_DIR"
+exec >>"$LOG_FILE" 2>&1
+
+echo "=== setup-and-run $(date) ==="
+
+if command -v xattr >/dev/null 2>&1; then
+    xattr -cr "$APP_BUNDLE" >/dev/null 2>&1 || true
+fi
+
+if command -v codesign >/dev/null 2>&1; then
+    codesign --force --deep --sign - "$APP_BUNDLE" >/dev/null 2>&1 || true
+fi
+
+show_message() {
+    /usr/bin/osascript -e "display dialog \"$1\" buttons {\"OK\"} default button \"OK\" with title \"Cursor Usage Widget\"" >/dev/null 2>&1 || true
+}
+
+find_dotnet() {
+    export PATH="/usr/local/share/dotnet:/opt/homebrew/bin:/usr/local/bin:$HOME/.dotnet:$HOME/.dotnet/tools:$PATH"
+
+    if command -v dotnet >/dev/null 2>&1; then
+        command -v dotnet
+        return 0
+    fi
+
+    local candidate
+    for candidate in \
+        "$HOME/.dotnet/dotnet" \
+        "/usr/local/share/dotnet/dotnet" \
+        "/opt/homebrew/bin/dotnet" \
+        "/usr/local/bin/dotnet"
+    do
+        if [[ -x "$candidate" ]]; then
+            echo "$candidate"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+if [[ -x "$NATIVE_LAUNCHER" ]]; then
+    exec "$NATIVE_LAUNCHER"
+fi
+
+DOTNET="$(find_dotnet || true)"
+if [[ -z "$DOTNET" ]]; then
+    show_message "The .NET 8 SDK is required. We opened the download page in your browser. Install it, then double-click setup-and-run again."
+    open "https://dotnet.microsoft.com/download/dotnet/8.0"
+    exit 1
+fi
+
+if ! DOTNET="$DOTNET" /bin/bash "$REPO_ROOT/scripts/package-macos-app.sh"; then
+    show_message "Setup failed. Details were saved to $LOG_FILE. Make sure the .NET 8 SDK is installed, then double-click setup-and-run again."
+    exit 1
+fi

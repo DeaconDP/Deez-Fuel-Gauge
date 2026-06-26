@@ -4,3 +4,9 @@ obj/
 *.user
 *.suo
 publish/
+.build-out/
+artifacts/
+_buildtest/
+CursorUsageWidget.app/
+setup-and-run.app/Contents/MacOS/publish-*/
+setup-and-run.app/Contents/MacOS/setup-and-run-native

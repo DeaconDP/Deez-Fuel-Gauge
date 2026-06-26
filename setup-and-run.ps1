@@ -39,7 +39,7 @@ function Install-DotNetSdk {
         throw @"
 .NET 8 SDK (or newer) is required but was not found, and winget is not available.
 
-Install the SDK manually, then run this script again:
+Install the SDK from the page that opens, then double-click setup-and-run.bat again:
 https://dotnet.microsoft.com/download/dotnet/8.0
 "@
     }
@@ -56,7 +56,30 @@ https://dotnet.microsoft.com/download/dotnet/8.0
 }
 
 function Get-BuiltExePath {
-    Join-Path $PSScriptRoot 'CursorUsageWidget\bin\Release\net8.0-windows\CursorUsageWidget.exe'
+    Join-Path $PSScriptRoot 'CursorUsageWidget\bin\Release\net8.0\CursorUsageWidget.exe'
+}
+
+function Stop-RunningWidget {
+    $processes = @(Get-Process -Name 'CursorUsageWidget' -ErrorAction SilentlyContinue)
+    if ($processes.Count -eq 0) {
+        return
+    }
+
+    Write-Step 'Stopping running widget so the build can replace the executable...'
+    foreach ($process in $processes) {
+        Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+    }
+
+    $deadline = [DateTime]::UtcNow.AddSeconds(5)
+    while ([DateTime]::UtcNow -lt $deadline) {
+        $remaining = @(Get-Process -Name 'CursorUsageWidget' -ErrorAction SilentlyContinue)
+        if ($remaining.Count -eq 0) {
+            return
+        }
+        Start-Sleep -Milliseconds 100
+    }
+
+    throw 'CursorUsageWidget is still running and is locking the executable. Close it manually, then run setup-and-run again.'
 }
 
 if (-not (Test-DotNetSdk)) {
@@ -64,18 +87,19 @@ if (-not (Test-DotNetSdk)) {
 }
 
 $exePath = Get-BuiltExePath
-$projectFile = Join-Path $PSScriptRoot 'CursorUsageWidget\CursorUsageWidget.csproj'
+
+Stop-RunningWidget
 
 if (-not (Test-Path $exePath)) {
     Write-Step 'First run: building Cursor Usage Widget...'
-    dotnet build $projectFile -c Release --nologo -v q
+    dotnet build CursorUsageWidget.sln -c Release --nologo -v q
     if ($LASTEXITCODE -ne 0) {
         throw "Build failed (exit code $LASTEXITCODE)."
     }
 }
 else {
     Write-Step 'Rebuilding to pick up any changes...'
-    dotnet build $projectFile -c Release --nologo -v q
+    dotnet build CursorUsageWidget.sln -c Release --nologo -v q
     if ($LASTEXITCODE -ne 0) {
         throw "Build failed (exit code $LASTEXITCODE)."
     }

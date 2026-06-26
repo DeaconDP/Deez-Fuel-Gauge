@@ -6,9 +6,7 @@ namespace CursorUsageWidget.Services;
 
 public static class SettingsStore
 {
-    private static readonly string SettingsDir = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "cursor-usage-widget");
+    private static readonly string SettingsDir = PlatformPaths.SettingsDirectory;
 
     private static readonly string SettingsPath = Path.Combine(SettingsDir, "settings.json");
 
@@ -20,12 +18,33 @@ public static class SettingsStore
                 return new WidgetSettings();
 
             var json = File.ReadAllText(SettingsPath);
-            return JsonSerializer.Deserialize<WidgetSettings>(json) ?? new WidgetSettings();
+            var settings = JsonSerializer.Deserialize<WidgetSettings>(json) ?? new WidgetSettings();
+            MigrateClaudeSettings(settings);
+            MigrateGeminiSettings(settings);
+            return settings;
         }
         catch
         {
             return new WidgetSettings();
         }
+    }
+
+    internal static void MigrateClaudeSettings(WidgetSettings settings)
+    {
+        if (!settings.Claude.ShowDirectSource)
+            return;
+
+        settings.Claude.ShowApiConsoleBilling = true;
+        settings.Claude.ShowDirectSource = false;
+    }
+
+    internal static void MigrateGeminiSettings(WidgetSettings settings)
+    {
+        if (!settings.Gemini.ShowDirectSource)
+            return;
+
+        settings.Gemini.ShowProLimits = true;
+        settings.Gemini.ShowDirectSource = false;
     }
 
     public static void Save(WidgetSettings settings)

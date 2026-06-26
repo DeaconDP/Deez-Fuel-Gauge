@@ -14,10 +14,7 @@ public static class CursorTokenReader
     private const string AccessTokenKey = "cursorAuth/accessToken";
     private const string RefreshTokenKey = "cursorAuth/refreshToken";
 
-    public static string DatabasePath =>
-        Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "Cursor", "User", "globalStorage", "state.vscdb");
+    public static string DatabasePath => PlatformPaths.CursorStateDatabasePath;
 
     public static CursorTokens Read()
     {

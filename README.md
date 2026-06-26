@@ -1,54 +1,103 @@
 # Cursor Usage Widget
 
-A lightweight, draggable Windows overlay that shows how much of your Cursor included usage cap you've used.
+A lightweight, draggable desktop overlay that shows how much of your Cursor included usage cap you've used.
+
+Runs on **Windows 10/11** and **macOS**.
 
 ## Requirements
 
-- Windows 10/11
+- Windows 10/11 or macOS 12+
 - [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
-- Cursor IDE logged in on the same Windows profile
+- Cursor IDE logged in on the same user profile
 
 ## One-click setup & run
 
-Double-click **`setup-and-run.bat`** in this folder.
+Double-click the launcher for your platform:
 
-On first run it will install the .NET 8 SDK via winget if needed, build the widget, and launch it. Later runs rebuild and start the widget.
+| Platform | File |
+|----------|------|
+| Windows | **`setup-and-run.bat`** |
+| macOS | **`setup-and-run.app`** |
 
-## Build & run (manual)
+On first run it builds the widget and launches it. Later runs rebuild and start the widget.
 
-```powershell
-cd C:\Projects\Cursor\cursor-usage-widget
-dotnet build
-dotnet run --project CursorUsageWidget
-```
+After the first successful setup, you can open **`CursorUsageWidget.app`** directly.
 
-## Publish (single exe)
+- **Windows:** if .NET 8 is missing, the launcher can install it via winget.
+- **macOS:** if .NET 8 is missing, the launcher opens the official download page in your browser.
+- **macOS:** if macOS blocks the launcher the first time, right-click **`setup-and-run.app`** and choose **Open**.
+- **macOS:** if **`CursorUsageWidget.app`** is blocked after setup, right-click it and choose **Open** as well.
 
-```powershell
-dotnet publish CursorUsageWidget -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true
-```
-
-The executable will be at `CursorUsageWidget\bin\Release\net8.0-windows\win-x64\publish\CursorUsageWidget.exe`.
+If setup fails on macOS, details are saved to `~/Library/Logs/CursorUsageWidget/setup.log`.
 
 ## Usage
 
 - **Drag** the pill anywhere on screen.
 - **Right-click** for Refresh or Quit.
-- Position is saved to `%LOCALAPPDATA%\cursor-usage-widget\settings.json`.
+- Position is saved locally (see paths below).
 - Usage refreshes automatically every 5 minutes.
 
-## Optional: run at Windows startup
+### Settings (gear icon)
 
-1. Publish or build the exe.
+Click the **gear** in the widget header to configure what is shown:
+
+| Provider | Cursor usage (automatic) | Direct API usage (optional) |
+|----------|--------------------------|-----------------------------|
+| **Cursor** | Sign in to Cursor IDE on this machine — no API key needed | — |
+| **OpenAI** | Aggregated from your Cursor plan | **Codex limits** (ChatGPT Plus/Pro 5h + weekly) via `~/.codex/auth.json` or session cookie; optional **Platform** Admin API key + budget |
+| **Claude** | Aggregated from your Cursor plan | **Pro/Max limits** via Open + Refresh (Claude Code login, Chrome/Edge session, or saved session); optional **API Console** Admin key + budget |
+| **Gemini** | Aggregated from your Cursor plan | **Antigravity limits** (Gemini Models + Claude/GPT groups, 5h + weekly) auto-read from local Antigravity login |
+
+- Toggle **Show Cursor usage** / **Show Codex limits** / **Show Claude Pro limits** / **Show Antigravity limits** / **Show direct API usage** independently per provider.
+- **Easy setup** (per provider section) turns on subscription-limit bars, checks local auth, runs the same connection tests as **Test**, and opens login pages or `codex login` when manual steps are still needed.
+- **Spend details** shows remaining quota (Cursor) or dollar/token breakdown (direct).
+- Use **Test** buttons to verify API keys without waiting for the 5-minute refresh.
+- API keys are stored encrypted under the settings folder (`credentials/`). They are never written to `settings.json` or committed to Git.
+
+**OpenAI (Codex / ChatGPT Plus):** if you use the [Codex CLI](https://developers.openai.com/codex), run `codex login` once — the widget reads `~/.codex/auth.json` automatically and shows the same 5-hour and weekly limits as ChatGPT's Usage & billing page. If auth is stored in the OS keyring instead, paste a ChatGPT session cookie from DevTools as a fallback. This uses an undocumented ChatGPT endpoint and may change without notice.
+
+**OpenAI (Platform, optional):** create an [organization admin key](https://platform.openai.com) with `api.usage.read` scope for org spend tracking against a monthly budget. This is separate from ChatGPT/Codex subscription limits.
+
+**Claude (Pro/Max):** click **Open** in settings to sign in at claude.ai, then click **Refresh**. The widget reads your session from Chrome or Edge automatically, or from Claude Code login (`~/.claude/.credentials.json`) when present. If Refresh fails, close your browser and try again. Uses undocumented claude.ai endpoints and may change without notice.
+
+**Claude (API Console, advanced):** create an [Admin API key](https://console.anthropic.com) (`sk-ant-admin...`) and optional monthly budget for org spend tracking. This is separate from Claude Pro/Max subscription limits.
+
+**Gemini (Antigravity):** sign in to [Antigravity](https://antigravity.google/) on this machine once. The widget reads your local Antigravity OAuth session and shows the same grouped **Gemini Models** and **Claude and GPT models** 5-hour and weekly limits as Antigravity's Model Quota screen. No API keys or project IDs needed. Uses undocumented Google Cloud Code endpoints and may change without notice.
+
+### Settings location
+
+| Platform | Path |
+|----------|------|
+| Windows | `%LOCALAPPDATA%\cursor-usage-widget\settings.json` |
+| macOS | `~/Library/Application Support/cursor-usage-widget/settings.json` |
+
+Encrypted API keys: `credentials/` in the same folder.
+
+## Optional: run at login
+
+**Windows**
+
+1. Build the widget once using **`setup-and-run.bat`**.
 2. Press `Win+R`, type `shell:startup`, press Enter.
-3. Create a shortcut to `CursorUsageWidget.exe` in that folder.
+3. Create a shortcut to `CursorUsageWidget\bin\Release\net8.0\CursorUsageWidget.exe` in that folder.
+
+**macOS**
+
+1. Build the widget once using **`setup-and-run.app`**.
+2. Open **System Settings → General → Login Items**.
+3. Add **`CursorUsageWidget.app`** from this folder.
 
 ## How it works
 
-1. Reads `cursorAuth/accessToken` from Cursor's local SQLite database at  
-   `%APPDATA%\Cursor\User\globalStorage\state.vscdb`
-2. Calls Cursor's unofficial `GetCurrentPeriodUsage` API (Pro/Ultra/Team plans).
-3. Falls back to `GET /auth/usage` for legacy Enterprise request-based quotas.
+1. Reads `cursorAuth/accessToken` from Cursor's local SQLite database:
+   - **Windows:** `%APPDATA%\Cursor\User\globalStorage\state.vscdb`
+   - **macOS:** `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb`
+2. Calls Cursor's unofficial `GetCurrentPeriodUsage` API (Pro/Ultra/Team plans), or falls back to `GET /auth/usage` for legacy Enterprise request-based quotas.
+3. Optionally enriches OpenAI / Claude / Gemini bars from Cursor's aggregated usage events.
+4. Optionally fetches **Codex / ChatGPT Plus** 5-hour and weekly limits from `chatgpt.com` when Codex auth or a session cookie is available.
+5. Optionally fetches **Claude Pro/Max** session and weekly limits via Claude Code OAuth, browser session detection, or a saved session when configured.
+6. Optionally fetches **Antigravity** grouped Gemini and Claude/GPT 5-hour and weekly limits from Google Cloud Code when Antigravity is signed in locally.
+7. Optionally fetches **direct** OpenAI Platform / Claude API Console billing via provider admin APIs when configured in settings.
 
 ## Disclaimer
 
