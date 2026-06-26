@@ -64,13 +64,14 @@ fi
 
 chmod +x "$NATIVE_LAUNCHER"
 cp "$NATIVE_LAUNCHER" "$LAUNCHER_DIR/setup-and-run"
+rm -rf "$ARM64_OUT" "$X64_OUT"
 
 if command -v codesign >/dev/null 2>&1; then
-    codesign --force --deep --sign - "$REPO_ROOT/setup-and-run.app" >/dev/null 2>&1 || true
+    codesign --force --deep --sign - "$REPO_ROOT/setup-and-run.app"
 fi
 
 if command -v xattr >/dev/null 2>&1; then
-    xattr -cr "$REPO_ROOT/setup-and-run.app" >/dev/null 2>&1 || true
+    xattr -cr "$REPO_ROOT/setup-and-run.app" || true
 fi
 
 echo "$NATIVE_LAUNCHER"
