@@ -40,3 +40,14 @@ jobs:
 
       - name: Test
         run: dotnet test CursorUsageWidget.sln -c Release --no-build
+
+      - name: Verify macOS packaging
+        if: runner.os == 'macOS'
+        run: |
+          chmod +x scripts/package-macos-app.sh scripts/refresh-macos-setup-launcher.sh setup-and-run.app/Contents/MacOS/setup-and-run
+          ./scripts/refresh-macos-setup-launcher.sh
+          test -x setup-and-run.app/Contents/MacOS/setup-and-run
+          ./scripts/package-macos-app.sh
+          test -x CursorUsageWidget.app/Contents/MacOS/CursorUsageWidget
+          codesign --verify --deep --strict CursorUsageWidget.app
+          codesign --verify --deep --strict setup-and-run.app

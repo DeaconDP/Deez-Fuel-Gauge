@@ -30,8 +30,26 @@ public class PlatformPathsTests
     }
 
     [Fact]
-    public void CursorTokenReader_database_path_matches_platform_paths()
+    public void AntigravityStateDatabasePaths_include_antigravity_global_storage()
     {
-        Assert.Equal(PlatformPaths.CursorStateDatabasePath, CursorTokenReader.DatabasePath);
+        var paths = PlatformPaths.AntigravityStateDatabasePaths;
+
+        Assert.Equal(2, paths.Count);
+        Assert.Contains(paths, path => path.EndsWith(Path.Combine("Antigravity IDE", "User", "globalStorage", "state.vscdb")));
+        Assert.Contains(paths, path => path.EndsWith(Path.Combine("Antigravity", "User", "globalStorage", "state.vscdb")));
+        Assert.All(paths, path => Assert.StartsWith(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            path));
+    }
+
+    [Fact]
+    public void ClaudeCodeCredentialsPath_uses_claude_config_directory()
+    {
+        var path = PlatformPaths.ClaudeCodeCredentialsPath;
+
+        Assert.EndsWith(Path.Combine(".claude", ".credentials.json"), path);
+        Assert.StartsWith(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            path);
     }
 }

@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\CursorUsageWidget\CursorUsageWidget.csproj" />
+    <ProjectReference Include="..\CursorUsageWidget.Setup\CursorUsageWidget.Setup.csproj" />
   </ItemGroup>
 
 </Project>

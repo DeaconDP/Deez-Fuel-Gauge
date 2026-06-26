@@ -18,12 +18,33 @@ public static class SettingsStore
                 return new WidgetSettings();
 
             var json = File.ReadAllText(SettingsPath);
-            return JsonSerializer.Deserialize<WidgetSettings>(json) ?? new WidgetSettings();
+            var settings = JsonSerializer.Deserialize<WidgetSettings>(json) ?? new WidgetSettings();
+            MigrateClaudeSettings(settings);
+            MigrateGeminiSettings(settings);
+            return settings;
         }
         catch
         {
             return new WidgetSettings();
         }
+    }
+
+    internal static void MigrateClaudeSettings(WidgetSettings settings)
+    {
+        if (!settings.Claude.ShowDirectSource)
+            return;
+
+        settings.Claude.ShowApiConsoleBilling = true;
+        settings.Claude.ShowDirectSource = false;
+    }
+
+    internal static void MigrateGeminiSettings(WidgetSettings settings)
+    {
+        if (!settings.Gemini.ShowDirectSource)
+            return;
+
+        settings.Gemini.ShowProLimits = true;
+        settings.Gemini.ShowDirectSource = false;
     }
 
     public static void Save(WidgetSettings settings)

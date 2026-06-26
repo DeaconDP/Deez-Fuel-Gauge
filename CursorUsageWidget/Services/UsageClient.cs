@@ -9,6 +9,7 @@ namespace CursorUsageWidget.Services;
 public sealed class UsageClient : IDisposable
 {
     private const string ApiBase = "https://api2.cursor.sh";
+    private const string DashboardBase = "https://cursor.com";
     private const string OAuthClientId = "KbZUR41cY7W6zRSdpSUJ7I7mLYBKOCmB";
     private const string IncludedModelKey = "gpt-4";
 
@@ -36,13 +37,142 @@ public sealed class UsageClient : IDisposable
 
         var periodUsage = await TryGetCurrentPeriodUsageAsync(cancellationToken);
         if (periodUsage is not null)
-            return periodUsage;
+            return await EnrichWithProviderBreakdownAsync(periodUsage, cancellationToken);
 
         var legacyUsage = await TryGetLegacyUsageAsync(cancellationToken);
         if (legacyUsage is not null)
             return legacyUsage;
 
         return UsageSnapshot.Error("Can't fetch usage");
+    }
+
+    private async Task<UsageSnapshot> EnrichWithProviderBreakdownAsync(
+        UsageSnapshot snapshot,
+        CancellationToken cancellationToken)
+    {
+        if (snapshot.IsError || string.IsNullOrWhiteSpace(_accessToken))
+            return snapshot;
+
+        var breakdown = await TryGetProviderBreakdownAsync(snapshot, cancellationToken);
+        if (breakdown is null)
+            return snapshot;
+
+        return new UsageSnapshot
+        {
+            PercentUsed = snapshot.PercentUsed,
+            RemainingLabel = snapshot.RemainingLabel,
+            AutoPercentUsed = snapshot.AutoPercentUsed,
+            ApiPercentUsed = snapshot.ApiPercentUsed,
+            PlanLimitCents = snapshot.PlanLimitCents,
+            BillingCycleStartMs = snapshot.BillingCycleStartMs,
+            BillingCycleEndMs = snapshot.BillingCycleEndMs,
+            OpenAi = breakdown.Value.OpenAi,
+            Claude = breakdown.Value.Claude,
+            Gemini = breakdown.Value.Gemini,
+            IsError = snapshot.IsError,
+            ErrorMessage = snapshot.ErrorMessage
+        };
+    }
+
+    private async Task<(ProviderUsageSnapshot OpenAi, ProviderUsageSnapshot Claude, ProviderUsageSnapshot Gemini)?>
+        TryGetProviderBreakdownAsync(UsageSnapshot snapshot, CancellationToken cancellationToken)
+    {
+        if (snapshot.PlanLimitCents is not > 0
+            || snapshot.BillingCycleStartMs is null
+            || snapshot.BillingCycleEndMs is null)
+            return null;
+
+        var aggregations = await TryGetAggregatedUsageAsync(
+            snapshot.BillingCycleStartMs.Value,
+            snapshot.BillingCycleEndMs.Value,
+            cancellationToken);
+
+        if (aggregations is null)
+            return null;
+
+        var spendByProvider = new Dictionary<ModelProvider, double>
+        {
+            [ModelProvider.OpenAi] = 0,
+            [ModelProvider.Claude] = 0,
+            [ModelProvider.Gemini] = 0
+        };
+
+        foreach (var (modelName, cents) in aggregations)
+        {
+            var provider = ModelProviderClassifier.Classify(modelName);
+            if (provider is ModelProvider.Unknown)
+                continue;
+
+            spendByProvider[provider] += cents;
+        }
+
+        var limit = snapshot.PlanLimitCents.Value;
+        return (
+            ProviderUsageSnapshot.FromSpend(spendByProvider[ModelProvider.OpenAi], limit),
+            ProviderUsageSnapshot.FromSpend(spendByProvider[ModelProvider.Claude], limit),
+            ProviderUsageSnapshot.FromSpend(spendByProvider[ModelProvider.Gemini], limit));
+    }
+
+    private async Task<IReadOnlyList<(string ModelName, double Cents)>?> TryGetAggregatedUsageAsync(
+        long startMs,
+        long endMs,
+        CancellationToken cancellationToken)
+    {
+        var userId = JwtHelper.GetSessionUserId(_accessToken!);
+        if (string.IsNullOrWhiteSpace(userId))
+            return null;
+
+        var body = JsonSerializer.Serialize(new
+        {
+            teamId = -1,
+            startDate = startMs.ToString(),
+            endDate = endMs.ToString()
+        });
+
+        using var request = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"{DashboardBase}/api/dashboard/get-aggregated-usage-events")
+        {
+            Content = new StringContent(body, Encoding.UTF8, "application/json")
+        };
+
+        request.Headers.Add("Origin", DashboardBase);
+        request.Headers.Add(
+            "Cookie",
+            $"WorkosCursorSessionToken={Uri.EscapeDataString(userId)}%3A%3A{Uri.EscapeDataString(_accessToken!)}");
+
+        using var response = await _http.SendAsync(request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+            return null;
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+
+        if (!document.RootElement.TryGetProperty("aggregations", out var aggregationsEl)
+            || aggregationsEl.ValueKind != JsonValueKind.Array)
+            return null;
+
+        var results = new List<(string ModelName, double Cents)>();
+        foreach (var item in aggregationsEl.EnumerateArray())
+        {
+            if (!item.TryGetProperty("modelIntent", out var modelEl))
+                continue;
+
+            var modelName = modelEl.GetString();
+            if (string.IsNullOrWhiteSpace(modelName))
+                continue;
+
+            if (!item.TryGetProperty("totalCents", out var centsEl) || centsEl.ValueKind == JsonValueKind.Null)
+                continue;
+
+            var cents = centsEl.GetDouble();
+            if (!double.IsFinite(cents) || cents <= 0)
+                continue;
+
+            results.Add((modelName, cents));
+        }
+
+        return results;
     }
 
     private async Task<UsageSnapshot?> TryGetCurrentPeriodUsageAsync(CancellationToken cancellationToken)
@@ -61,34 +191,7 @@ public sealed class UsageClient : IDisposable
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
 
-        if (!document.RootElement.TryGetProperty("planUsage", out var planUsage))
-            return null;
-
-        if (!planUsage.TryGetProperty("limit", out var limitElement))
-            return null;
-
-        var limit = limitElement.GetInt64();
-        if (limit <= 0)
-            return null;
-
-        var percent = GetFinitePercent(planUsage, "totalPercentUsed");
-        if (percent is null)
-        {
-            var includedSpend = planUsage.TryGetProperty("includedSpend", out var spendEl)
-                ? spendEl.GetInt64()
-                : 0;
-            percent = limit > 0 ? includedSpend * 100.0 / limit : 0;
-        }
-
-        var remaining = planUsage.TryGetProperty("remaining", out var remainingEl)
-            ? remainingEl.GetInt64()
-            : Math.Max(0, limit - (planUsage.TryGetProperty("includedSpend", out var inc) ? inc.GetInt64() : 0));
-
-        return new UsageSnapshot
-        {
-            PercentUsed = Math.Clamp(percent.Value, 0, 100),
-            RemainingLabel = $"${remaining / 100.0:F2} left"
-        };
+        return UsageResponseParser.ParseCurrentPeriodUsage(document.RootElement);
     }
 
     private async Task<UsageSnapshot?> TryGetLegacyUsageAsync(CancellationToken cancellationToken)
@@ -169,18 +272,6 @@ public sealed class UsageClient : IDisposable
             request.Content = new StringContent(jsonBody, Encoding.UTF8, "application/json");
 
         return request;
-    }
-
-    private static double? GetFinitePercent(JsonElement parent, string propertyName)
-    {
-        if (!parent.TryGetProperty(propertyName, out var element))
-            return null;
-
-        if (element.ValueKind != JsonValueKind.Number)
-            return null;
-
-        var value = element.GetDouble();
-        return double.IsFinite(value) ? value : null;
     }
 
     private static bool IsJwtExpired(string jwt)

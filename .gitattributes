@@ -1,1 +1,2 @@
+*.sh text eol=lf
 setup-and-run.app/Contents/MacOS/setup-and-run text eol=lf
