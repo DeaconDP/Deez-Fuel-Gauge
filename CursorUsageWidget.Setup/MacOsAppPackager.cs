@@ -31,7 +31,8 @@ public static class MacOsAppPackager
             "-r", rid,
             "--self-contained", "true",
             "-p:UseAppHost=true",
-            "-p:PublishSingleFile=false",
+            "-p:PublishSingleFile=true",
+            "-p:IncludeNativeLibrariesForSelfExtract=true",
             "--nologo"
         });
 
@@ -50,8 +51,8 @@ public static class MacOsAppPackager
         File.Copy(infoPlist, Path.Combine(appPath, "Contents", "Info.plist"), overwrite: true);
         File.WriteAllText(Path.Combine(appPath, "Contents", "PkgInfo"), "APPL????");
 
-        CopyDirectory(publishDir, macOsDir);
-        MakeExecutable(appHostPath);
+        File.Copy(appHostPath, Path.Combine(macOsDir, "CursorUsageWidget"), overwrite: true);
+        MakeExecutable(Path.Combine(macOsDir, "CursorUsageWidget"));
         SignAppBundle(appPath);
         SignAppBundle(Path.Combine(repoRoot, "setup-and-run.app"));
 
@@ -158,13 +159,6 @@ public static class MacOsAppPackager
     {
         if (!Directory.Exists(appPath) || !File.Exists("/usr/bin/codesign"))
             return;
-
-        var macOsDir = Path.Combine(appPath, "Contents", "MacOS");
-        if (Directory.Exists(macOsDir))
-        {
-            foreach (var file in Directory.EnumerateFiles(macOsDir, "*", SearchOption.AllDirectories))
-                SignFile(file);
-        }
 
         SignFile(appPath);
         RunProcessOptional("/usr/bin/xattr", new[] { "-cr", appPath });
