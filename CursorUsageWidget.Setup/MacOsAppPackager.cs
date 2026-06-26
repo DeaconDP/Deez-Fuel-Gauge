@@ -156,11 +156,23 @@ public static class MacOsAppPackager
 
     private static void SignAppBundle(string appPath)
     {
-        if (!Directory.Exists(appPath))
+        if (!Directory.Exists(appPath) || !File.Exists("/usr/bin/codesign"))
             return;
 
-        RunProcessOptional("/usr/bin/codesign", new[] { "--force", "--deep", "--sign", "-", appPath });
+        var macOsDir = Path.Combine(appPath, "Contents", "MacOS");
+        if (Directory.Exists(macOsDir))
+        {
+            foreach (var file in Directory.EnumerateFiles(macOsDir, "*", SearchOption.AllDirectories))
+                SignFile(file);
+        }
+
+        SignFile(appPath);
         RunProcessOptional("/usr/bin/xattr", new[] { "-cr", appPath });
+    }
+
+    private static void SignFile(string path)
+    {
+        RunProcessOptional("/usr/bin/codesign", new[] { "--force", "--sign", "-", path });
     }
 
     private static void RunProcess(string fileName, IReadOnlyList<string> arguments)
