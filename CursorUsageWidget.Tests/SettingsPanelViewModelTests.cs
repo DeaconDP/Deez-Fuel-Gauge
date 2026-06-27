@@ -151,6 +151,139 @@ public sealed class SettingsPanelViewModelTests
     }
 
     [Fact]
+    public void ShowOpenRouterCredentials_hidden_when_limits_off_or_key_saved()
+    {
+        var viewModel = CreateViewModel();
+        viewModel.Load(new WidgetSettings());
+
+        viewModel.ShowOpenRouterLimits = true;
+        Assert.True(viewModel.ShowOpenRouterCredentials);
+
+        viewModel.SaveOpenRouterApiKey("sk-or-test");
+        Assert.False(viewModel.ShowOpenRouterCredentials);
+
+        viewModel.ClearOpenRouterApiKey();
+        viewModel.ShowOpenRouterLimits = false;
+        Assert.False(viewModel.ShowOpenRouterCredentials);
+    }
+
+    [Fact]
+    public void Load_and_Commit_round_trip_preserves_opencode_go_details()
+    {
+        var settings = new WidgetSettings
+        {
+            OpenCode = new ProviderBillingSettings
+            {
+                ShowDirectSource = true,
+                ShowProLimits = true,
+                ShowDetails = true,
+                ShowProDetails = false,
+                ShowProBreakdown = false
+            }
+        };
+
+        var viewModel = CreateViewModel();
+        viewModel.Load(settings);
+
+        Assert.True(viewModel.ShowOpenCodeZenDetails);
+        Assert.False(viewModel.ShowOpenCodeGoDetails);
+
+        viewModel.ShowOpenCodeGoDetails = true;
+        viewModel.ShowOpenCodeGoBreakdown = true;
+
+        var committed = new WidgetSettings();
+        viewModel.Commit(committed);
+
+        Assert.True(committed.OpenCode.ShowProDetails);
+        Assert.True(committed.OpenCode.EffectiveShowProDetails);
+        Assert.True(committed.OpenCode.ShowProBreakdown);
+    }
+
+    [Fact]
+    public async Task RunEasySetupClaudeAsync_enables_claude_pro_limits()
+    {
+        var claudePro = new ClaudeProUsageClient(
+            new HttpClient(new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.Unauthorized))),
+            new ClaudeProAuthResolver(
+                claudeCodeReader: () => null,
+                browserCookieReader: () => null,
+                savedSessionReader: _ => null));
+
+        var service = new ProviderEasySetupService(claudePro: claudePro);
+
+        var viewModel = new SettingsPanelViewModel(
+            service,
+            new OpenAiBillingClient(),
+            new CodexUsageClient(),
+            new AnthropicBillingClient(),
+            claudePro,
+            new AntigravityUsageClient(),
+            new OpenRouterUsageClient(),
+            new OpenCodeUsageClient(),
+            () => new CursorTokens());
+
+        var settings = new WidgetSettings
+        {
+            Claude = new ProviderBillingSettings { ShowProLimits = false }
+        };
+
+        viewModel.Load(settings);
+        await viewModel.RunEasySetupClaudeAsync(settings);
+
+        Assert.True(settings.Claude.ShowCursorSource);
+        Assert.True(settings.Claude.ShowDetails);
+        Assert.True(settings.Claude.ShowProLimits);
+        Assert.Contains("Sign in at claude.ai", viewModel.ClaudeProStatus);
+    }
+
+    [Fact]
+    public void ClaudeCursorPlanStatus_reflects_cursor_session()
+    {
+        var viewModel = CreateViewModel(() => new CursorTokens { AccessToken = "token" });
+        viewModel.Load(new WidgetSettings());
+        Assert.Equal("Connected via Cursor session", viewModel.ClaudeCursorPlanStatus);
+    }
+
+    [Fact]
+    public void OpenAiCursorPlanStatus_reflects_cursor_session()
+    {
+        var viewModel = CreateViewModel(() => new CursorTokens { AccessToken = "token" });
+        viewModel.Load(new WidgetSettings());
+        Assert.Equal("Connected via Cursor session", viewModel.OpenAiCursorPlanStatus);
+    }
+
+    [Fact]
+    public void GeminiCursorPlanStatus_reflects_cursor_session()
+    {
+        var viewModel = CreateViewModel(() => new CursorTokens { AccessToken = "token" });
+        viewModel.Load(new WidgetSettings());
+        Assert.Equal("Connected via Cursor session", viewModel.GeminiCursorPlanStatus);
+    }
+
+    [Fact]
+    public void CursorPlanStatus_without_token_prompts_sign_in()
+    {
+        var viewModel = CreateViewModel(() => new CursorTokens());
+        viewModel.Load(new WidgetSettings());
+        Assert.Equal("Sign in to Cursor IDE on this machine", viewModel.OpenAiCursorPlanStatus);
+        Assert.Equal("Sign in to Cursor IDE on this machine", viewModel.GeminiCursorPlanStatus);
+    }
+
+    private static SettingsPanelViewModel CreateViewModel(Func<CursorTokens> cursorReader)
+    {
+        return new SettingsPanelViewModel(
+            new ProviderEasySetupService(),
+            new OpenAiBillingClient(),
+            new CodexUsageClient(),
+            new AnthropicBillingClient(),
+            new ClaudeProUsageClient(),
+            new AntigravityUsageClient(),
+            new OpenRouterUsageClient(),
+            new OpenCodeUsageClient(),
+            cursorReader);
+    }
+
+    [Fact]
     public async Task RefreshClaudeProAsync_updates_status_and_persists_session()
     {
         var handler = new StubHttpHandler(request =>

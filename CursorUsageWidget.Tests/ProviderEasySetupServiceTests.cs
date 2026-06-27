@@ -92,7 +92,7 @@ public sealed class ProviderEasySetupServiceTests
     }
 
     [Fact]
-    public async Task SetupOpenAi_launches_codex_login_when_auth_missing()
+    public async Task SetupOpenAi_opens_chatgpt_when_auth_missing()
     {
         var settings = new WidgetSettings();
         var launcher = new RecordingLauncher();
@@ -102,11 +102,11 @@ public sealed class ProviderEasySetupServiceTests
 
         var result = await service.SetupOpenAiAsync(settings);
 
-        Assert.True(launcher.LaunchedCodexLogin);
+        Assert.False(launcher.LaunchedCodexLogin);
         Assert.Contains("https://chatgpt.com", launcher.OpenedUrls);
-        Assert.True(result.LaunchedCodexLogin);
+        Assert.False(result.LaunchedCodexLogin);
         Assert.True(result.OpenedExternalUrl);
-        Assert.Contains("codex login", result.StatusMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("session cookie", result.StatusMessage, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

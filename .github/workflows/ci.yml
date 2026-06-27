@@ -44,7 +44,7 @@ jobs:
       - name: Verify macOS packaging
         if: runner.os == 'macOS'
         run: |
-          chmod +x scripts/package-macos-app.sh scripts/refresh-macos-setup-launcher.sh setup-and-run.app/Contents/MacOS/setup-and-run
+          chmod +x scripts/package-macos-app.sh scripts/package-macos-release.sh scripts/refresh-macos-setup-launcher.sh setup-and-run.app/Contents/MacOS/setup-and-run
           ./scripts/refresh-macos-setup-launcher.sh
           test -x setup-and-run.app/Contents/MacOS/setup-and-run
           ./scripts/package-macos-app.sh
@@ -52,5 +52,9 @@ jobs:
           test -f CursorUsageWidget.app/Contents/MacOS/libSkiaSharp.dylib
           test -f CursorUsageWidget.app/Contents/MacOS/libHarfBuzzSharp.dylib
           test -f CursorUsageWidget.app/Contents/MacOS/libAvaloniaNative.dylib
+          test -f CursorUsageWidget.app/Contents/Resources/AppIcon.icns
           codesign --verify --deep --strict CursorUsageWidget.app
           codesign --verify --deep --strict setup-and-run.app
+          ./scripts/package-macos-release.sh
+          test -f Releases/cursor-usage-widget-mac-Universal.zip
+          unzip -l Releases/cursor-usage-widget-mac-Universal.zip | grep -q AppIcon.icns

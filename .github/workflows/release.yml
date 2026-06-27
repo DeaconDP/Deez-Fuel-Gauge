@@ -41,6 +41,21 @@ jobs:
           chmod +x scripts/package-macos-release.sh
           ./scripts/package-macos-release.sh
 
+      - name: Notarize macOS release
+        if: env.APPLE_ID != '' && env.APPLE_APP_SPECIFIC_PASSWORD != ''
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          ditto -x -k Releases/cursor-usage-widget-mac-Universal.zip /tmp/cuw-release
+          codesign --force --deep --sign - /tmp/cuw-release/CursorUsageWidget.app
+          xcrun notarytool submit Releases/cursor-usage-widget-mac-Universal.zip \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait || echo "Notarization skipped or failed — upload manually if needed"
+
       - name: Upload release asset
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2

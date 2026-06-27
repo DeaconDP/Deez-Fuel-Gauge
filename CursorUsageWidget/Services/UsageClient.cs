@@ -13,9 +13,14 @@ public sealed class UsageClient : IDisposable
     private const string OAuthClientId = "KbZUR41cY7W6zRSdpSUJ7I7mLYBKOCmB";
     private const string IncludedModelKey = "gpt-4";
 
-    private readonly HttpClient _http = new();
+    private readonly HttpClient _http;
     private string? _accessToken;
     private string? _refreshToken;
+
+    public UsageClient(HttpClient? http = null)
+    {
+        _http = http ?? new HttpClient();
+    }
 
     public void SetTokens(string? accessToken, string? refreshToken)
     {
@@ -302,5 +307,8 @@ public sealed class UsageClient : IDisposable
         }
     }
 
-    public void Dispose() => _http.Dispose();
+    public void Dispose()
+    {
+        _http.Dispose();
+    }
 }

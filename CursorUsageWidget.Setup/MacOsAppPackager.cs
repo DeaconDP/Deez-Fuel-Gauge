@@ -62,6 +62,10 @@ public static class MacOsAppPackager
         File.Copy(infoPlist, Path.Combine(appPath, "Contents", "Info.plist"), overwrite: true);
         File.WriteAllText(Path.Combine(appPath, "Contents", "PkgInfo"), "APPL????");
 
+        var appIcon = Path.Combine(repoRoot, "packaging", "icons", "AppIcon.icns");
+        if (File.Exists(appIcon))
+            File.Copy(appIcon, Path.Combine(resourcesDir, "AppIcon.icns"), overwrite: true);
+
         CopyPublishedFiles(publishDir, macOsDir);
         SignAppBundle(appPath);
         SignAppBundle(Path.Combine(repoRoot, "setup-and-run.app"));

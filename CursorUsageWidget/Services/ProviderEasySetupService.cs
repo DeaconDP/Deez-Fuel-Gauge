@@ -60,12 +60,11 @@ public sealed class ProviderEasySetupService
 
         if (!hasAuthFile && !hasSession)
         {
-            _launcher.LaunchCodexLogin();
             _launcher.OpenChatGpt();
             const string message =
-                "Codex: run codex login in the terminal, or paste a ChatGPT session cookie";
+                "Codex: paste a ChatGPT session cookie in settings, or use codex login for CLI auth";
             settings.OpenAi.ProLastConnectionStatus = message;
-            return new EasySetupResult(message, LaunchedCodexLogin: true, OpenedExternalUrl: true);
+            return new EasySetupResult(message, OpenedExternalUrl: true);
         }
 
         var status = await _codex.TestConnectionAsync(hasSession ? session : null, cancellationToken);
@@ -134,7 +133,7 @@ public sealed class ProviderEasySetupService
             return Task.FromResult(new EasySetupResult(message, OpenedExternalUrl: true));
         }
 
-        return Task.FromResult(new EasySetupResult(settings.OpenRouter.LastConnectionStatus ?? "Connected"));
+        return TestOpenRouterAsync(settings, cancellationToken);
     }
 
     public Task<EasySetupResult> SetupOpenCodeAsync(
@@ -158,7 +157,33 @@ public sealed class ProviderEasySetupService
             return Task.FromResult(new EasySetupResult(message, OpenedExternalUrl: true));
         }
 
-        return Task.FromResult(new EasySetupResult(settings.OpenCode.ProLastConnectionStatus ?? "Connected"));
+        return TestOpenCodeAsync(settings, cancellationToken);
+    }
+
+    private async Task<EasySetupResult> TestOpenRouterAsync(
+        WidgetSettings settings,
+        CancellationToken cancellationToken)
+    {
+        using var client = new OpenRouterUsageClient();
+        var status = await client.TestConnectionAsync(
+            CredentialStore.Retrieve(settings.OpenRouter.CredentialId) ?? "",
+            cancellationToken);
+        settings.OpenRouter.LastConnectionStatus = status;
+        return new EasySetupResult(status);
+    }
+
+    private async Task<EasySetupResult> TestOpenCodeAsync(
+        WidgetSettings settings,
+        CancellationToken cancellationToken)
+    {
+        using var client = new OpenCodeUsageClient();
+        var session = CredentialStore.Retrieve(settings.OpenCode.ProSessionCredentialId) ?? "";
+        var status = await client.TestConnectionAsync(
+            session,
+            settings.OpenCode.WorkspaceId,
+            cancellationToken);
+        settings.OpenCode.ProLastConnectionStatus = status;
+        return new EasySetupResult(status);
     }
 
     public EasySetupResult SetupDisk(WidgetSettings settings)

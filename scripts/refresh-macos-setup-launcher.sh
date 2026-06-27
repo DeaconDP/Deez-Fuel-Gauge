@@ -64,6 +64,10 @@ fi
 
 chmod +x "$NATIVE_LAUNCHER"
 cp "$NATIVE_LAUNCHER" "$LAUNCHER_DIR/setup-and-run"
+mkdir -p "$REPO_ROOT/setup-and-run.app/Contents/Resources"
+if [[ -f "$REPO_ROOT/packaging/icons/AppIcon.icns" ]]; then
+    cp "$REPO_ROOT/packaging/icons/AppIcon.icns" "$REPO_ROOT/setup-and-run.app/Contents/Resources/AppIcon.icns"
+fi
 rm -rf "$ARM64_OUT" "$X64_OUT"
 
 if command -v codesign >/dev/null 2>&1; then

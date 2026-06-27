@@ -38,43 +38,59 @@ public sealed class DirectBillingService : IDisposable
         WidgetSettings settings,
         CancellationToken cancellationToken = default)
     {
-        var openAiDirect = settings.OpenAi.ShowDirectSource
-            ? await _openAi.FetchAsync(
-                settings.OpenAi,
-                snapshot.BillingCycleStartMs,
-                snapshot.BillingCycleEndMs,
-                cancellationToken)
-            : DirectProviderSnapshot.Unavailable();
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutCts.CancelAfter(TimeSpan.FromSeconds(30));
 
-        var codex = settings.OpenAi.ShowProLimits
-            ? await _codex.FetchAsync(settings.OpenAi, cancellationToken)
-            : CodexSnapshot.Unavailable();
+        var token = timeoutCts.Token;
+        var billingStart = snapshot.BillingCycleStartMs;
+        var billingEnd = snapshot.BillingCycleEndMs;
 
-        var claudePro = settings.Claude.ShowProLimits
-            ? await _claudePro.FetchAsync(settings.Claude, cancellationToken)
-            : ClaudeProSnapshot.Unavailable();
+        var openAiDirectTask = settings.OpenAi.ShowDirectSource
+            ? _openAi.FetchAsync(settings.OpenAi, billingStart, billingEnd, token)
+            : Task.FromResult(DirectProviderSnapshot.Unavailable());
 
-        var claudeDirect = settings.Claude.ShowApiConsoleBilling
-            ? await _anthropic.FetchAsync(
-                settings.Claude,
-                snapshot.BillingCycleStartMs,
-                snapshot.BillingCycleEndMs,
-                cancellationToken)
-            : DirectProviderSnapshot.Unavailable();
+        var codexTask = settings.OpenAi.ShowProLimits
+            ? _codex.FetchAsync(settings.OpenAi, token)
+            : Task.FromResult(CodexSnapshot.Unavailable());
 
-        var antigravity = settings.Gemini.ShowProLimits
-            ? await _antigravity.FetchAsync(settings.Gemini, cancellationToken)
-            : AntigravitySnapshot.Unavailable();
+        var claudeProTask = settings.Claude.ShowProLimits
+            ? _claudePro.FetchAsync(settings.Claude, token)
+            : Task.FromResult(ClaudeProSnapshot.Unavailable());
 
-        var openRouter = settings.OpenRouter.ShowProLimits
-            ? await _openRouter.FetchAsync(settings.OpenRouter, cancellationToken)
-            : OpenRouterSnapshot.Unavailable();
+        var claudeDirectTask = settings.Claude.ShowApiConsoleBilling
+            ? _anthropic.FetchAsync(settings.Claude, billingStart, billingEnd, token)
+            : Task.FromResult(DirectProviderSnapshot.Unavailable());
 
-        var openCode = settings.OpenCode.ShowDirectSource || settings.OpenCode.ShowProLimits
-            ? await _openCode.FetchAsync(settings.OpenCode, cancellationToken)
-            : OpenCodeSnapshot.Unavailable();
+        var antigravityTask = settings.Gemini.ShowProLimits
+            ? _antigravity.FetchAsync(settings.Gemini, token)
+            : Task.FromResult(AntigravitySnapshot.Unavailable());
 
-        return CopyWithEnrichment(snapshot, openAiDirect, codex, claudePro, claudeDirect, antigravity, openRouter, openCode);
+        var openRouterTask = settings.OpenRouter.ShowProLimits
+            ? _openRouter.FetchAsync(settings.OpenRouter, token)
+            : Task.FromResult(OpenRouterSnapshot.Unavailable());
+
+        var openCodeTask = settings.OpenCode.ShowDirectSource || settings.OpenCode.ShowProLimits
+            ? _openCode.FetchAsync(settings.OpenCode, token)
+            : Task.FromResult(OpenCodeSnapshot.Unavailable());
+
+        await Task.WhenAll(
+            openAiDirectTask,
+            codexTask,
+            claudeProTask,
+            claudeDirectTask,
+            antigravityTask,
+            openRouterTask,
+            openCodeTask);
+
+        return CopyWithEnrichment(
+            snapshot,
+            await openAiDirectTask,
+            await codexTask,
+            await claudeProTask,
+            await claudeDirectTask,
+            await antigravityTask,
+            await openRouterTask,
+            await openCodeTask);
     }
 
     internal static UsageSnapshot CopyWithEnrichment(

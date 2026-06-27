@@ -41,6 +41,7 @@ public sealed class SettingsPanelViewModel : ViewModelBase
     private string _openAiApiKeyWatermark = "Admin API key";
     private string _openAiSessionCookieWatermark = "ChatGPT session cookie (optional fallback)";
     private string _openAiStatus = "";
+    private string _openAiCursorPlanStatus = "";
     private string _codexStatus = "";
 
     private bool _showClaude = true;
@@ -54,6 +55,7 @@ public sealed class SettingsPanelViewModel : ViewModelBase
     private string _claudeApiKeyWatermark = "Admin API key (sk-ant-admin...)";
     private string _claudeProStatus = "";
     private string _claudeApiConsoleStatus = "";
+    private string _claudeCursorPlanStatus = "";
 
     private bool _showGemini = true;
     private bool _showGeminiDetails = true;
@@ -61,6 +63,7 @@ public sealed class SettingsPanelViewModel : ViewModelBase
     private bool _showAntigravityDetails = true;
     private bool _showAntigravityBreakdown = true;
     private string _antigravityStatus = "";
+    private string _geminiCursorPlanStatus = "";
 
     private bool _showOpenRouterLimits = true;
     private bool _showOpenRouterDetails = true;
@@ -80,6 +83,8 @@ public sealed class SettingsPanelViewModel : ViewModelBase
 
     private bool _showDiskDrives = true;
     private bool _showDiskDetails = true;
+    private int _refreshIntervalMinutes = 5;
+    private bool _launchAtLogin;
 
     private SettingsExpandedProvider _expandedProvider = SettingsExpandedProvider.None;
 
@@ -253,6 +258,12 @@ public sealed class SettingsPanelViewModel : ViewModelBase
         set => SetProperty(ref _openAiStatus, value);
     }
 
+    public string OpenAiCursorPlanStatus
+    {
+        get => _openAiCursorPlanStatus;
+        set => SetProperty(ref _openAiCursorPlanStatus, value);
+    }
+
     public string CodexStatus
     {
         get => _codexStatus;
@@ -354,6 +365,12 @@ public sealed class SettingsPanelViewModel : ViewModelBase
         set => SetProperty(ref _claudeApiConsoleStatus, value);
     }
 
+    public string ClaudeCursorPlanStatus
+    {
+        get => _claudeCursorPlanStatus;
+        private set => SetProperty(ref _claudeCursorPlanStatus, value);
+    }
+
     public bool ShowGemini
     {
         get => _showGemini;
@@ -390,10 +407,23 @@ public sealed class SettingsPanelViewModel : ViewModelBase
         set => SetProperty(ref _antigravityStatus, value);
     }
 
+    public string GeminiCursorPlanStatus
+    {
+        get => _geminiCursorPlanStatus;
+        set => SetProperty(ref _geminiCursorPlanStatus, value);
+    }
+
     public bool ShowOpenRouterLimits
     {
         get => _showOpenRouterLimits;
-        set => SetToggle(ref _showOpenRouterLimits, value);
+        set
+        {
+            if (SetToggle(ref _showOpenRouterLimits, value))
+            {
+                OnPropertyChanged(nameof(ShowOpenRouterCredentials));
+                UpdateConnectionStates();
+            }
+        }
     }
 
     public bool ShowOpenRouterDetails
@@ -415,6 +445,8 @@ public sealed class SettingsPanelViewModel : ViewModelBase
     }
 
     public bool HasOpenRouterApiKeySaved => !string.IsNullOrWhiteSpace(_openRouterCredentialId);
+
+    public bool ShowOpenRouterCredentials => ShowOpenRouterLimits && !HasOpenRouterApiKeySaved;
 
     public bool ShowOpenCodeZen
     {
@@ -482,6 +514,40 @@ public sealed class SettingsPanelViewModel : ViewModelBase
         set => SetToggle(ref _showDiskDetails, value);
     }
 
+    public int RefreshIntervalMinutes
+    {
+        get => _refreshIntervalMinutes;
+        set
+        {
+            var clamped = Math.Clamp(value, 1, 120);
+            if (SetProperty(ref _refreshIntervalMinutes, clamped))
+            {
+                OnPropertyChanged(nameof(RefreshIntervalText));
+                NotifyFieldChanged();
+            }
+        }
+    }
+
+    public string RefreshIntervalText
+    {
+        get => _refreshIntervalMinutes.ToString(CultureInfo.InvariantCulture);
+        set
+        {
+            if (int.TryParse(value?.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var minutes))
+                RefreshIntervalMinutes = minutes;
+        }
+    }
+
+    public bool LaunchAtLogin
+    {
+        get => _launchAtLogin;
+        set
+        {
+            if (SetToggle(ref _launchAtLogin, value))
+                NotifyFieldChanged();
+        }
+    }
+
     public SettingsExpandedProvider ExpandedProvider
     {
         get => _expandedProvider;
@@ -502,6 +568,7 @@ public sealed class SettingsPanelViewModel : ViewModelBase
     public bool IsOpenRouterExpanded => ExpandedProvider == SettingsExpandedProvider.OpenRouter;
     public bool IsOpenCodeExpanded => ExpandedProvider == SettingsExpandedProvider.OpenCode;
     public bool IsDiskExpanded => ExpandedProvider == SettingsExpandedProvider.Disk;
+    public bool IsWidgetExpanded => ExpandedProvider == SettingsExpandedProvider.Widget;
 
     public string CursorChevron => IsCursorExpanded ? "▴" : "▾";
     public string OpenAiChevron => IsOpenAiExpanded ? "▴" : "▾";
@@ -510,6 +577,7 @@ public sealed class SettingsPanelViewModel : ViewModelBase
     public string OpenRouterChevron => IsOpenRouterExpanded ? "▴" : "▾";
     public string OpenCodeChevron => IsOpenCodeExpanded ? "▴" : "▾";
     public string DiskChevron => IsDiskExpanded ? "▴" : "▾";
+    public string WidgetChevron => IsWidgetExpanded ? "▴" : "▾";
 
     public string CursorHeaderColor => ProviderConnectionStateHelper.ToColor(_cursorConnectionState);
     public string OpenAiHeaderColor => ProviderConnectionStateHelper.ToColor(_openAiHeaderState);
@@ -519,6 +587,7 @@ public sealed class SettingsPanelViewModel : ViewModelBase
     public string OpenCodeHeaderColor => ProviderConnectionStateHelper.ToColor(_openCodeHeaderState);
     public string DiskHeaderColor => ProviderConnectionStateHelper.ToColor(
         ShowDiskDrives ? ProviderConnectionState.Connected : ProviderConnectionState.Off);
+    public string WidgetHeaderColor => ProviderConnectionStateHelper.ToColor(ProviderConnectionState.Connected);
 
     public void ToggleExpandedProvider(SettingsExpandedProvider provider) =>
         ExpandedProvider = ExpandedProvider == provider ? SettingsExpandedProvider.None : provider;
@@ -583,6 +652,8 @@ public sealed class SettingsPanelViewModel : ViewModelBase
 
             ShowDiskDrives = settings.ShowDiskDrives;
             ShowDiskDetails = settings.ShowDiskDetails;
+            RefreshIntervalMinutes = settings.RefreshIntervalMinutes > 0 ? settings.RefreshIntervalMinutes : 5;
+            LaunchAtLogin = settings.LaunchAtLogin;
 
             _expandedProvider = settings.SettingsExpandedProvider;
             NotifyAccordionPropertiesChanged();
@@ -653,6 +724,8 @@ public sealed class SettingsPanelViewModel : ViewModelBase
 
         settings.ShowDiskDrives = ShowDiskDrives;
         settings.ShowDiskDetails = ShowDiskDetails;
+        settings.RefreshIntervalMinutes = RefreshIntervalMinutes;
+        settings.LaunchAtLogin = LaunchAtLogin;
         settings.SettingsExpandedProvider = ExpandedProvider;
     }
 
@@ -708,6 +781,18 @@ public sealed class SettingsPanelViewModel : ViewModelBase
         _openCodeHeaderState = ProviderConnectionStateHelper.Aggregate(
             ProviderConnectionStateHelper.FromConnected(ShowOpenCodeZen, HasOpenCodeSessionSaved && !string.IsNullOrWhiteSpace(OpenCodeWorkspaceId)),
             ProviderConnectionStateHelper.FromConnected(ShowOpenCodeGo, HasOpenCodeSessionSaved && !string.IsNullOrWhiteSpace(OpenCodeWorkspaceId)));
+
+        ClaudeCursorPlanStatus = hasCursorToken
+            ? "Connected via Cursor session"
+            : "Sign in to Cursor IDE on this machine";
+
+        OpenAiCursorPlanStatus = hasCursorToken
+            ? "Connected via Cursor session"
+            : "Sign in to Cursor IDE on this machine";
+
+        GeminiCursorPlanStatus = hasCursorToken
+            ? "Connected via Cursor session"
+            : "Sign in to Cursor IDE on this machine";
 
         OnPropertyChanged(nameof(CursorHeaderColor));
         OnPropertyChanged(nameof(OpenAiHeaderColor));
@@ -827,6 +912,14 @@ public sealed class SettingsPanelViewModel : ViewModelBase
         ClaudeProStatus = await _claudeProBilling.RefreshAndConnectAsync(settings.Claude);
         _claudeProSessionCredentialId = settings.Claude.ProSessionCredentialId;
         UpdateCredentialWatermarks();
+        await CompleteEasySetupAsync(settings);
+    }
+
+    public async Task RunEasySetupClaudeAsync(WidgetSettings settings)
+    {
+        var result = await _easySetup.SetupClaudeAsync(settings);
+        ClaudeProStatus = result.StatusMessage ?? settings.Claude.ProLastConnectionStatus ?? "";
+        UpdateStatusFromSettings(settings);
         await CompleteEasySetupAsync(settings);
     }
 
@@ -959,6 +1052,7 @@ public sealed class SettingsPanelViewModel : ViewModelBase
         OnPropertyChanged(nameof(ShowOpenAiDirectCredentials));
         OnPropertyChanged(nameof(ShowCodexCredentials));
         OnPropertyChanged(nameof(ShowClaudeApiConsoleCredentials));
+        OnPropertyChanged(nameof(ShowOpenRouterCredentials));
         OnPropertyChanged(nameof(HasCodexAutoAuth));
         UpdateConnectionStates();
     }
@@ -972,6 +1066,7 @@ public sealed class SettingsPanelViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsOpenRouterExpanded));
         OnPropertyChanged(nameof(IsOpenCodeExpanded));
         OnPropertyChanged(nameof(IsDiskExpanded));
+        OnPropertyChanged(nameof(IsWidgetExpanded));
         OnPropertyChanged(nameof(CursorChevron));
         OnPropertyChanged(nameof(OpenAiChevron));
         OnPropertyChanged(nameof(ClaudeChevron));
@@ -979,6 +1074,7 @@ public sealed class SettingsPanelViewModel : ViewModelBase
         OnPropertyChanged(nameof(OpenRouterChevron));
         OnPropertyChanged(nameof(OpenCodeChevron));
         OnPropertyChanged(nameof(DiskChevron));
+        OnPropertyChanged(nameof(WidgetChevron));
     }
 
     private static string BuildWatermark(string label, string? credentialId) =>

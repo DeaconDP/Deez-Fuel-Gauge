@@ -10,6 +10,10 @@ public class MacOsPackagingTests
     {
         var repoRoot = FindRepoRoot();
         Assert.True(File.Exists(Path.Combine(repoRoot, "packaging", "macos", "Info.plist")));
+        Assert.True(File.Exists(Path.Combine(repoRoot, "packaging", "icons", "app-icon.ico")));
+        Assert.True(File.Exists(Path.Combine(repoRoot, "packaging", "icons", "app-icon.png")));
+        Assert.True(File.Exists(Path.Combine(repoRoot, "packaging", "icons", "AppIcon.icns")));
+        Assert.True(File.Exists(Path.Combine(repoRoot, "scripts", "generate-app-icons.py")));
         Assert.True(File.Exists(Path.Combine(repoRoot, "scripts", "package-macos-app.sh")));
         Assert.True(File.Exists(Path.Combine(repoRoot, "scripts", "package-macos-release.sh")));
         Assert.True(File.Exists(Path.Combine(repoRoot, "scripts", "refresh-macos-setup-launcher.sh")));
@@ -29,6 +33,8 @@ public class MacOsPackagingTests
         Assert.Contains("<key>CFBundleExecutable</key>", plist);
         Assert.Contains("<string>CursorUsageWidget</string>", plist);
         Assert.Contains("<key>CFBundleIdentifier</key>", plist);
+        Assert.Contains("<key>CFBundleIconFile</key>", plist);
+        Assert.Contains("<string>AppIcon</string>", plist);
     }
 
     [Fact]
@@ -38,6 +44,22 @@ public class MacOsPackagingTests
 
         Assert.Contains("REPO_ROOT=\"$(cd \"$(dirname \"$0\")/..\" && pwd)\"", script);
         Assert.DoesNotContain("$(dirname \"$0\")/../..", script);
+    }
+
+    [Fact]
+    public void Setup_app_info_plist_declares_icon()
+    {
+        var plistPath = Path.Combine(FindRepoRoot(), "setup-and-run.app", "Contents", "Info.plist");
+        var plist = File.ReadAllText(plistPath);
+
+        Assert.Contains("<key>CFBundleIconFile</key>", plist);
+        Assert.Contains("<string>AppIcon</string>", plist);
+    }
+
+    [Fact]
+    public void Windows_release_script_exists()
+    {
+        Assert.True(File.Exists(Path.Combine(FindRepoRoot(), "scripts", "package-windows-release.ps1")));
     }
 
     [Fact]

@@ -41,7 +41,7 @@ public static class CursorTokenReader
         }
     }
 
-    private static CursorTokens ReadFromPath(string path)
+    internal static CursorTokens ReadFromPath(string path)
     {
         var connectionString = new SqliteConnectionStringBuilder
         {

@@ -9,5 +9,6 @@ public enum SettingsExpandedProvider
     Gemini,
     OpenRouter,
     OpenCode,
-    Disk
+    Disk,
+    Widget
 }

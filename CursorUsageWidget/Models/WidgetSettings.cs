@@ -27,4 +27,7 @@ public sealed class WidgetSettings
     public bool ShowBreakdown { get; set; } = true;
     public bool ShowDiskDrives { get; set; } = true;
     public bool ShowDiskDetails { get; set; } = true;
+    public int RefreshIntervalMinutes { get; set; } = 5;
+    public bool LaunchAtLogin { get; set; }
+    public bool HasCompletedFirstRun { get; set; }
 }

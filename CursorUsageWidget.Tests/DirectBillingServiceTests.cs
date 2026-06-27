@@ -29,4 +29,25 @@ public sealed class DirectBillingServiceTests
         Assert.False(enriched.OpenCode.IsAvailable);
         Assert.Equal(42, enriched.PercentUsed);
     }
+
+    [Fact]
+    public async Task EnrichAsync_fetches_enabled_providers_in_parallel()
+    {
+        var settings = new WidgetSettings
+        {
+            OpenAi = new ProviderBillingSettings { ShowProLimits = true },
+            Claude = new ProviderBillingSettings { ShowProLimits = true },
+            Gemini = new ProviderBillingSettings { ShowProLimits = true },
+            OpenRouter = new ProviderBillingSettings { ShowProLimits = true },
+            OpenCode = new ProviderBillingSettings { ShowProLimits = true, ShowDirectSource = true }
+        };
+
+        var source = new UsageSnapshot { PercentUsed = 10 };
+        using var service = new DirectBillingService();
+        var enriched = await service.EnrichAsync(source, settings);
+
+        Assert.Equal(10, enriched.PercentUsed);
+        Assert.False(enriched.Codex.IsAvailable);
+        Assert.False(enriched.ClaudePro.IsAvailable);
+    }
 }

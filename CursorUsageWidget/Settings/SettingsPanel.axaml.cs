@@ -66,6 +66,9 @@ public partial class SettingsPanel : UserControl
     private void DiskHeader_PointerPressed(object? sender, PointerPressedEventArgs e) =>
         ToggleHeader(SettingsExpandedProvider.Disk, e);
 
+    private void WidgetHeader_PointerPressed(object? sender, PointerPressedEventArgs e) =>
+        ToggleHeader(SettingsExpandedProvider.Widget, e);
+
     private void ClearTextBox(TextBox box)
     {
         box.Text = "";
@@ -165,4 +168,10 @@ public partial class SettingsPanel : UserControl
 
     private async void EasySetupOpenRouter_Click(object? sender, RoutedEventArgs e) =>
         await ViewModel.RunEasySetupOpenRouterAsync(RequireSettings());
+
+    private async void EasySetupClaude_Click(object? sender, RoutedEventArgs e) =>
+        await ViewModel.RunEasySetupClaudeAsync(RequireSettings());
+
+    private async void EasySetupOpenCode_Click(object? sender, RoutedEventArgs e) =>
+        await ViewModel.RunEasySetupOpenCodeAsync(RequireSettings());
 }

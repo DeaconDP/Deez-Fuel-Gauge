@@ -10,7 +10,13 @@
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <RuntimeIdentifiers>win-x64;osx-arm64;osx-x64</RuntimeIdentifiers>
     <UseAppHost>true</UseAppHost>
+    <ApplicationIcon>..\packaging\icons\app-icon.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <AvaloniaResource Include="..\packaging\icons\app-icon.png" Link="Assets\app-icon.png" />
+    <AvaloniaResource Include="Settings\Controls\SettingsStyles.axaml" />
+  </ItemGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="CursorUsageWidget.Tests" />

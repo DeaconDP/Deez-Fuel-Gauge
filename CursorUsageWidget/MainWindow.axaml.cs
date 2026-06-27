@@ -9,12 +9,13 @@ using Avalonia.Threading;
 using CursorUsageWidget.Models;
 using CursorUsageWidget.Services;
 using CursorUsageWidget.Settings;
+using CursorUsageWidget.ViewModels;
 
 namespace CursorUsageWidget;
 
 public partial class MainWindow : Window, ISettingsPanelHost
 {
-    private readonly UsageClient _usageClient = new();
+    private readonly UsageRefreshService _refreshService;
     private readonly OpenAiBillingClient _openAiBilling = new();
     private readonly CodexUsageClient _codexBilling = new();
     private readonly AnthropicBillingClient _anthropicBilling = new();
@@ -70,6 +71,9 @@ public partial class MainWindow : Window, ISettingsPanelHost
     private double _lastOpenCodeGoMonthlyPercent;
     private double _lastOpenCodeHeadlinePercent;
     private UsageSnapshot? _lastSnapshot;
+    private RefreshResult? _lastRefreshResult;
+    private readonly WidgetViewModel _widgetViewModel = new();
+    private TrayIconService? _trayIconService;
     private readonly List<DiskBarRow> _diskBarRows = [];
     private double _settingsAnchorHeight;
     private bool _compensateSettingsAnchor;
@@ -96,6 +100,9 @@ public partial class MainWindow : Window, ISettingsPanelHost
             _antigravityBilling,
             _openRouterBilling,
             _openCodeBilling);
+        _refreshService = new UsageRefreshService(
+            new UsageClient(),
+            _directBilling);
         _easySetup = new ProviderEasySetupService(
             _codexBilling,
             _claudeProBilling,
@@ -139,7 +146,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
 
         _pollTimer = new DispatcherTimer
         {
-            Interval = TimeSpan.FromMinutes(5)
+            Interval = TimeSpan.FromMinutes(_settings.RefreshIntervalMinutes > 0 ? _settings.RefreshIntervalMinutes : 5)
         };
         _pollTimer.Tick += async (_, _) => await RefreshAsync();
         _pollTimer.Start();
@@ -147,10 +154,19 @@ public partial class MainWindow : Window, ISettingsPanelHost
         Opened += async (_, _) =>
         {
             Dispatcher.UIThread.Post(ApplyInitialPosition, DispatcherPriority.Loaded);
+            ApplyRuntimeSettings();
+            _trayIconService = new TrayIconService(
+                () => _ = RefreshAsync(),
+                Close);
             await RefreshAsync();
+            await MaybeShowFirstRunAsync();
         };
         SizeChanged += (_, _) => UpdateAllProgressWidths();
-        Closing += (_, _) => SaveSettings();
+        Closing += (_, _) =>
+        {
+            SaveSettings();
+            _trayIconService?.Dispose();
+        };
     }
 
     private void ApplyInitialPosition()
@@ -260,12 +276,43 @@ public partial class MainWindow : Window, ISettingsPanelHost
     public void OnSettingsChanged()
     {
         SyncSettingsAndVisibility();
+        ApplyRuntimeSettings();
         SaveSettings();
 
         if (_lastSnapshot is not null)
             ApplySnapshot(_lastSnapshot);
 
         RefreshDiskVolumes();
+    }
+
+    private void ApplyRuntimeSettings()
+    {
+        var minutes = _settings.RefreshIntervalMinutes > 0 ? _settings.RefreshIntervalMinutes : 5;
+        _pollTimer.Interval = TimeSpan.FromMinutes(minutes);
+
+        if (LoginItemService.IsSupported)
+        {
+            var exe = Environment.ProcessPath;
+            if (!string.IsNullOrWhiteSpace(exe))
+                LoginItemService.SetEnabled(_settings.LaunchAtLogin, exe);
+        }
+    }
+
+    private async Task MaybeShowFirstRunAsync()
+    {
+        if (_settings.HasCompletedFirstRun)
+            return;
+
+        var dialog = new FirstRunWindow();
+        await dialog.ShowDialog(this);
+        _settings.HasCompletedFirstRun = true;
+        SaveSettings();
+
+        if (dialog.OpenSettingsRequested)
+        {
+            _isSettingsExpanded = true;
+            UpdateSettingsExpandedState();
+        }
     }
 
     public async Task OnEasySetupCompletedAsync()
@@ -751,17 +798,18 @@ public partial class MainWindow : Window, ISettingsPanelHost
         {
             SyncSettingsAndVisibility();
             _settingsViewModel.UpdateCursorConnectionStatus();
-            var tokens = CursorTokenReader.Read();
-            _usageClient.SetTokens(tokens.AccessToken, tokens.RefreshToken);
-            var snapshot = await _usageClient.FetchAsync();
-            snapshot = await _directBilling.EnrichAsync(snapshot, _settings);
-            ApplySnapshot(snapshot);
+            var result = await _refreshService.RefreshAsync(_settings);
+            _lastRefreshResult = result;
+            _widgetViewModel.ApplyRefreshResult(result);
+            ApplySnapshot(result.Snapshot, result.CursorFetchSucceeded);
+            ApplyDegradedTooltips();
             SaveSettings();
             _settingsViewModel.UpdateStatusFromSettings(_settings);
+            UpdateLastRefreshedLabel();
         }
         catch
         {
-            ApplySnapshot(UsageSnapshot.Error("Can't fetch usage"));
+            ApplySnapshot(UsageSnapshot.Error("Can't fetch usage"), cursorFetchSucceeded: false);
         }
         finally
         {
@@ -783,7 +831,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
         }
     }
 
-    private void ApplySnapshot(UsageSnapshot snapshot)
+    private void ApplySnapshot(UsageSnapshot snapshot, bool cursorFetchSucceeded = true)
     {
         _lastSnapshot = snapshot;
 
@@ -791,7 +839,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
         {
             RemainingText.Text = snapshot.ErrorMessage ?? "Error";
             BreakdownPanel.IsVisible = false;
-            ResetProviderBars();
+            ResetCursorPlanBars();
             ApplyHeadlineBar(CursorHeadlineTrack, CursorHeadlineFill, ref _lastCursorHeadlinePercent, 0);
             CursorHeadlineFill.Background = new SolidColorBrush(Color.FromRgb(0xFF, 0x98, 0x00));
             CursorHeadlineTrack.Opacity = 0.45;
@@ -800,30 +848,57 @@ public partial class MainWindow : Window, ISettingsPanelHost
                 WriteProviderExpandState(ProviderExpandState.ExpandOnly(ProviderSection.Cursor));
                 UpdateAllProviderExpandedState();
             }
-            OpenAiProviderSection.IsVisible = false;
-            ClaudeProviderSection.IsVisible = false;
-            GeminiProviderSection.IsVisible = false;
-            OpenRouterProviderSection.IsVisible = false;
-            OpenCodeProviderSection.IsVisible = false;
+
+            ApplyDirectProviderData(snapshot);
+            ApplyProviderHeadlines(snapshot);
+            SyncSettingsAndVisibility();
             return;
         }
 
         RemainingText.Text = _settings.Cursor.ShowDetails ? snapshot.RemainingLabel : "";
         ApplyProviderDetailChrome();
 
+        ApplyCursorPlanBars(snapshot);
+        ApplyDirectProviderData(snapshot);
+        ApplyProviderHeadlines(snapshot);
+        SyncSettingsAndVisibility();
+    }
+
+    private void ApplyCursorPlanBars(UsageSnapshot snapshot)
+    {
         ApplyProviderBar(snapshot.OpenAi, _settings.OpenAi, ref _lastOpenAiPercent, OpenAiProgressTrack, OpenAiProgressFill, OpenAiDetailText);
         ApplyProviderBar(snapshot.Claude, _settings.Claude, ref _lastClaudePercent, ClaudeProgressTrack, ClaudeProgressFill, ClaudeDetailText);
-        ApplyClaudeProBars(snapshot.ClaudePro, _settings.Claude);
         ApplyProviderBar(snapshot.Gemini, _settings.Gemini, ref _lastGeminiPercent, GeminiProgressTrack, GeminiProgressFill, GeminiDetailText);
+    }
 
+    private void ApplyDirectProviderData(UsageSnapshot snapshot)
+    {
+        ApplyClaudeProBars(snapshot.ClaudePro, _settings.Claude);
         ApplyDirectProviderBar(snapshot.OpenAiDirect, _settings.OpenAi.ShowDirectSource, _settings.OpenAi.EffectiveShowDirectDetails, ref _lastOpenAiDirectPercent, OpenAiDirectProgressTrack, OpenAiDirectProgressFill, OpenAiDirectDetailText);
         ApplyCodexBars(snapshot.Codex, _settings.OpenAi);
         ApplyDirectProviderBar(snapshot.ClaudeDirect, _settings.Claude.ShowApiConsoleBilling, _settings.Claude.EffectiveShowDirectDetails, ref _lastClaudeDirectPercent, ClaudeDirectProgressTrack, ClaudeDirectProgressFill, ClaudeDirectDetailText);
         ApplyAntigravityBars(snapshot.Antigravity, _settings.Gemini);
         ApplyOpenRouterBars(snapshot.OpenRouter, _settings.OpenRouter);
         ApplyOpenCodeBars(snapshot.OpenCode, _settings.OpenCode);
-        ApplyProviderHeadlines(snapshot);
-        SyncSettingsAndVisibility();
+    }
+
+    private void UpdateLastRefreshedLabel()
+    {
+        if (LastRefreshedText is null)
+            return;
+
+        var label = _widgetViewModel.LastRefreshedLabel;
+        LastRefreshedText.Text = label;
+        LastRefreshedText.IsVisible = !string.IsNullOrWhiteSpace(label);
+    }
+
+    private void ApplyDegradedTooltips()
+    {
+        ToolTip.SetTip(OpenAiProviderHeader, _widgetViewModel.OpenAi.DegradedMessage);
+        ToolTip.SetTip(ClaudeProviderHeader, _widgetViewModel.Claude.DegradedMessage);
+        ToolTip.SetTip(GeminiProviderHeader, _widgetViewModel.Gemini.DegradedMessage);
+        ToolTip.SetTip(OpenRouterProviderHeader, _widgetViewModel.OpenRouter.DegradedMessage);
+        ToolTip.SetTip(OpenCodeProviderHeader, _widgetViewModel.OpenCode.DegradedMessage);
     }
 
     private void ApplyProviderHeadlines(UsageSnapshot snapshot)
@@ -1168,6 +1243,21 @@ public partial class MainWindow : Window, ISettingsPanelHost
             provider.DetailLabel,
             showDetails,
             detailText);
+    }
+
+    private void ResetCursorPlanBars()
+    {
+        _lastAutoPercent = 0;
+        _lastApiPercent = 0;
+        _lastOpenAiPercent = 0;
+        _lastClaudePercent = 0;
+        _lastGeminiPercent = 0;
+        OpenAiProgressFill.Width = 0;
+        ClaudeProgressFill.Width = 0;
+        GeminiProgressFill.Width = 0;
+        OpenAiProgressTrack.Opacity = 0.45;
+        ClaudeProgressTrack.Opacity = 0.45;
+        GeminiProgressTrack.Opacity = 0.45;
     }
 
     private void ResetProviderBars()
@@ -1522,7 +1612,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
     protected override void OnClosed(EventArgs e)
     {
         _pollTimer.Stop();
-        _usageClient.Dispose();
+        _refreshService.Dispose();
         _directBilling.Dispose();
         _openAiBilling.Dispose();
         _codexBilling.Dispose();

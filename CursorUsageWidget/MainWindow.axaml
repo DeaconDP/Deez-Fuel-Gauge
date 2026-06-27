@@ -56,7 +56,7 @@
                                Foreground="#CC00E5FF"
                                Margin="0,0,7,0"
                                VerticalAlignment="Center" />
-                    <TextBlock Text="Deez Fuel Guage"
+                    <TextBlock Text="Cursor Usage"
                                FontFamily="Segoe UI Semibold, Segoe UI, sans-serif"
                                FontSize="13"
                                FontWeight="SemiBold"
@@ -1197,6 +1197,13 @@
                         Margin="0,6,0,0"
                         Spacing="4"
                         IsVisible="False" />
+            <TextBlock x:Name="LastRefreshedText"
+                       FontSize="8"
+                       LineHeight="11"
+                       Foreground="#44FFFFFF"
+                       HorizontalAlignment="Center"
+                       Margin="0,4,0,0"
+                       IsVisible="False" />
             <StackPanel Orientation="Horizontal"
                         Margin="0,9,0,0"
                         HorizontalAlignment="Center"
