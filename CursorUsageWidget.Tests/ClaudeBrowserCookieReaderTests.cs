@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using CursorUsageWidget.Services;
 using Microsoft.Data.Sqlite;
 using Xunit;
@@ -16,7 +18,7 @@ public sealed class ClaudeBrowserCookieReaderTests
             var sessionKey = ClaudeBrowserCookieReader.TryReadSessionKeyFromCookieDatabase(
                 databasePath,
                 encryptionKey: null,
-                (_, encryptedValue) => System.Text.Encoding.UTF8.GetString(encryptedValue));
+                (_, encryptedValue) => Encoding.UTF8.GetString(encryptedValue));
 
             Assert.Equal("abc-session-key", sessionKey);
         }
@@ -34,14 +36,134 @@ public sealed class ClaudeBrowserCookieReaderTests
             return;
 
         var plain = "session-from-dpapi";
-        var encrypted = System.Security.Cryptography.ProtectedData.Protect(
-            System.Text.Encoding.UTF8.GetBytes(plain),
+        var encrypted = ProtectedData.Protect(
+            Encoding.UTF8.GetBytes(plain),
             null,
-            System.Security.Cryptography.DataProtectionScope.CurrentUser);
+            DataProtectionScope.CurrentUser);
 
         var decrypted = ClaudeBrowserCookieReader.DecryptChromiumCookieValue(null, encrypted);
 
         Assert.Equal(plain, decrypted);
+    }
+
+    [Fact]
+    public void DeriveMacChromiumKey_is_deterministic()
+    {
+        var key = ClaudeBrowserCookieReader.DeriveMacChromiumKey("peanuts");
+        var again = ClaudeBrowserCookieReader.DeriveMacChromiumKey("peanuts");
+
+        Assert.Equal(key, again);
+        Assert.Equal(16, key.Length);
+    }
+
+    [Fact]
+    public void DecryptMacV10Cookie_decrypts_aes_cbc_cookie_value()
+    {
+        var key = ClaudeBrowserCookieReader.DeriveMacChromiumKey("peanuts");
+        var plain = Encoding.UTF8.GetBytes("abc-session-key");
+        var iv = new byte[16];
+        RandomNumberGenerator.Fill(iv);
+
+        byte[] encrypted;
+        using (var aes = Aes.Create())
+        {
+            aes.Key = key;
+            aes.Mode = CipherMode.CBC;
+            aes.Padding = PaddingMode.PKCS7;
+            aes.IV = iv;
+            using var encryptor = aes.CreateEncryptor();
+            encrypted = encryptor.TransformFinalBlock(plain, 0, plain.Length);
+        }
+
+        var payload = new byte[3 + 16 + encrypted.Length];
+        payload[0] = (byte)'v';
+        payload[1] = (byte)'1';
+        payload[2] = (byte)'0';
+        iv.CopyTo(payload.AsSpan(3));
+        encrypted.CopyTo(payload.AsSpan(19));
+
+        var decrypted = ClaudeBrowserCookieReader.DecryptMacV10Cookie(key, payload);
+
+        Assert.Equal("abc-session-key", decrypted);
+    }
+
+    [Fact]
+    public void DecryptChromiumCookieValue_uses_mac_v10_cbc_on_macos()
+    {
+        if (!OperatingSystem.IsMacOS())
+            return;
+
+        var key = ClaudeBrowserCookieReader.DeriveMacChromiumKey("peanuts");
+        var plain = Encoding.UTF8.GetBytes("session-from-browser");
+        var iv = new byte[16];
+        RandomNumberGenerator.Fill(iv);
+
+        byte[] encrypted;
+        using (var aes = Aes.Create())
+        {
+            aes.Key = key;
+            aes.Mode = CipherMode.CBC;
+            aes.Padding = PaddingMode.PKCS7;
+            aes.IV = iv;
+            using var encryptor = aes.CreateEncryptor();
+            encrypted = encryptor.TransformFinalBlock(plain, 0, plain.Length);
+        }
+
+        var payload = new byte[3 + 16 + encrypted.Length];
+        payload[0] = (byte)'v';
+        payload[1] = (byte)'1';
+        payload[2] = (byte)'0';
+        iv.CopyTo(payload.AsSpan(3));
+        encrypted.CopyTo(payload.AsSpan(19));
+
+        var decrypted = ClaudeBrowserCookieReader.DecryptChromiumCookieValue(key, payload);
+
+        Assert.Equal("session-from-browser", decrypted);
+    }
+
+    [Fact]
+    public void Mac_chrome_profile_path_uses_application_support()
+    {
+        if (!OperatingSystem.IsMacOS())
+            return;
+
+        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        var chromePath = Path.Combine(localAppData, "Google", "Chrome", "User Data");
+
+        Assert.Contains("Application Support", chromePath);
+        Assert.EndsWith(Path.Combine("Google", "Chrome", "User Data"), chromePath);
+    }
+
+    [Fact]
+    public void ReadChromiumEncryptionKey_returns_null_for_missing_mac_keychain_entry()
+    {
+        if (!OperatingSystem.IsMacOS())
+            return;
+
+        var localStatePath = Path.Combine(Path.GetTempPath(), $"local-state-{Guid.NewGuid():N}.json");
+        var encryptedKeyBytes = new byte[] { (byte)'v', (byte)'1', (byte)'0', 1, 2, 3, 4 };
+        var encryptedPayload = Convert.ToBase64String(encryptedKeyBytes);
+
+        File.WriteAllText(
+            localStatePath,
+            "{\"os_crypt\":{\"encrypted_key\":\"" + encryptedPayload + "\"}}");
+
+        try
+        {
+            var profile = new ChromiumBrowserProfile(
+                CookieDatabasePath: "/tmp/nonexistent-cookies",
+                LocalStatePath: localStatePath,
+                MacKeychainService: "CursorUsageWidget-Tests-Missing",
+                MacKeychainAccount: "Missing");
+
+            var key = ClaudeBrowserCookieReader.ReadChromiumEncryptionKey(profile);
+
+            Assert.Null(key);
+        }
+        finally
+        {
+            File.Delete(localStatePath);
+        }
     }
 
     private static string CreateCookieDatabase(string name)
@@ -74,7 +196,7 @@ public sealed class ClaudeBrowserCookieReaderTests
                     """;
                 insert.Parameters.AddWithValue("$name", "sessionKey");
                 insert.Parameters.AddWithValue("$host", ".claude.ai");
-                insert.Parameters.AddWithValue("$value", System.Text.Encoding.UTF8.GetBytes("abc-session-key"));
+                insert.Parameters.AddWithValue("$value", Encoding.UTF8.GetBytes("abc-session-key"));
                 insert.ExecuteNonQuery();
             }
 

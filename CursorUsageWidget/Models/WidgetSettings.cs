@@ -4,6 +4,7 @@ public sealed class WidgetSettings
 {
     public double Left { get; set; } = 100;
     public double Top { get; set; } = 100;
+    public bool IsPositionPinned { get; set; }
     public bool IsBreakdownExpanded { get; set; }
     public bool IsCodexLimitsExpanded { get; set; }
     public bool IsClaudeProLimitsExpanded { get; set; }

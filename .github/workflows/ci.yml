@@ -49,5 +49,8 @@ jobs:
           test -x setup-and-run.app/Contents/MacOS/setup-and-run
           ./scripts/package-macos-app.sh
           test -x CursorUsageWidget.app/Contents/MacOS/CursorUsageWidget
+          test -f CursorUsageWidget.app/Contents/MacOS/libSkiaSharp.dylib
+          test -f CursorUsageWidget.app/Contents/MacOS/libHarfBuzzSharp.dylib
+          test -f CursorUsageWidget.app/Contents/MacOS/libAvaloniaNative.dylib
           codesign --verify --deep --strict CursorUsageWidget.app
           codesign --verify --deep --strict setup-and-run.app

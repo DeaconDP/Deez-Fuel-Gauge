@@ -4,13 +4,27 @@ A lightweight, draggable desktop overlay that shows how much of your Cursor incl
 
 Runs on **Windows 10/11** and **macOS**.
 
+## Download
+
+| Platform | File | Notes |
+|----------|------|-------|
+| Windows | [cursor-usage-widget-win-Setup.exe](Releases/cursor-usage-widget-win-Setup.exe) | Installer |
+| Windows | [cursor-usage-widget-win-Portable.zip](Releases/cursor-usage-widget-win-Portable.zip) | Portable zip |
+| macOS | **GitHub Releases** → `cursor-usage-widget-mac-Universal.zip` | Universal `.app` (Apple Silicon + Intel); built by the release workflow |
+
+To build the macOS zip locally (produces `Releases/cursor-usage-widget-mac-Universal.zip`), run **`scripts/package-macos-release.sh`** from the repo root on a Mac with the .NET 8 SDK installed.
+
+After downloading or building the macOS zip, unzip it and move **`CursorUsageWidget.app`** anywhere you like (for example **Applications**). The app is self-contained and does **not** require .NET to be installed.
+
+If macOS blocks the app the first time, right-click **`CursorUsageWidget.app`** and choose **Open**.
+
 ## Requirements
 
 - Windows 10/11 or macOS 12+
-- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
 - Cursor IDE logged in on the same user profile
+- **From source:** [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) (not required for the macOS release zip above)
 
-## One-click setup & run
+## One-click setup & run (from source)
 
 Double-click the launcher for your platform:
 
@@ -24,11 +38,20 @@ On first run it builds the widget and launches it. Later runs rebuild and start 
 After the first successful setup, you can open **`CursorUsageWidget.app`** directly.
 
 - **Windows:** if .NET 8 is missing, the launcher can install it via winget.
-- **macOS:** if .NET 8 is missing, the launcher opens the official download page in your browser.
+- **macOS:** if .NET 8 is missing, the launcher tries a silent SDK install first, then opens the official download page if that fails.
 - **macOS:** if macOS blocks the launcher the first time, right-click **`setup-and-run.app`** and choose **Open**.
 - **macOS:** if **`CursorUsageWidget.app`** is blocked after setup, right-click it and choose **Open** as well.
 
 If setup fails on macOS, details are saved to `~/Library/Logs/CursorUsageWidget/setup.log`.
+
+### macOS troubleshooting
+
+| Issue | What to try |
+|-------|-------------|
+| “App can’t be opened” / Gatekeeper | Right-click the app → **Open**, or **System Settings → Privacy & Security → Open Anyway** |
+| Setup fails immediately | Open `~/Library/Logs/CursorUsageWidget/setup.log` for the exact error |
+| .NET SDK missing | Re-run **`setup-and-run.app`** (it attempts auto-install) or install the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) manually |
+| Claude browser session not detected | Ensure Chrome, Edge, or Brave is logged into claude.ai; macOS may prompt for Keychain access once per browser |
 
 ## Usage
 
@@ -58,7 +81,7 @@ Click the **gear** in the widget header to configure what is shown:
 
 **OpenAI (Platform, optional):** create an [organization admin key](https://platform.openai.com) with `api.usage.read` scope for org spend tracking against a monthly budget. This is separate from ChatGPT/Codex subscription limits.
 
-**Claude (Pro/Max):** click **Open** in settings to sign in at claude.ai, then click **Refresh**. The widget reads your session from Chrome or Edge automatically, or from Claude Code login (`~/.claude/.credentials.json`) when present. If Refresh fails, close your browser and try again. Uses undocumented claude.ai endpoints and may change without notice.
+**Claude (Pro/Max):** click **Open** in settings to sign in at claude.ai, then click **Refresh**. The widget reads your session from Chrome, Edge, or Brave automatically on **Windows and macOS**, from Claude Code login (`~/.claude/.credentials.json` or macOS Keychain) when present, or from a saved session. macOS may show a one-time Keychain prompt when reading browser cookies. If Refresh fails, close your browser and try again. Uses undocumented claude.ai endpoints and may change without notice.
 
 **Claude (API Console, advanced):** create an [Admin API key](https://console.anthropic.com) (`sk-ant-admin...`) and optional monthly budget for org spend tracking. This is separate from Claude Pro/Max subscription limits.
 

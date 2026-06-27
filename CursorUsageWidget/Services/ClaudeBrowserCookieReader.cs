@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
@@ -9,6 +10,7 @@ namespace CursorUsageWidget.Services;
 public sealed class ClaudeBrowserCookieReader
 {
     private const string CookieName = "sessionKey";
+    private static readonly byte[] MacMasterKeyIv = Encoding.UTF8.GetBytes("                ");
 
     private readonly Func<IReadOnlyList<ChromiumBrowserProfile>> _profileResolver;
     private readonly Func<byte[]?, byte[], string?> _decryptValue;
@@ -23,9 +25,6 @@ public sealed class ClaudeBrowserCookieReader
 
     public string? ReadSessionKey()
     {
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-            return null;
-
         foreach (var profile in _profileResolver())
         {
             var sessionKey = TryReadSessionKeyFromProfile(profile);
@@ -64,25 +63,100 @@ public sealed class ClaudeBrowserCookieReader
         }
     }
 
-    internal static byte[]? ReadChromiumEncryptionKey(string localStatePath)
+    internal static byte[]? ReadChromiumEncryptionKey(ChromiumBrowserProfile profile)
     {
-        if (!File.Exists(localStatePath))
+        if (!File.Exists(profile.LocalStatePath))
             return null;
 
         try
         {
-            using var document = JsonDocument.Parse(File.ReadAllText(localStatePath));
+            using var document = JsonDocument.Parse(File.ReadAllText(profile.LocalStatePath));
             if (!document.RootElement.TryGetProperty("os_crypt", out var osCrypt)
                 || !osCrypt.TryGetProperty("encrypted_key", out var encryptedKeyEl)
                 || encryptedKeyEl.ValueKind != JsonValueKind.String)
                 return null;
 
             var encryptedKey = Convert.FromBase64String(encryptedKeyEl.GetString() ?? "");
-            if (encryptedKey.Length <= 5
-                || !encryptedKey.AsSpan(0, 5).SequenceEqual("DPAPI"u8))
+            if (encryptedKey.Length <= 5)
                 return null;
 
-            return ProtectedData.Unprotect(encryptedKey.AsSpan(5).ToArray(), null, DataProtectionScope.CurrentUser);
+            if (OperatingSystem.IsWindows()
+                && encryptedKey.AsSpan(0, 5).SequenceEqual("DPAPI"u8))
+                return ProtectedData.Unprotect(encryptedKey.AsSpan(5).ToArray(), null, DataProtectionScope.CurrentUser);
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
+                && encryptedKey.Length > 3
+                && encryptedKey[0] == (byte)'v'
+                && encryptedKey[1] == (byte)'1'
+                && encryptedKey[2] == (byte)'0'
+                && profile.MacKeychainService is not null
+                && profile.MacKeychainAccount is not null)
+            {
+                return ReadMacChromiumEncryptionKey(
+                    encryptedKey.AsSpan(3).ToArray(),
+                    profile.MacKeychainService,
+                    profile.MacKeychainAccount);
+            }
+
+            return null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    internal static byte[] DeriveMacChromiumKey(string keychainPassword)
+    {
+        return Rfc2898DeriveBytes.Pbkdf2(
+            Encoding.UTF8.GetBytes(keychainPassword),
+            "saltysalt"u8.ToArray(),
+            1003,
+            HashAlgorithmName.SHA1,
+            16);
+    }
+
+    internal static byte[]? ReadMacChromiumEncryptionKey(
+        byte[] encryptedKeyPayload,
+        string keychainService,
+        string keychainAccount)
+    {
+        var keychainPassword = ReadMacKeychainPassword(keychainService, keychainAccount);
+        if (keychainPassword is null)
+            return null;
+
+        var derivedKey = DeriveMacChromiumKey(keychainPassword);
+        return DecryptAesCbc(derivedKey, encryptedKeyPayload, MacMasterKeyIv);
+    }
+
+    internal static string? ReadMacKeychainPassword(string service, string account)
+    {
+        try
+        {
+            var startInfo = new ProcessStartInfo("/usr/bin/security")
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            startInfo.ArgumentList.Add("find-generic-password");
+            startInfo.ArgumentList.Add("-s");
+            startInfo.ArgumentList.Add(service);
+            startInfo.ArgumentList.Add("-a");
+            startInfo.ArgumentList.Add(account);
+            startInfo.ArgumentList.Add("-w");
+
+            using var process = Process.Start(startInfo);
+            if (process is null)
+                return null;
+
+            var output = process.StandardOutput.ReadToEnd();
+            process.WaitForExit(5000);
+            if (process.ExitCode != 0 || string.IsNullOrWhiteSpace(output))
+                return null;
+
+            return output.TrimEnd('\r', '\n');
         }
         catch
         {
@@ -98,10 +172,18 @@ public sealed class ClaudeBrowserCookieReader
         if (encryptionKey is { Length: > 0 }
             && encryptedValue.Length >= 3
             && encryptedValue[0] == (byte)'v'
-            && encryptedValue[1] == (byte)'1'
-            && (encryptedValue[2] == (byte)'0' || encryptedValue[2] == (byte)'1'))
+            && encryptedValue[1] == (byte)'1')
         {
-            return DecryptAesGcmCookie(encryptionKey, encryptedValue);
+            if (encryptedValue[2] == (byte)'1')
+                return DecryptAesGcmCookie(encryptionKey, encryptedValue);
+
+            if (encryptedValue[2] == (byte)'0')
+            {
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+                    return DecryptMacV10Cookie(encryptionKey, encryptedValue);
+
+                return DecryptAesGcmCookie(encryptionKey, encryptedValue);
+            }
         }
 
         if (OperatingSystem.IsWindows())
@@ -125,7 +207,7 @@ public sealed class ClaudeBrowserCookieReader
 
     private string? TryReadSessionKeyFromProfile(ChromiumBrowserProfile profile)
     {
-        var encryptionKey = ReadChromiumEncryptionKey(profile.LocalStatePath);
+        var encryptionKey = ReadChromiumEncryptionKey(profile);
         return TryReadSessionKeyFromCookieDatabase(profile.CookieDatabasePath, encryptionKey, _decryptValue);
     }
 
@@ -164,6 +246,36 @@ public sealed class ClaudeBrowserCookieReader
         return string.IsNullOrWhiteSpace(decrypted) ? null : decrypted;
     }
 
+    internal static string? DecryptMacV10Cookie(byte[] key, byte[] encryptedValue)
+    {
+        if (encryptedValue.Length < 3 + 16)
+            return null;
+
+        var iv = encryptedValue.AsSpan(3, 16);
+        var cipherText = encryptedValue.AsSpan(19);
+        var plain = DecryptAesCbc(key, cipherText, iv);
+        return plain is null ? null : Encoding.UTF8.GetString(plain);
+    }
+
+    internal static byte[]? DecryptAesCbc(byte[] key, ReadOnlySpan<byte> cipherText, ReadOnlySpan<byte> iv)
+    {
+        try
+        {
+            using var aes = Aes.Create();
+            aes.Key = key;
+            aes.Mode = CipherMode.CBC;
+            aes.Padding = PaddingMode.PKCS7;
+            aes.IV = iv.ToArray();
+
+            using var decryptor = aes.CreateDecryptor();
+            return decryptor.TransformFinalBlock(cipherText.ToArray(), 0, cipherText.Length);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private static string? DecryptAesGcmCookie(byte[] key, byte[] encryptedValue)
     {
         if (encryptedValue.Length < 3 + 12 + 16)
@@ -194,25 +306,44 @@ public sealed class ClaudeBrowserCookieReader
         var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         var profiles = new List<ChromiumBrowserProfile>();
 
-        AddBrowserProfiles(profiles, Path.Combine(localAppData, "Google", "Chrome", "User Data"));
-        AddBrowserProfiles(profiles, Path.Combine(localAppData, "Microsoft", "Edge", "User Data"));
-        AddBrowserProfiles(profiles, Path.Combine(localAppData, "BraveSoftware", "Brave-Browser", "User Data"));
+        AddBrowserProfiles(
+            profiles,
+            Path.Combine(localAppData, "Google", "Chrome", "User Data"),
+            "Chrome Safe Storage",
+            "Chrome");
+        AddBrowserProfiles(
+            profiles,
+            Path.Combine(localAppData, "Microsoft", "Edge", "User Data"),
+            "Microsoft Edge Safe Storage",
+            "Microsoft Edge");
+        AddBrowserProfiles(
+            profiles,
+            Path.Combine(localAppData, "BraveSoftware", "Brave-Browser", "User Data"),
+            "Brave Safe Storage",
+            "Brave");
 
         return profiles;
     }
 
-    private static void AddBrowserProfiles(List<ChromiumBrowserProfile> profiles, string userDataDir)
+    private static void AddBrowserProfiles(
+        List<ChromiumBrowserProfile> profiles,
+        string userDataDir,
+        string macKeychainService,
+        string macKeychainAccount)
     {
         if (!Directory.Exists(userDataDir))
             return;
 
         var localStatePath = Path.Combine(userDataDir, "Local State");
-        AddProfileIfPresent(profiles, userDataDir, "Default", localStatePath);
+        var macService = RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ? macKeychainService : null;
+        var macAccount = RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ? macKeychainAccount : null;
+
+        AddProfileIfPresent(profiles, userDataDir, "Default", localStatePath, macService, macAccount);
 
         foreach (var profileDir in Directory.EnumerateDirectories(userDataDir, "Profile *"))
         {
             var profileName = Path.GetFileName(profileDir);
-            AddProfileIfPresent(profiles, userDataDir, profileName, localStatePath);
+            AddProfileIfPresent(profiles, userDataDir, profileName, localStatePath, macService, macAccount);
         }
     }
 
@@ -220,15 +351,27 @@ public sealed class ClaudeBrowserCookieReader
         List<ChromiumBrowserProfile> profiles,
         string userDataDir,
         string profileName,
-        string localStatePath)
+        string localStatePath,
+        string? macKeychainService,
+        string? macKeychainAccount)
     {
         var cookiePath = Path.Combine(userDataDir, profileName, "Network", "Cookies");
         if (!File.Exists(cookiePath))
             cookiePath = Path.Combine(userDataDir, profileName, "Cookies");
 
         if (File.Exists(cookiePath))
-            profiles.Add(new ChromiumBrowserProfile(cookiePath, localStatePath));
+        {
+            profiles.Add(new ChromiumBrowserProfile(
+                cookiePath,
+                localStatePath,
+                macKeychainService,
+                macKeychainAccount));
+        }
     }
 }
 
-public sealed record ChromiumBrowserProfile(string CookieDatabasePath, string LocalStatePath);
+public sealed record ChromiumBrowserProfile(
+    string CookieDatabasePath,
+    string LocalStatePath,
+    string? MacKeychainService = null,
+    string? MacKeychainAccount = null);

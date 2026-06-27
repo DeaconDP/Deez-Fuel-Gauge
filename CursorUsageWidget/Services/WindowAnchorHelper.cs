@@ -10,4 +10,17 @@ public static class WindowAnchorHelper
         var delta = (int)Math.Round(newHeight - oldHeight);
         return currentY - delta;
     }
+
+    public static (int X, int Y) ComputeCenteredPosition(
+        int workAreaX,
+        int workAreaY,
+        int workAreaWidth,
+        int workAreaHeight,
+        int windowWidth,
+        int windowHeight)
+    {
+        var x = workAreaX + Math.Max(0, (workAreaWidth - windowWidth) / 2);
+        var y = workAreaY + Math.Max(0, (workAreaHeight - windowHeight) / 2);
+        return (x, y);
+    }
 }

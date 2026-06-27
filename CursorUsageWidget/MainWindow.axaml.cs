@@ -28,7 +28,6 @@ public partial class MainWindow : Window, ISettingsPanelHost
     private readonly DispatcherTimer _pollTimer;
     private readonly WidgetSettings _settings;
     private bool _isRefreshing;
-    private bool _isBreakdownExpanded;
     private bool _isCodexLimitsExpanded;
     private bool _isClaudeProLimitsExpanded;
     private bool _isAntigravityLimitsExpanded;
@@ -40,7 +39,6 @@ public partial class MainWindow : Window, ISettingsPanelHost
     private bool _isOpenRouterProviderExpanded;
     private bool _isOpenCodeProviderExpanded;
     private bool _isOpenCodeGoLimitsExpanded;
-    private double _lastPercentUsed;
     private double _lastAutoPercent;
     private double _lastApiPercent;
     private double _lastOpenAiPercent;
@@ -118,8 +116,6 @@ public partial class MainWindow : Window, ISettingsPanelHost
         _settingsViewModel.AttachHost(this);
         SettingsPanelControl.Initialize(_settingsViewModel, _settings);
         SyncSettingsAndVisibility();
-        Position = new PixelPoint((int)_settings.Left, (int)_settings.Top);
-        _isBreakdownExpanded = _settings.IsBreakdownExpanded;
         _isCodexLimitsExpanded = _settings.IsCodexLimitsExpanded;
         _isClaudeProLimitsExpanded = _settings.IsClaudeProLimitsExpanded;
         _isAntigravityLimitsExpanded = _settings.IsAntigravityLimitsExpanded;
@@ -131,12 +127,12 @@ public partial class MainWindow : Window, ISettingsPanelHost
         _isOpenRouterProviderExpanded = _settings.IsOpenRouterProviderExpanded;
         _isOpenCodeProviderExpanded = _settings.IsOpenCodeProviderExpanded;
         _isOpenCodeGoLimitsExpanded = _settings.IsOpenCodeGoLimitsExpanded;
-        UpdateBreakdownExpandedState();
         UpdateCodexLimitsExpandedState();
         UpdateClaudeProLimitsExpandedState();
         UpdateAntigravityLimitsExpandedState();
         UpdateOpenCodeGoLimitsExpandedState();
         UpdateSettingsExpandedState();
+        UpdatePinIconState();
         UpdateAllProviderExpandedState();
 
         SettingsPanelHost.SizeChanged += (_, _) => CompensateSettingsAnchorIfNeeded();
@@ -148,10 +144,64 @@ public partial class MainWindow : Window, ISettingsPanelHost
         _pollTimer.Tick += async (_, _) => await RefreshAsync();
         _pollTimer.Start();
 
-        Opened += async (_, _) => await RefreshAsync();
+        Opened += async (_, _) =>
+        {
+            Dispatcher.UIThread.Post(ApplyInitialPosition, DispatcherPriority.Loaded);
+            await RefreshAsync();
+        };
         SizeChanged += (_, _) => UpdateAllProgressWidths();
-        PositionChanged += (_, _) => SaveSettings();
         Closing += (_, _) => SaveSettings();
+    }
+
+    private void ApplyInitialPosition()
+    {
+        if (_settings.IsPositionPinned)
+        {
+            Position = new PixelPoint((int)_settings.Left, (int)_settings.Top);
+            return;
+        }
+
+        var screen = Screens.Primary;
+        if (screen is null)
+            return;
+
+        var area = screen.WorkingArea;
+        var width = (int)Math.Round(Bounds.Width > 0 ? Bounds.Width : Width);
+        var height = (int)Math.Round(Bounds.Height > 0 ? Bounds.Height : Height);
+        var (x, y) = WindowAnchorHelper.ComputeCenteredPosition(
+            area.X, area.Y, area.Width, area.Height, width, height);
+        Position = new PixelPoint(x, y);
+    }
+
+    private void PinToggle_PointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+            return;
+
+        _settings.IsPositionPinned = !_settings.IsPositionPinned;
+        if (_settings.IsPositionPinned)
+        {
+            _settings.Left = Position.X;
+            _settings.Top = Position.Y;
+        }
+
+        UpdatePinIconState();
+        SaveSettings();
+        e.Handled = true;
+    }
+
+    private void CloseButton_PointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+            return;
+
+        Close();
+        e.Handled = true;
+    }
+
+    private void UpdatePinIconState()
+    {
+        PinIcon.Opacity = _settings.IsPositionPinned ? 1 : 0.45;
     }
 
     private void SettingsToggle_PointerPressed(object? sender, PointerPressedEventArgs e)
@@ -171,7 +221,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
     {
         SettingsPanelHost.IsVisible = _isSettingsExpanded;
         SettingsIcon.Foreground = new SolidColorBrush(
-            _isSettingsExpanded ? Color.FromRgb(0x00, 0xE5, 0xFF) : Color.FromRgb(0x88, 0x88, 0x88));
+            _isSettingsExpanded ? Color.FromRgb(0x88, 0xFF, 0x88) : Color.FromRgb(0x44, 0xCC, 0x44));
     }
 
     public void OnSettingsLayoutChanged()
@@ -264,12 +314,11 @@ public partial class MainWindow : Window, ISettingsPanelHost
         var openRouterExpanded = _isOpenRouterProviderExpanded;
         var openCodeExpanded = _isOpenCodeProviderExpanded;
 
-        PercentText.IsVisible = cursorExpanded;
         if (cursorExpanded)
             RefreshCursorBreakdownVisibility(_lastSnapshot ?? new UsageSnapshot());
-        RemainingText.IsVisible = cursorExpanded && _settings.Cursor.ShowDetails && !string.IsNullOrEmpty(RemainingText.Text);
+        RemainingText.IsVisible = cursorExpanded && !string.IsNullOrEmpty(RemainingText.Text);
         if (!cursorExpanded)
-            BreakdownSection.IsVisible = false;
+            BreakdownPanel.IsVisible = false;
 
         OpenAiDetailText.IsVisible = openAiExpanded && _settings.OpenAi.ShowCursorSource && _settings.OpenAi.ShowDetails;
         OpenAiDirectDetailText.IsVisible = openAiExpanded && _settings.OpenAi.ShowDirectSource && _settings.OpenAi.EffectiveShowDirectDetails;
@@ -516,43 +565,23 @@ public partial class MainWindow : Window, ISettingsPanelHost
 
     private void RefreshCursorBreakdownVisibility(UsageSnapshot snapshot)
     {
-        var showBreakdown = _settings.ShowBreakdown && snapshot.HasBreakdown;
-        BreakdownSection.IsVisible = showBreakdown;
-        if (showBreakdown)
-            UpdateBreakdownExpandedState();
+        var showBreakdown = _settings.ShowBreakdown && snapshot.HasBreakdown && _isCursorProviderExpanded;
+        BreakdownPanel.IsVisible = showBreakdown;
+        if (!showBreakdown)
+            return;
+
+        _lastAutoPercent = snapshot.AutoPercentUsed ?? 0;
+        _lastApiPercent = snapshot.ApiPercentUsed ?? 0;
+        AutoPercentText.Text = $"{Math.Round(_lastAutoPercent)}%";
+        ApiPercentText.Text = $"{Math.Round(_lastApiPercent)}%";
+        ApiPlanNoteText.Text = CursorBreakdownPresenter.FormatApiPlanNote(snapshot.PlanLimitCents);
+        UpdateBreakdownProgressWidths();
     }
 
     private void Window_PointerPressed(object? sender, PointerPressedEventArgs e)
     {
         if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
             BeginMoveDrag(e);
-    }
-
-    private void CursorBar_PointerPressed(object? sender, PointerPressedEventArgs e)
-    {
-        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
-            return;
-
-        if (!BreakdownSection.IsVisible)
-            return;
-
-        _isBreakdownExpanded = !_isBreakdownExpanded;
-        UpdateBreakdownExpandedState();
-        SaveSettings();
-        e.Handled = true;
-    }
-
-    private void UpdateBreakdownExpandedState()
-    {
-        BreakdownPanel.IsVisible = _isBreakdownExpanded;
-        BreakdownChevron.Text = _isBreakdownExpanded ? "\u25B4" : "\u25BE";
-    }
-
-    private void UpdateCursorBarInteractivity(bool hasBreakdown)
-    {
-        CursorBarBorder.Cursor = hasBreakdown
-            ? new Cursor(StandardCursorType.Hand)
-            : new Cursor(StandardCursorType.Arrow);
     }
 
     private void CodexLimits_PointerPressed(object? sender, PointerPressedEventArgs e)
@@ -760,13 +789,8 @@ public partial class MainWindow : Window, ISettingsPanelHost
 
         if (snapshot.IsError)
         {
-            PercentText.Text = snapshot.ErrorMessage ?? "Error";
-            RemainingText.Text = "";
-            ProgressFill.Width = 0;
-            ProgressFill.Background = new SolidColorBrush(Color.FromRgb(0xFF, 0x98, 0x00));
-            PercentText.Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x98, 0x00));
-            BreakdownSection.IsVisible = false;
-            UpdateCursorBarInteractivity(false);
+            RemainingText.Text = snapshot.ErrorMessage ?? "Error";
+            BreakdownPanel.IsVisible = false;
             ResetProviderBars();
             ApplyHeadlineBar(CursorHeadlineTrack, CursorHeadlineFill, ref _lastCursorHeadlinePercent, 0);
             CursorHeadlineFill.Background = new SolidColorBrush(Color.FromRgb(0xFF, 0x98, 0x00));
@@ -784,38 +808,8 @@ public partial class MainWindow : Window, ISettingsPanelHost
             return;
         }
 
-        _lastPercentUsed = snapshot.PercentUsed;
-        var percent = Math.Round(snapshot.PercentUsed);
-        PercentText.Text = $"{percent}% used";
         RemainingText.Text = _settings.Cursor.ShowDetails ? snapshot.RemainingLabel : "";
         ApplyProviderDetailChrome();
-        UpdateProgressWidth(snapshot.PercentUsed);
-
-        var accent = UsageBarColors.GetColorForPercent(snapshot.PercentUsed);
-        ProgressFill.Background = new SolidColorBrush(accent);
-        PercentText.Foreground = new SolidColorBrush(accent);
-
-        var showBreakdown = _settings.ShowBreakdown && snapshot.HasBreakdown && _isCursorProviderExpanded;
-        if (showBreakdown)
-        {
-            _lastAutoPercent = snapshot.AutoPercentUsed ?? 0;
-            _lastApiPercent = snapshot.ApiPercentUsed ?? 0;
-            var autoRounded = Math.Round(_lastAutoPercent);
-            var apiRounded = Math.Round(_lastApiPercent);
-            BreakdownSummary.Text = $"{autoRounded}% Auto and {apiRounded}% API used";
-            AutoPercentText.Text = $"{autoRounded}%";
-            ApiPercentText.Text = $"{apiRounded}%";
-            BreakdownSection.IsVisible = true;
-            UpdateCursorBarInteractivity(true);
-            UpdateBreakdownExpandedState();
-            UpdateBreakdownProgressWidths();
-        }
-        else
-        {
-            BreakdownSection.IsVisible = false;
-            BreakdownPanel.IsVisible = false;
-            UpdateCursorBarInteractivity(false);
-        }
 
         ApplyProviderBar(snapshot.OpenAi, _settings.OpenAi, ref _lastOpenAiPercent, OpenAiProgressTrack, OpenAiProgressFill, OpenAiDetailText);
         ApplyProviderBar(snapshot.Claude, _settings.Claude, ref _lastClaudePercent, ClaudeProgressTrack, ClaudeProgressFill, ClaudeDetailText);
@@ -1269,7 +1263,6 @@ public partial class MainWindow : Window, ISettingsPanelHost
 
     private void UpdateAllProgressWidths()
     {
-        UpdateProgressWidth(_lastPercentUsed);
         UpdateBreakdownProgressWidths();
         UpdateLimitsProgressWidths();
         UpdateCodexLimitsExpandedState();
@@ -1323,26 +1316,19 @@ public partial class MainWindow : Window, ISettingsPanelHost
         OpenCodeGoMonthlyProgressFill.Background = new SolidColorBrush(UsageBarColors.GetColorForPercent(_lastOpenCodeGoMonthlyPercent));
     }
 
-    private void UpdateProgressWidth(double percentUsed)
-    {
-        var trackWidth = ProgressTrack.Bounds.Width;
-        if (trackWidth <= 0)
-            return;
-
-        ProgressFill.Width = trackWidth * (percentUsed / 100.0);
-    }
-
     private void UpdateBreakdownProgressWidths()
     {
+        var breakdownFill = new SolidColorBrush(Color.FromRgb(0x4D, 0x9F, 0xFF));
+
         var autoTrackWidth = AutoProgressTrack.Bounds.Width;
         if (autoTrackWidth > 0)
             AutoProgressFill.Width = autoTrackWidth * (_lastAutoPercent / 100.0);
-        AutoProgressFill.Background = new SolidColorBrush(UsageBarColors.GetColorForPercent(_lastAutoPercent));
+        AutoProgressFill.Background = breakdownFill;
 
         var apiTrackWidth = ApiProgressTrack.Bounds.Width;
         if (apiTrackWidth > 0)
             ApiProgressFill.Width = apiTrackWidth * (_lastApiPercent / 100.0);
-        ApiProgressFill.Background = new SolidColorBrush(UsageBarColors.GetColorForPercent(_lastApiPercent));
+        ApiProgressFill.Background = breakdownFill;
     }
 
     private void ApplyDiskVolumes(IReadOnlyList<DiskVolumeSnapshot> volumes)
@@ -1518,9 +1504,6 @@ public partial class MainWindow : Window, ISettingsPanelHost
     private void SaveSettings()
     {
         SettingsPanelControl.CommitToSettings(_settings);
-        _settings.Left = Position.X;
-        _settings.Top = Position.Y;
-        _settings.IsBreakdownExpanded = _isBreakdownExpanded;
         _settings.IsCodexLimitsExpanded = _isCodexLimitsExpanded;
         _settings.IsClaudeProLimitsExpanded = _isClaudeProLimitsExpanded;
         _settings.IsAntigravityLimitsExpanded = _isAntigravityLimitsExpanded;

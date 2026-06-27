@@ -13,6 +13,23 @@
         ShowInTaskbar="False"
         Topmost="True"
         PointerPressed="Window_PointerPressed">
+    <Window.Styles>
+        <Style Selector="Border.breakdown-note-host">
+            <Setter Property="MaxHeight" Value="0" />
+            <Setter Property="Opacity" Value="0" />
+            <Setter Property="ClipToBounds" Value="True" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="Opacity" Duration="0:0:0.15" Easing="CubicEaseOut" />
+                    <DoubleTransition Property="MaxHeight" Duration="0:0:0.22" Easing="CubicEaseOut" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Border.breakdown-row:pointerover Border.breakdown-note-host">
+            <Setter Property="MaxHeight" Value="56" />
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+    </Window.Styles>
     <Border x:Name="PillBorder"
             CornerRadius="10"
             Background="#E6181818"
@@ -47,18 +64,45 @@
                                Foreground="#FF00E5FF"
                                VerticalAlignment="Center" />
                 </StackPanel>
-                <Border Grid.Column="1"
-                        Background="Transparent"
-                        Cursor="Hand"
-                        Padding="2,0,0,0"
-                        PointerPressed="SettingsToggle_PointerPressed">
-                    <TextBlock x:Name="SettingsIcon"
-                               Text="&#x2699;"
-                               FontSize="14"
-                               LineHeight="18"
-                               Foreground="#FF888888"
-                               VerticalAlignment="Center" />
-                </Border>
+                <StackPanel Grid.Column="1"
+                            Orientation="Horizontal"
+                            VerticalAlignment="Center">
+                    <Border Background="Transparent"
+                            Cursor="Hand"
+                            Padding="2,0,0,0"
+                            PointerPressed="SettingsToggle_PointerPressed">
+                        <TextBlock x:Name="SettingsIcon"
+                                   Text="&#x2699;"
+                                   FontFamily="Segoe UI Symbol, Apple Symbols, sans-serif"
+                                   FontSize="14"
+                                   LineHeight="18"
+                                   Foreground="#FF44CC44"
+                                   VerticalAlignment="Center" />
+                    </Border>
+                    <Border Background="Transparent"
+                            Cursor="Hand"
+                            Margin="6,0,0,0"
+                            PointerPressed="PinToggle_PointerPressed">
+                        <TextBlock x:Name="PinIcon"
+                                   Text="&#x2316;"
+                                   FontFamily="Segoe UI Symbol, Apple Symbols, sans-serif"
+                                   FontSize="14"
+                                   LineHeight="18"
+                                   Foreground="#FFFFCC00"
+                                   VerticalAlignment="Center" />
+                    </Border>
+                    <Border Background="Transparent"
+                            Cursor="Hand"
+                            Margin="6,0,0,0"
+                            PointerPressed="CloseButton_PointerPressed">
+                        <TextBlock Text="&#x2715;"
+                                   FontFamily="Segoe UI Symbol, Apple Symbols, sans-serif"
+                                   FontSize="14"
+                                   LineHeight="18"
+                                   Foreground="#FFFF4444"
+                                   VerticalAlignment="Center" />
+                    </Border>
+                </StackPanel>
             </Grid>
             <Border x:Name="SettingsPanelHost"
                     Margin="0,0,0,8"
@@ -103,133 +147,89 @@
                 </Border>
                 <StackPanel x:Name="CursorDetailsPanel" IsVisible="False">
             <StackPanel x:Name="CursorSection">
-                <TextBlock x:Name="PercentText"
-                           Text="..."
-                           FontSize="12"
-                           FontWeight="SemiBold"
-                           LineHeight="16"
-                           Foreground="#FFE8E8E8" />
-                <Border x:Name="CursorBarBorder"
-                        Background="Transparent"
-                        PointerPressed="CursorBar_PointerPressed">
-                    <Grid Margin="0,5,0,5">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Text="Cursor"
-                                   Grid.Column="0"
-                                   VerticalAlignment="Center"
-                                   Margin="0,0,8,0"
-                                   FontFamily="Segoe UI Semibold, Segoe UI, sans-serif"
-                                   FontSize="11"
-                                   FontWeight="SemiBold"
-                                   Foreground="#FFB0B0B0" />
-                        <Grid x:Name="ProgressTrack"
-                              Grid.Column="1"
-                              Height="6"
-                              VerticalAlignment="Center">
-                            <Border CornerRadius="3" Background="#33FFFFFF" />
-                            <Border x:Name="ProgressFill"
-                                    CornerRadius="3"
-                                    HorizontalAlignment="Left"
-                                    Width="0"
-                                    Background="#FF4CAF50" />
-                        </Grid>
-                    </Grid>
-                </Border>
-                <StackPanel x:Name="BreakdownSection"
-                            Margin="0,3,0,0"
-                            IsVisible="False">
-                    <StackPanel Orientation="Horizontal"
-                                Spacing="4">
-                        <TextBlock x:Name="BreakdownChevron"
-                                   Text="&#x25BE;"
-                                   FontSize="10"
-                                   LineHeight="14"
-                                   Foreground="#FF888888"
-                                   VerticalAlignment="Center" />
-                        <TextBlock x:Name="BreakdownSummary"
-                                   Text=""
-                                   FontSize="10"
-                                   LineHeight="14"
-                                   Foreground="#FF888888"
-                                   VerticalAlignment="Center"
-                                   TextWrapping="Wrap" />
-                    </StackPanel>
-                    <Border x:Name="BreakdownPanel"
-                            Margin="0,6,0,0"
-                            Padding="8,7"
-                            CornerRadius="6"
-                            Background="#FF121212"
-                            IsVisible="False">
-                        <StackPanel Spacing="10">
+                <Border x:Name="BreakdownPanel"
+                        Padding="6,5"
+                        CornerRadius="5"
+                        Background="#FF252525"
+                        IsVisible="False">
+                    <StackPanel Spacing="5">
+                        <Border Classes="breakdown-row" Background="Transparent">
                             <StackPanel>
-                                <Grid Margin="0,0,0,4">
+                                <Grid Margin="0,0,0,2">
                                     <TextBlock Text="Auto + Composer"
-                                               FontSize="10"
-                                               LineHeight="13"
+                                               FontSize="9.5"
+                                               LineHeight="12"
                                                Foreground="#FFE8E8E8"
                                                HorizontalAlignment="Left" />
                                     <TextBlock x:Name="AutoPercentText"
                                                Text=""
-                                               FontSize="10"
-                                               LineHeight="13"
+                                               FontSize="9.5"
+                                               LineHeight="12"
                                                Foreground="#FFE8E8E8"
                                                HorizontalAlignment="Right" />
                                 </Grid>
-                                <Grid x:Name="AutoProgressTrack" Height="5">
-                                    <Border CornerRadius="2.5" Background="#33FFFFFF" />
+                                <Grid x:Name="AutoProgressTrack" Height="4">
+                                    <Border CornerRadius="2" Background="#33FFFFFF" />
                                     <Border x:Name="AutoProgressFill"
-                                            CornerRadius="2.5"
+                                            CornerRadius="2"
                                             HorizontalAlignment="Left"
                                             Width="0"
                                             Background="#FF4D9FFF" />
                                 </Grid>
-                                <TextBlock Text="Additional usage beyond limits consumes API quota or on-demand spend."
-                                           FontSize="8.5"
-                                           LineHeight="12"
-                                           Foreground="#FF666666"
-                                           TextWrapping="Wrap"
-                                           Margin="0,4,0,0" />
+                                <Border Classes="breakdown-note-host">
+                                    <TextBlock Classes="breakdown-note"
+                                               Text="Additional usage beyond limits consumes API quota or on-demand spend."
+                                               FontSize="8"
+                                               LineHeight="11"
+                                               Foreground="#FF666666"
+                                               TextWrapping="Wrap"
+                                               Margin="0,2,0,0" />
+                                </Border>
                             </StackPanel>
+                        </Border>
+                        <Border Classes="breakdown-row" Background="Transparent">
                             <StackPanel>
-                                <Grid Margin="0,0,0,4">
+                                <Grid Margin="0,0,0,2">
                                     <TextBlock Text="API"
-                                               FontSize="10"
-                                               LineHeight="13"
+                                               FontSize="9.5"
+                                               LineHeight="12"
                                                Foreground="#FFE8E8E8"
                                                HorizontalAlignment="Left" />
                                     <TextBlock x:Name="ApiPercentText"
                                                Text=""
-                                               FontSize="10"
-                                               LineHeight="13"
+                                               FontSize="9.5"
+                                               LineHeight="12"
                                                Foreground="#FFE8E8E8"
                                                HorizontalAlignment="Right" />
                                 </Grid>
-                                <Grid x:Name="ApiProgressTrack" Height="5">
-                                    <Border CornerRadius="2.5" Background="#33FFFFFF" />
+                                <Grid x:Name="ApiProgressTrack" Height="4">
+                                    <Border CornerRadius="2" Background="#33FFFFFF" />
                                     <Border x:Name="ApiProgressFill"
-                                            CornerRadius="2.5"
+                                            CornerRadius="2"
                                             HorizontalAlignment="Left"
                                             Width="0"
                                             Background="#FF4D9FFF" />
                                 </Grid>
-                                <TextBlock Text="Additional usage beyond limits consumes on-demand spend."
-                                           FontSize="8.5"
-                                           LineHeight="12"
-                                           Foreground="#FF666666"
-                                           TextWrapping="Wrap"
-                                           Margin="0,4,0,0" />
+                                <Border Classes="breakdown-note-host">
+                                    <TextBlock x:Name="ApiPlanNoteText"
+                                               Classes="breakdown-note"
+                                               Text=""
+                                               FontSize="8"
+                                               LineHeight="11"
+                                               Foreground="#FF666666"
+                                               TextWrapping="Wrap"
+                                               Margin="0,2,0,0" />
+                                </Border>
                             </StackPanel>
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </Border>
                 <TextBlock x:Name="RemainingText"
                            Text=""
-                           FontSize="11"
-                           LineHeight="15"
-                           Foreground="#FFB0B0B0" />
+                           FontSize="10"
+                           LineHeight="13"
+                           Foreground="#FFB0B0B0"
+                           Margin="0,2,0,0" />
             </StackPanel>
                 </StackPanel>
             </StackPanel>

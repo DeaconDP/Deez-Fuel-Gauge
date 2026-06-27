@@ -22,6 +22,12 @@ try
     var dotnet = MacOsAppPackager.FindDotnet();
     if (dotnet is null)
     {
+        File.AppendAllText(logPath, $"dotnet not found; attempting dotnet-install.sh...{Environment.NewLine}");
+        dotnet = DotNetInstaller.TryInstallSdk(logPath);
+    }
+
+    if (dotnet is null)
+    {
         ShowMessage(
             "The .NET 8 SDK is required. We opened the download page in your browser. Install it, then double-click setup-and-run again.");
         Process.Start(new ProcessStartInfo("https://dotnet.microsoft.com/download/dotnet/8.0")
@@ -40,7 +46,7 @@ catch (Exception ex)
 {
     File.AppendAllText(logPath, ex + Environment.NewLine);
     ShowMessage(
-        $"Setup failed. Details were saved to {logPath}. Make sure the .NET 8 SDK is installed, then double-click setup-and-run again.");
+        $"Setup failed: {ex.Message} Details were saved to {logPath}.");
     return 1;
 }
 

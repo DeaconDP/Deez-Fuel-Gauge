@@ -3,10 +3,11 @@ obj/
 .vs/
 *.user
 *.suo
-publish/
+.publish/
 .build-out/
 artifacts/
 _buildtest/
 CursorUsageWidget.app/
+Releases/cursor-usage-widget-mac-Universal.zip
 setup-and-run.app/Contents/MacOS/publish-*/
 setup-and-run.app/Contents/MacOS/setup-and-run-native

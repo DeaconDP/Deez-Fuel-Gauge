@@ -5,6 +5,13 @@ namespace CursorUsageWidget.Setup;
 
 public static class MacOsAppPackager
 {
+    public static readonly string[] RequiredNativeLibraries =
+    [
+        "libSkiaSharp.dylib",
+        "libHarfBuzzSharp.dylib",
+        "libAvaloniaNative.dylib"
+    ];
+
     public static string Package(string repoRoot, string dotnetPath)
     {
         if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
@@ -24,6 +31,10 @@ public static class MacOsAppPackager
         var infoPlist = Path.Combine(repoRoot, "packaging", "macos", "Info.plist");
         var appHostPath = Path.Combine(publishDir, "CursorUsageWidget");
 
+        // Incremental single-file publish can omit native .dylib files when publish/ already exists.
+        if (Directory.Exists(publishDir))
+            Directory.Delete(publishDir, recursive: true);
+
         RunProcess(dotnetPath, new[]
         {
             "publish", project,
@@ -32,7 +43,7 @@ public static class MacOsAppPackager
             "--self-contained", "true",
             "-p:UseAppHost=true",
             "-p:PublishSingleFile=true",
-            "-p:IncludeNativeLibrariesForSelfExtract=true",
+            "-p:IncludeNativeLibrariesForSelfExtract=false",
             "--nologo"
         });
 
@@ -51,8 +62,7 @@ public static class MacOsAppPackager
         File.Copy(infoPlist, Path.Combine(appPath, "Contents", "Info.plist"), overwrite: true);
         File.WriteAllText(Path.Combine(appPath, "Contents", "PkgInfo"), "APPL????");
 
-        File.Copy(appHostPath, Path.Combine(macOsDir, "CursorUsageWidget"), overwrite: true);
-        MakeExecutable(Path.Combine(macOsDir, "CursorUsageWidget"));
+        CopyPublishedFiles(publishDir, macOsDir);
         SignAppBundle(appPath);
         SignAppBundle(Path.Combine(repoRoot, "setup-and-run.app"));
 
@@ -128,6 +138,28 @@ public static class MacOsAppPackager
         }
 
         return null;
+    }
+
+    public static void CopyPublishedFiles(string publishDir, string macOsDir)
+    {
+        foreach (var file in Directory.GetFiles(publishDir))
+        {
+            var fileName = Path.GetFileName(file);
+            if (string.Equals(Path.GetExtension(fileName), ".pdb", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var destination = Path.Combine(macOsDir, fileName);
+            File.Copy(file, destination, overwrite: true);
+
+            if (!fileName.EndsWith(".dylib", StringComparison.OrdinalIgnoreCase))
+                MakeExecutable(destination);
+        }
+
+        foreach (var library in RequiredNativeLibraries)
+        {
+            if (!File.Exists(Path.Combine(macOsDir, library)))
+                throw new FileNotFoundException($"Published native library was not copied: {library}", library);
+        }
     }
 
     private static void CopyDirectory(string sourceDir, string destinationDir)

@@ -83,4 +83,64 @@ public sealed class DiskSpaceProviderTests
             Assert.False(string.IsNullOrWhiteSpace(v.DetailLabel));
         });
     }
+
+    [Fact]
+    public void SelectMacOsPrimaryDriveName_prefers_data_volume()
+    {
+        var driveNames = new[]
+        {
+            "/",
+            "/System/Volumes/Data",
+            "/System/Volumes/VM",
+            "/Library/Developer/CoreSimulator/Volumes/iOS_23C54"
+        };
+
+        var primary = DiskSpaceProvider.SelectMacOsPrimaryDriveName(driveNames);
+
+        Assert.Equal("/System/Volumes/Data", primary);
+    }
+
+    [Fact]
+    public void SelectMacOsPrimaryDriveName_falls_back_to_root()
+    {
+        var driveNames = new[]
+        {
+            "/",
+            "/System/Volumes/VM",
+            "/Volumes/External"
+        };
+
+        var primary = DiskSpaceProvider.SelectMacOsPrimaryDriveName(driveNames);
+
+        Assert.Equal("/", primary);
+    }
+
+    [Fact]
+    public void SelectMacOsPrimaryDriveName_returns_null_when_no_primary_volume()
+    {
+        var driveNames = new[]
+        {
+            "/System/Volumes/VM",
+            "/Volumes/External"
+        };
+
+        var primary = DiskSpaceProvider.SelectMacOsPrimaryDriveName(driveNames);
+
+        Assert.Null(primary);
+    }
+
+    [Fact]
+    public void GetMacOsAggregatedVolumes_returns_empty_when_no_primary_volume()
+    {
+        var drives = new[]
+        {
+            new DriveInfo("/System/Volumes/VM"),
+            new DriveInfo("/Volumes/External")
+        };
+
+        var volumes = DiskSpaceProvider.GetMacOsAggregatedVolumes(
+            drives.Where(d => d.IsReady && d.TotalSize > 0));
+
+        Assert.Empty(volumes);
+    }
 }

@@ -1,0 +1,55 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos-release:
+    name: macOS release artifact
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore CursorUsageWidget.sln
+
+      - name: Build
+        run: dotnet build CursorUsageWidget.sln -c Release --no-restore
+
+      - name: Test
+        run: dotnet test CursorUsageWidget.sln -c Release --no-build
+
+      - name: Package macOS release
+        run: |
+          chmod +x scripts/package-macos-release.sh
+          ./scripts/package-macos-release.sh
+
+      - name: Upload release asset
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Releases/cursor-usage-widget-mac-Universal.zip
+
+      - name: Upload workflow artifact
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cursor-usage-widget-mac-Universal
+          path: Releases/cursor-usage-widget-mac-Universal.zip

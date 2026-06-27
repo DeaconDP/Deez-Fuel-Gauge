@@ -256,4 +256,32 @@ public sealed class WidgetSettingsTests
         Assert.False(settings.Gemini.ShowDirectSource);
         Assert.True(settings.Gemini.ShowProLimits);
     }
+
+    [Fact]
+    public void RoundTrip_preserves_pinned_position()
+    {
+        var settings = new WidgetSettings
+        {
+            IsPositionPinned = true,
+            Left = 420,
+            Top = 180
+        };
+
+        var json = JsonSerializer.Serialize(settings);
+        var restored = JsonSerializer.Deserialize<WidgetSettings>(json)!;
+
+        Assert.True(restored.IsPositionPinned);
+        Assert.Equal(420, restored.Left);
+        Assert.Equal(180, restored.Top);
+    }
+
+    [Fact]
+    public void Deserialize_defaults_is_position_pinned_to_false_when_missing()
+    {
+        var json = """{"Left":10,"Top":20}""";
+
+        var settings = JsonSerializer.Deserialize<WidgetSettings>(json)!;
+
+        Assert.False(settings.IsPositionPinned);
+    }
 }
