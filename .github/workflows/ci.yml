@@ -33,21 +33,28 @@ jobs:
           dotnet-version: 8.0.x
 
       - name: Restore
-        run: dotnet restore CursorUsageWidget.sln
+        run: dotnet restore DeezFuelGauge.sln
 
       - name: Build
-        run: dotnet build CursorUsageWidget.sln -c Release --no-restore
+        run: dotnet build DeezFuelGauge.sln -c Release --no-restore
 
       - name: Test
-        run: dotnet test CursorUsageWidget.sln -c Release --no-build
+        run: dotnet test DeezFuelGauge.sln -c Release --no-build
 
       - name: Verify macOS packaging
         if: runner.os == 'macOS'
         run: |
-          chmod +x scripts/package-macos-app.sh scripts/refresh-macos-setup-launcher.sh setup-and-run.app/Contents/MacOS/setup-and-run
+          chmod +x scripts/package-macos-app.sh scripts/package-macos-release.sh scripts/refresh-macos-setup-launcher.sh setup-and-run.app/Contents/MacOS/setup-and-run
           ./scripts/refresh-macos-setup-launcher.sh
           test -x setup-and-run.app/Contents/MacOS/setup-and-run
           ./scripts/package-macos-app.sh
-          test -x CursorUsageWidget.app/Contents/MacOS/CursorUsageWidget
-          codesign --verify --deep --strict CursorUsageWidget.app
+          test -x "Deez Fuel Gauge.app/Contents/MacOS/DeezFuelGauge"
+          test -f "Deez Fuel Gauge.app/Contents/MacOS/libSkiaSharp.dylib"
+          test -f "Deez Fuel Gauge.app/Contents/MacOS/libHarfBuzzSharp.dylib"
+          test -f "Deez Fuel Gauge.app/Contents/MacOS/libAvaloniaNative.dylib"
+          test -f "Deez Fuel Gauge.app/Contents/Resources/AppIcon.icns"
+          codesign --verify --deep --strict "Deez Fuel Gauge.app"
           codesign --verify --deep --strict setup-and-run.app
+          ./scripts/package-macos-release.sh
+          test -f Releases/deez-fuel-gauge-mac-Universal.zip
+          unzip -l Releases/deez-fuel-gauge-mac-Universal.zip | grep -q AppIcon.icns

@@ -3,34 +3,13 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 LAUNCHER_DIR="$REPO_ROOT/setup-and-run.app/Contents/MacOS"
-SETUP_PROJECT="$REPO_ROOT/CursorUsageWidget.Setup/CursorUsageWidget.Setup.csproj"
+SETUP_PROJECT="$REPO_ROOT/DeezFuelGauge.Setup/DeezFuelGauge.Setup.csproj"
 ARM64_OUT="$LAUNCHER_DIR/publish-arm64"
 X64_OUT="$LAUNCHER_DIR/publish-x64"
 NATIVE_LAUNCHER="$LAUNCHER_DIR/setup-and-run-native"
 
-find_dotnet() {
-    if command -v dotnet >/dev/null 2>&1; then
-        command -v dotnet
-        return 0
-    fi
-
-    local candidate
-    for candidate in \
-        "$HOME/.dotnet/dotnet" \
-        "/usr/local/share/dotnet/dotnet" \
-        "/opt/homebrew/bin/dotnet" \
-        "/usr/local/bin/dotnet"
-    do
-        if [[ -x "$candidate" ]]; then
-            echo "$candidate"
-            return 0
-        fi
-    done
-
-    return 1
-}
-
-DOTNET="$(find_dotnet)"
+# shellcheck source=ensure-dotnet8-sdk.sh
+source "$REPO_ROOT/scripts/ensure-dotnet8-sdk.sh"
 ARCH="$(uname -m)"
 
 dotnet_publish() {
@@ -51,19 +30,23 @@ dotnet_publish osx-x64 "$X64_OUT"
 
 if command -v lipo >/dev/null 2>&1; then
     lipo -create \
-        "$ARM64_OUT/CursorUsageWidget.Setup" \
-        "$X64_OUT/CursorUsageWidget.Setup" \
+        "$ARM64_OUT/DeezFuelGauge.Setup" \
+        "$X64_OUT/DeezFuelGauge.Setup" \
         -output "$NATIVE_LAUNCHER"
 else
     case "$ARCH" in
-        arm64) cp "$ARM64_OUT/CursorUsageWidget.Setup" "$NATIVE_LAUNCHER" ;;
-        x86_64) cp "$X64_OUT/CursorUsageWidget.Setup" "$NATIVE_LAUNCHER" ;;
+        arm64) cp "$ARM64_OUT/DeezFuelGauge.Setup" "$NATIVE_LAUNCHER" ;;
+        x86_64) cp "$X64_OUT/DeezFuelGauge.Setup" "$NATIVE_LAUNCHER" ;;
         *) echo "Unsupported macOS architecture: $ARCH" >&2; exit 1 ;;
     esac
 fi
 
 chmod +x "$NATIVE_LAUNCHER"
 cp "$NATIVE_LAUNCHER" "$LAUNCHER_DIR/setup-and-run"
+mkdir -p "$REPO_ROOT/setup-and-run.app/Contents/Resources"
+if [[ -f "$REPO_ROOT/packaging/icons/AppIcon.icns" ]]; then
+    cp "$REPO_ROOT/packaging/icons/AppIcon.icns" "$REPO_ROOT/setup-and-run.app/Contents/Resources/AppIcon.icns"
+fi
 rm -rf "$ARM64_OUT" "$X64_OUT"
 
 if command -v codesign >/dev/null 2>&1; then
