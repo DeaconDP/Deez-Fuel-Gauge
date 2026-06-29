@@ -206,6 +206,9 @@ public static class MacOsAppPackager
         if (!File.Exists(path))
             return;
 
+        if (!OperatingSystem.IsMacOS() && !OperatingSystem.IsLinux())
+            return;
+
         var mode = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute
             | UnixFileMode.GroupRead | UnixFileMode.GroupExecute
             | UnixFileMode.OtherRead | UnixFileMode.OtherExecute;

@@ -132,6 +132,9 @@ public sealed class DiskSpaceProviderTests
     [Fact]
     public void GetMacOsAggregatedVolumes_returns_empty_when_no_primary_volume()
     {
+        if (!OperatingSystem.IsMacOS())
+            return;
+
         var drives = new[]
         {
             new DriveInfo("/System/Volumes/VM"),
