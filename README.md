@@ -142,7 +142,7 @@ pip install Pillow
 python3 scripts/generate-app-icons.py
 ```
 
-This writes `packaging/icons/app-icon.png`, `app-icon.ico`, and `AppIcon.icns`. Commit the generated files — CI does not regenerate them.
+Source artwork lives in `packaging/icons/app-icon-source.png` (1024×1024). The script writes `packaging/icons/app-icon.png`, `app-icon.ico`, and `AppIcon.icns`. Commit the generated files — CI does not regenerate them.
 
 ### Windows release zip
 

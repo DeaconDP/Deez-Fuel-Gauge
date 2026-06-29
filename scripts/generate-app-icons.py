@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate macOS (.icns) and Windows (.ico) app icons from a shared design."""
+"""Generate macOS (.icns) and Windows (.ico) app icons from a shared source image."""
 
 from __future__ import annotations
 
@@ -8,20 +8,11 @@ import subprocess
 import sys
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ICONS_DIR = REPO_ROOT / "packaging" / "icons"
-SYMBOL = "\u25D0"  # ◐ — progress / partial fill
-BACKGROUND = (0, 0, 0, 255)
-FOREGROUND = (255, 255, 255, 255)
-
-FONT_CANDIDATES = [
-    "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
-    "/System/Library/Fonts/Apple Symbols.ttf",
-    "/Library/Fonts/Arial Unicode.ttf",
-    "/System/Library/Fonts/Supplemental/Arial.ttf",
-]
+SOURCE_PNG = ICONS_DIR / "app-icon-source.png"
 
 MACOS_ICONSET_SIZES = [
     (16, "icon_16x16.png"),
@@ -39,37 +30,31 @@ MACOS_ICONSET_SIZES = [
 WINDOWS_ICON_SIZES = [16, 24, 32, 48, 64, 128, 256]
 
 
-def load_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-    for path in FONT_CANDIDATES:
-        if Path(path).exists():
-            try:
-                return ImageFont.truetype(path, size=size)
-            except OSError:
-                continue
-    return ImageFont.load_default()
+def load_source() -> Image.Image:
+    if not SOURCE_PNG.exists():
+        raise FileNotFoundError(
+            f"Missing source icon at {SOURCE_PNG}. "
+            "Add app-icon-source.png (1024x1024 recommended) before running this script."
+        )
+
+    source = Image.open(SOURCE_PNG).convert("RGBA")
+    if source.size != (1024, 1024):
+        source = source.resize((1024, 1024), Image.Resampling.LANCZOS)
+    return source
 
 
-def render_icon(size: int) -> Image.Image:
-    image = Image.new("RGBA", (size, size), BACKGROUND)
-    draw = ImageDraw.Draw(image)
-    font_size = int(size * 0.72)
-    font = load_font(font_size)
-
-    bbox = draw.textbbox((0, 0), SYMBOL, font=font)
-    text_width = bbox[2] - bbox[0]
-    text_height = bbox[3] - bbox[1]
-    x = (size - text_width) / 2 - bbox[0]
-    y = (size - text_height) / 2 - bbox[1]
-    draw.text((x, y), SYMBOL, font=font, fill=FOREGROUND)
-    return image
+def render_icon(source: Image.Image, size: int) -> Image.Image:
+    if source.size == (size, size):
+        return source.copy()
+    return source.resize((size, size), Image.Resampling.LANCZOS)
 
 
-def write_png(path: Path, size: int) -> None:
-    render_icon(size).save(path, format="PNG")
+def write_png(path: Path, source: Image.Image, size: int) -> None:
+    render_icon(source, size).save(path, format="PNG")
 
 
-def write_ico(path: Path) -> None:
-    images = [render_icon(size) for size in WINDOWS_ICON_SIZES]
+def write_ico(path: Path, source: Image.Image) -> None:
+    images = [render_icon(source, size) for size in WINDOWS_ICON_SIZES]
     images[-1].save(
         path,
         format="ICO",
@@ -78,7 +63,7 @@ def write_ico(path: Path) -> None:
     )
 
 
-def write_icns(path: Path) -> None:
+def write_icns(path: Path, source: Image.Image) -> None:
     iconutil = shutil.which("iconutil")
     if iconutil is None:
         raise RuntimeError("iconutil is required to build AppIcon.icns (macOS only).")
@@ -89,7 +74,7 @@ def write_icns(path: Path) -> None:
     iconset.mkdir(parents=True)
 
     for size, filename in MACOS_ICONSET_SIZES:
-        write_png(iconset / filename, size)
+        write_png(iconset / filename, source, size)
 
     subprocess.run(
         [iconutil, "-c", "icns", str(iconset), "-o", str(path)],
@@ -100,15 +85,17 @@ def write_icns(path: Path) -> None:
 def main() -> int:
     ICONS_DIR.mkdir(parents=True, exist_ok=True)
 
+    source = load_source()
+
     source_png = ICONS_DIR / "app-icon.png"
-    write_png(source_png, 1024)
+    write_png(source_png, source, 1024)
 
     ico_path = ICONS_DIR / "app-icon.ico"
-    write_ico(ico_path)
+    write_ico(ico_path, source)
 
     icns_path = ICONS_DIR / "AppIcon.icns"
     if sys.platform == "darwin":
-        write_icns(icns_path)
+        write_icns(icns_path, source)
     elif not icns_path.exists():
         print(
             "Skipping AppIcon.icns (iconutil unavailable). "

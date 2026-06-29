@@ -10,6 +10,7 @@ public class MacOsPackagingTests
     {
         var repoRoot = FindRepoRoot();
         Assert.True(File.Exists(Path.Combine(repoRoot, "packaging", "macos", "Info.plist")));
+        Assert.True(File.Exists(Path.Combine(repoRoot, "packaging", "icons", "app-icon-source.png")));
         Assert.True(File.Exists(Path.Combine(repoRoot, "packaging", "icons", "app-icon.ico")));
         Assert.True(File.Exists(Path.Combine(repoRoot, "packaging", "icons", "app-icon.png")));
         Assert.True(File.Exists(Path.Combine(repoRoot, "packaging", "icons", "AppIcon.icns")));
