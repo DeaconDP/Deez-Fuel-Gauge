@@ -1,0 +1,10 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="DeezFuelGauge.Views.Controls.UsageBarView">
+    <Grid x:Name="Track" Height="6" Opacity="0.45">
+        <Border x:Name="Fill"
+                HorizontalAlignment="Left"
+                Height="6"
+                CornerRadius="3" />
+    </Grid>
+</UserControl>

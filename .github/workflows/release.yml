@@ -28,13 +28,13 @@ jobs:
           dotnet-version: 8.0.x
 
       - name: Restore
-        run: dotnet restore CursorUsageWidget.sln
+        run: dotnet restore DeezFuelGauge.sln
 
       - name: Build
-        run: dotnet build CursorUsageWidget.sln -c Release --no-restore
+        run: dotnet build DeezFuelGauge.sln -c Release --no-restore
 
       - name: Test
-        run: dotnet test CursorUsageWidget.sln -c Release --no-build
+        run: dotnet test DeezFuelGauge.sln -c Release --no-build
 
       - name: Package macOS release
         run: |
@@ -48,9 +48,9 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          ditto -x -k Releases/cursor-usage-widget-mac-Universal.zip /tmp/cuw-release
-          codesign --force --deep --sign - /tmp/cuw-release/CursorUsageWidget.app
-          xcrun notarytool submit Releases/cursor-usage-widget-mac-Universal.zip \
+          ditto -x -k Releases/deez-fuel-gauge-mac-Universal.zip /tmp/cuw-release
+          codesign --force --deep --sign - "/tmp/cuw-release/Deez Fuel Gauge.app"
+          xcrun notarytool submit Releases/deez-fuel-gauge-mac-Universal.zip \
             --apple-id "$APPLE_ID" \
             --password "$APPLE_APP_SPECIFIC_PASSWORD" \
             --team-id "$APPLE_TEAM_ID" \
@@ -60,11 +60,11 @@ jobs:
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
-          files: Releases/cursor-usage-widget-mac-Universal.zip
+          files: Releases/deez-fuel-gauge-mac-Universal.zip
 
       - name: Upload workflow artifact
         if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
-          name: cursor-usage-widget-mac-Universal
-          path: Releases/cursor-usage-widget-mac-Universal.zip
+          name: deez-fuel-gauge-mac-Universal
+          path: Releases/deez-fuel-gauge-mac-Universal.zip

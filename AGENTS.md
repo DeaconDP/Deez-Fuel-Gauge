@@ -14,9 +14,9 @@
 
 Run:
 
-1. `dotnet restore CursorUsageWidget.sln`
-2. `dotnet build CursorUsageWidget.sln -c Release --no-restore`
-3. `dotnet test CursorUsageWidget.sln -c Release --no-build` (when test projects exist)
+1. `dotnet restore DeezFuelGauge.sln`
+2. `dotnet build DeezFuelGauge.sln -c Release --no-restore`
+3. `dotnet test DeezFuelGauge.sln -c Release --no-build` (when test projects exist)
 
 Fix failures caused by the change.
 

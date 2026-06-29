@@ -2,7 +2,7 @@
 
 APP_BUNDLE="$(cd "$(dirname "$0")/../.." && pwd)"
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
-LOG_DIR="$HOME/Library/Logs/CursorUsageWidget"
+LOG_DIR="$HOME/Library/Logs/DeezFuelGauge"
 LOG_FILE="$LOG_DIR/setup.log"
 NATIVE_LAUNCHER="$(dirname "$0")/setup-and-run-native"
 PACKAGE_SCRIPT="$REPO_ROOT/scripts/package-macos-app.sh"
@@ -21,7 +21,7 @@ if command -v codesign >/dev/null 2>&1; then
 fi
 
 show_message() {
-    /usr/bin/osascript -e "display dialog \"$1\" buttons {\"OK\"} default button \"OK\" with title \"Cursor Usage Widget\"" >/dev/null 2>&1 || true
+    /usr/bin/osascript -e "display dialog \"$1\" buttons {\"OK\"} default button \"OK\" with title \"Deez Fuel Gauge\"" >/dev/null 2>&1 || true
 }
 
 if [[ -x "$NATIVE_LAUNCHER" ]]; then

@@ -1,0 +1,31 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="DeezFuelGauge.FirstRunWindow"
+        Title="Welcome"
+        Width="320"
+        SizeToContent="Height"
+        CanResize="False"
+        WindowStartupLocation="CenterScreen">
+    <Border Background="#FF1A1A1A"
+            Padding="16"
+            CornerRadius="8">
+        <StackPanel Spacing="10">
+            <TextBlock Text="Deez Fuel Gauge"
+                       FontSize="16"
+                       FontWeight="SemiBold"
+                       Foreground="#FF00E5FF" />
+            <TextBlock TextWrapping="Wrap"
+                       FontSize="11"
+                       Foreground="#FFCCCCCC"
+                       Text="Track Cursor plan usage and optional provider limits from one overlay. Open settings to connect OpenAI Codex, Claude Pro, Antigravity, OpenRouter, or OpenCode — no terminal required for most providers." />
+            <StackPanel Orientation="Horizontal"
+                        HorizontalAlignment="Right"
+                        Spacing="8">
+                <Button Content="Not now"
+                        Click="Dismiss_Click" />
+                <Button Content="Open settings"
+                        Click="OpenSettings_Click" />
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</Window>

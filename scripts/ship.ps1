@@ -72,9 +72,9 @@ else {
 
 Write-Host 'Running checks...'
 
-if (Test-Path 'CursorUsageWidget.sln') {
-    dotnet restore CursorUsageWidget.sln
-    dotnet build CursorUsageWidget.sln -c Release --no-restore
+if (Test-Path 'DeezFuelGauge.sln') {
+    dotnet restore DeezFuelGauge.sln
+    dotnet build DeezFuelGauge.sln -c Release --no-restore
 }
 else {
     $project = Get-ChildItem -Path . -Filter '*.csproj' -Recurse -File |

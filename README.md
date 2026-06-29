@@ -1,4 +1,4 @@
-# Cursor Usage Widget
+# Deez Fuel Gauge
 
 A lightweight, draggable desktop overlay that shows how much of your Cursor included usage cap you've used.
 
@@ -8,15 +8,15 @@ Runs on **Windows 10/11** and **macOS**.
 
 | Platform | File | Notes |
 |----------|------|-------|
-| Windows | [cursor-usage-widget-win-Setup.exe](Releases/cursor-usage-widget-win-Setup.exe) | Installer |
-| Windows | [cursor-usage-widget-win-Portable.zip](Releases/cursor-usage-widget-win-Portable.zip) | Portable zip |
-| macOS | **GitHub Releases** → `cursor-usage-widget-mac-Universal.zip` | Universal `.app` (Apple Silicon + Intel); built by the release workflow |
+| Windows | [deez-fuel-gauge-win-Setup.exe](Releases/deez-fuel-gauge-win-Setup.exe) | Installer |
+| Windows | [deez-fuel-gauge-win-Portable.zip](Releases/deez-fuel-gauge-win-Portable.zip) | Portable zip |
+| macOS | **GitHub Releases** → `deez-fuel-gauge-mac-Universal.zip` | Universal `.app` (Apple Silicon + Intel); built by the release workflow |
 
-To build the macOS zip locally (produces `Releases/cursor-usage-widget-mac-Universal.zip`), run **`scripts/package-macos-release.sh`** from the repo root on a Mac with the .NET 8 SDK installed.
+To build the macOS zip locally (produces `Releases/deez-fuel-gauge-mac-Universal.zip`), run **`scripts/package-macos-release.sh`** from the repo root on a Mac with the .NET 8 SDK installed.
 
-After downloading or building the macOS zip, unzip it and move **`CursorUsageWidget.app`** anywhere you like (for example **Applications**). The app is self-contained and does **not** require .NET to be installed.
+After downloading or building the macOS zip, unzip it and move **`Deez Fuel Gauge.app`** anywhere you like (for example **Applications**). The app is self-contained and does **not** require .NET to be installed.
 
-If macOS blocks the app the first time, right-click **`CursorUsageWidget.app`** and choose **Open**.
+If macOS blocks the app the first time, right-click **`Deez Fuel Gauge.app`** and choose **Open**.
 
 ## Requirements
 
@@ -35,21 +35,23 @@ Double-click the launcher for your platform:
 
 On first run it builds the widget and launches it. Later runs rebuild and start the widget.
 
-After the first successful setup, you can open **`CursorUsageWidget.app`** directly.
+After the first successful setup, you can open **`Deez Fuel Gauge.app`** directly.
 
 - **Windows:** if .NET 8 is missing, the launcher can install it via winget.
 - **macOS:** if .NET 8 is missing, the launcher tries a silent SDK install first, then opens the official download page if that fails.
 - **macOS:** if macOS blocks the launcher the first time, right-click **`setup-and-run.app`** and choose **Open**.
-- **macOS:** if **`CursorUsageWidget.app`** is blocked after setup, right-click it and choose **Open** as well.
+- **macOS:** if **`Deez Fuel Gauge.app`** is blocked after setup, right-click it and choose **Open** as well.
 
-If setup fails on macOS, details are saved to `~/Library/Logs/CursorUsageWidget/setup.log`.
+If setup fails on macOS, details are saved to `~/Library/Logs/DeezFuelGauge/setup.log`.
+
+If you upgraded from Cursor Usage Widget, settings are copied automatically from `cursor-usage-widget` to `deez-fuel-gauge` on first launch. If launch-at-login was enabled, toggle it once in settings to refresh the login item.
 
 ### macOS troubleshooting
 
 | Issue | What to try |
 |-------|-------------|
 | “App can’t be opened” / Gatekeeper | Right-click the app → **Open**, or **System Settings → Privacy & Security → Open Anyway** |
-| Setup fails immediately | Open `~/Library/Logs/CursorUsageWidget/setup.log` for the exact error |
+| Setup fails immediately | Open `~/Library/Logs/DeezFuelGauge/setup.log` for the exact error |
 | .NET SDK missing | Re-run **`setup-and-run.app`** (it attempts auto-install) or install the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) manually |
 | Claude browser session not detected | Ensure Chrome, Edge, or Brave is logged into claude.ai; macOS may prompt for Keychain access once per browser |
 
@@ -108,8 +110,8 @@ Click the **gear** in the widget header to configure what is shown. Settings are
 
 | Platform | Path |
 |----------|------|
-| Windows | `%LOCALAPPDATA%\cursor-usage-widget\settings.json` |
-| macOS | `~/Library/Application Support/cursor-usage-widget/settings.json` |
+| Windows | `%LOCALAPPDATA%\deez-fuel-gauge\settings.json` |
+| macOS | `~/Library/Application Support/deez-fuel-gauge/settings.json` |
 
 Encrypted API keys: `credentials/` in the same folder.
 
@@ -119,13 +121,13 @@ Encrypted API keys: `credentials/` in the same folder.
 
 1. Build the widget once using **`setup-and-run.bat`**.
 2. Press `Win+R`, type `shell:startup`, press Enter.
-3. Create a shortcut to `CursorUsageWidget\bin\Release\net8.0\CursorUsageWidget.exe` in that folder.
+3. Create a shortcut to `DeezFuelGauge\bin\Release\net8.0\DeezFuelGauge.exe` in that folder.
 
 **macOS**
 
 1. Build the widget once using **`setup-and-run.app`**.
 2. Open **System Settings → General → Login Items**.
-3. Add **`CursorUsageWidget.app`** from this folder.
+3. Add **`Deez Fuel Gauge.app`** from this folder.
 
 You can also enable **Launch at login** from **Settings → System → Widget** in the app.
 
@@ -148,7 +150,7 @@ This writes `packaging/icons/app-icon.png`, `app-icon.ico`, and `AppIcon.icns`. 
 .\scripts\package-windows-release.ps1
 ```
 
-Produces `Releases/cursor-usage-widget-win-Portable.zip`.
+Produces `Releases/deez-fuel-gauge-win-Portable.zip`.
 
 ## How it works
 

@@ -3,17 +3,18 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 RELEASES_DIR="$REPO_ROOT/Releases"
-APP_NAME="CursorUsageWidget"
-APP_PATH="$REPO_ROOT/${APP_NAME}.app"
+APP_NAME="DeezFuelGauge"
+APP_BUNDLE_NAME="Deez Fuel Gauge.app"
+APP_PATH="$REPO_ROOT/$APP_BUNDLE_NAME"
 INFO_PLIST="$REPO_ROOT/packaging/macos/Info.plist"
-PROJECT="$REPO_ROOT/CursorUsageWidget/CursorUsageWidget.csproj"
+PROJECT="$REPO_ROOT/DeezFuelGauge/DeezFuelGauge.csproj"
 ARM64_PUBLISH="$REPO_ROOT/.publish/osx-arm64"
 X64_PUBLISH="$REPO_ROOT/.publish/osx-x64"
 ARM64_HOST="$ARM64_PUBLISH/$APP_NAME"
 X64_HOST="$X64_PUBLISH/$APP_NAME"
 UNIVERSAL_HOST="$REPO_ROOT/.publish/universal/$APP_NAME"
 UNIVERSAL_LIB_DIR="$REPO_ROOT/.publish/universal"
-ZIP_NAME="cursor-usage-widget-mac-Universal.zip"
+ZIP_NAME="deez-fuel-gauge-mac-Universal.zip"
 ZIP_PATH="$RELEASES_DIR/$ZIP_NAME"
 
 find_dotnet() {

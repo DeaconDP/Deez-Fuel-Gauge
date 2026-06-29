@@ -3,7 +3,7 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 LAUNCHER_DIR="$REPO_ROOT/setup-and-run.app/Contents/MacOS"
-SETUP_PROJECT="$REPO_ROOT/CursorUsageWidget.Setup/CursorUsageWidget.Setup.csproj"
+SETUP_PROJECT="$REPO_ROOT/DeezFuelGauge.Setup/DeezFuelGauge.Setup.csproj"
 ARM64_OUT="$LAUNCHER_DIR/publish-arm64"
 X64_OUT="$LAUNCHER_DIR/publish-x64"
 NATIVE_LAUNCHER="$LAUNCHER_DIR/setup-and-run-native"
@@ -30,13 +30,13 @@ dotnet_publish osx-x64 "$X64_OUT"
 
 if command -v lipo >/dev/null 2>&1; then
     lipo -create \
-        "$ARM64_OUT/CursorUsageWidget.Setup" \
-        "$X64_OUT/CursorUsageWidget.Setup" \
+        "$ARM64_OUT/DeezFuelGauge.Setup" \
+        "$X64_OUT/DeezFuelGauge.Setup" \
         -output "$NATIVE_LAUNCHER"
 else
     case "$ARCH" in
-        arm64) cp "$ARM64_OUT/CursorUsageWidget.Setup" "$NATIVE_LAUNCHER" ;;
-        x86_64) cp "$X64_OUT/CursorUsageWidget.Setup" "$NATIVE_LAUNCHER" ;;
+        arm64) cp "$ARM64_OUT/DeezFuelGauge.Setup" "$NATIVE_LAUNCHER" ;;
+        x86_64) cp "$X64_OUT/DeezFuelGauge.Setup" "$NATIVE_LAUNCHER" ;;
         *) echo "Unsupported macOS architecture: $ARCH" >&2; exit 1 ;;
     esac
 fi

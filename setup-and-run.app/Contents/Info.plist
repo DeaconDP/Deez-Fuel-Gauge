@@ -5,11 +5,11 @@
     <key>CFBundleExecutable</key>
     <string>setup-and-run</string>
     <key>CFBundleIdentifier</key>
-    <string>io.worldbuild.cursor-usage-widget.setup</string>
+    <string>io.worldbuild.deez-fuel-gauge.setup</string>
     <key>CFBundleName</key>
     <string>Setup and Run</string>
     <key>CFBundleDisplayName</key>
-    <string>Cursor Usage Widget Setup</string>
+    <string>Deez Fuel Gauge Setup</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>

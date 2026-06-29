@@ -4,9 +4,9 @@ Set-StrictMode -Version Latest
 
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 $ReleasesDir = Join-Path $RepoRoot 'Releases'
-$Project = Join-Path $RepoRoot 'CursorUsageWidget\CursorUsageWidget.csproj'
+$Project = Join-Path $RepoRoot 'DeezFuelGauge\DeezFuelGauge.csproj'
 $PublishDir = Join-Path $RepoRoot '.publish\win-x64'
-$ZipName = 'cursor-usage-widget-win-Portable.zip'
+$ZipName = 'deez-fuel-gauge-win-Portable.zip'
 $ZipPath = Join-Path $ReleasesDir $ZipName
 
 if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
@@ -28,7 +28,7 @@ dotnet publish $Project `
     -o $PublishDir `
     --nologo
 
-if (-not (Test-Path (Join-Path $PublishDir 'CursorUsageWidget.exe'))) {
+if (-not (Test-Path (Join-Path $PublishDir 'DeezFuelGauge.exe'))) {
     Write-Error 'Published executable was not created.'
     exit 1
 }
