@@ -1,5 +1,6 @@
 namespace CursorUsageWidget.ViewModels;
 
+using CursorUsageWidget.Models;
 using CursorUsageWidget.Services;
 
 public sealed class ProviderSectionViewModel
@@ -9,6 +10,8 @@ public sealed class ProviderSectionViewModel
     public bool IsExpanded { get; set; }
     public string? DegradedMessage { get; set; }
     public bool HasDegradedState => !string.IsNullOrWhiteSpace(DegradedMessage);
+    public string? UnusedQuotaMessage { get; set; }
+    public bool HasUnusedQuotaAlert => !string.IsNullOrWhiteSpace(UnusedQuotaMessage);
 }
 
 public sealed class WidgetViewModel
@@ -26,6 +29,28 @@ public sealed class WidgetViewModel
         LastRefreshedAt is { } at
             ? $"Updated {at.ToLocalTime():HH:mm}"
             : "";
+
+    public IReadOnlyList<QuotaAlert> ActiveQuotaAlerts { get; private set; } = Array.Empty<QuotaAlert>();
+
+    public string QuotaAlertHeaderSummary =>
+        QuotaAlertPresenter.FormatHeaderSummary(ActiveQuotaAlerts);
+
+    public string QuotaAlertHeaderTooltip =>
+        QuotaAlertPresenter.FormatHeaderTooltip(ActiveQuotaAlerts);
+
+    public bool HasQuotaAlerts => ActiveQuotaAlerts.Count > 0;
+
+    public void ApplyQuotaAlerts(IReadOnlyList<QuotaAlert> alerts)
+    {
+        ActiveQuotaAlerts = alerts;
+        ClearUnusedQuotaStates();
+
+        foreach (var group in alerts.GroupBy(a => a.ProviderKey))
+        {
+            var message = QuotaAlertPresenter.FormatProviderTooltip(group);
+            AssignUnusedQuotaMessage(group.Key, message);
+        }
+    }
 
     public void ApplyRefreshResult(Models.RefreshResult result)
     {
@@ -49,6 +74,41 @@ public sealed class WidgetViewModel
         Gemini.DegradedMessage = null;
         OpenRouter.DegradedMessage = null;
         OpenCode.DegradedMessage = null;
+    }
+
+    private void ClearUnusedQuotaStates()
+    {
+        Cursor.UnusedQuotaMessage = null;
+        OpenAi.UnusedQuotaMessage = null;
+        Claude.UnusedQuotaMessage = null;
+        Gemini.UnusedQuotaMessage = null;
+        OpenRouter.UnusedQuotaMessage = null;
+        OpenCode.UnusedQuotaMessage = null;
+    }
+
+    private void AssignUnusedQuotaMessage(string providerKey, string message)
+    {
+        switch (providerKey)
+        {
+            case "cursor":
+                Cursor.UnusedQuotaMessage = message;
+                break;
+            case "openai":
+                OpenAi.UnusedQuotaMessage = message;
+                break;
+            case "claude":
+                Claude.UnusedQuotaMessage = message;
+                break;
+            case "gemini":
+                Gemini.UnusedQuotaMessage = message;
+                break;
+            case "openrouter":
+                OpenRouter.UnusedQuotaMessage = message;
+                break;
+            case "opencode":
+                OpenCode.UnusedQuotaMessage = message;
+                break;
+        }
     }
 
     private void AssignDegradedMessage(string providerKey, string message)

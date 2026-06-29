@@ -29,6 +29,50 @@
             <Setter Property="MaxHeight" Value="56" />
             <Setter Property="Opacity" Value="1" />
         </Style>
+        <Style Selector="Border.header-icon-button">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Width" Value="18" />
+            <Setter Property="Height" Value="18" />
+            <Setter Property="Margin" Value="6,0,0,0" />
+        </Style>
+        <Style Selector="Border.header-icon-button > Viewbox">
+            <Setter Property="Width" Value="12" />
+            <Setter Property="Height" Value="12" />
+            <Setter Property="Stretch" Value="Uniform" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Border.header-icon-button TextBlock">
+            <Setter Property="FontFamily" Value="Segoe UI Symbol, Apple Symbols, sans-serif" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="TextAlignment" Value="Center" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Border.settings-panel-host">
+            <Setter Property="MaxHeight" Value="0" />
+            <Setter Property="Opacity" Value="0" />
+            <Setter Property="Margin" Value="0" />
+            <Setter Property="ClipToBounds" Value="True" />
+            <Setter Property="IsHitTestVisible" Value="False" />
+            <Setter Property="RenderTransformOrigin" Value="50%,100%" />
+            <Setter Property="RenderTransform" Value="translateY(18px)" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="Opacity" Duration="0:0:0.2" Easing="CubicEaseOut" />
+                    <DoubleTransition Property="MaxHeight" Duration="0:0:0.26" Easing="CubicEaseOut" />
+                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.26" Easing="CubicEaseOut" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Border.settings-panel-host.expanded">
+            <Setter Property="MaxHeight" Value="400" />
+            <Setter Property="Opacity" Value="1" />
+            <Setter Property="Margin" Value="0,0,0,8" />
+            <Setter Property="IsHitTestVisible" Value="True" />
+            <Setter Property="RenderTransform" Value="translateY(0)" />
+        </Style>
     </Window.Styles>
     <Border x:Name="PillBorder"
             CornerRadius="10"
@@ -67,50 +111,57 @@
                 <StackPanel Grid.Column="1"
                             Orientation="Horizontal"
                             VerticalAlignment="Center">
-                    <Border Background="Transparent"
-                            Cursor="Hand"
-                            Padding="2,0,0,0"
+                    <Border Classes="header-icon-button"
+                            Margin="0"
+                            ToolTip.Tip="Refresh"
+                            PointerPressed="RefreshButton_PointerPressed">
+                        <Viewbox>
+                            <TextBlock Text="&#x21BB;"
+                                       Foreground="#FF00E5FF" />
+                        </Viewbox>
+                    </Border>
+                    <Border x:Name="SettingsButton"
+                            Classes="header-icon-button"
+                            ToolTip.Tip="Settings"
                             PointerPressed="SettingsToggle_PointerPressed">
-                        <TextBlock x:Name="SettingsIcon"
-                                   Text="&#x2699;"
-                                   FontFamily="Segoe UI Symbol, Apple Symbols, sans-serif"
-                                   FontSize="14"
-                                   LineHeight="18"
-                                   Foreground="#FF44CC44"
-                                   VerticalAlignment="Center" />
+                        <Viewbox>
+                            <TextBlock x:Name="SettingsIcon"
+                                       Text="&#x2699;"
+                                       Foreground="#FF44CC44" />
+                        </Viewbox>
                     </Border>
-                    <Border Background="Transparent"
-                            Cursor="Hand"
-                            Margin="6,0,0,0"
+                    <Border Classes="header-icon-button"
+                            ToolTip.Tip="Pin"
                             PointerPressed="PinToggle_PointerPressed">
-                        <TextBlock x:Name="PinIcon"
-                                   Text="&#x2316;"
-                                   FontFamily="Segoe UI Symbol, Apple Symbols, sans-serif"
-                                   FontSize="14"
-                                   LineHeight="18"
-                                   Foreground="#FFFFCC00"
-                                   VerticalAlignment="Center" />
+                        <Viewbox>
+                            <TextBlock x:Name="PinIcon"
+                                       Text="&#x2316;"
+                                       Foreground="#FFFFCC00" />
+                        </Viewbox>
                     </Border>
-                    <Border Background="Transparent"
-                            Cursor="Hand"
-                            Margin="6,0,0,0"
+                    <Border Classes="header-icon-button"
+                            ToolTip.Tip="Close"
                             PointerPressed="CloseButton_PointerPressed">
-                        <TextBlock Text="&#x2715;"
-                                   FontFamily="Segoe UI Symbol, Apple Symbols, sans-serif"
-                                   FontSize="14"
-                                   LineHeight="18"
-                                   Foreground="#FFFF4444"
-                                   VerticalAlignment="Center" />
+                        <Viewbox>
+                            <TextBlock Text="&#x2715;"
+                                       Foreground="#FFFF4444" />
+                        </Viewbox>
                     </Border>
                 </StackPanel>
             </Grid>
+            <TextBlock x:Name="QuotaAlertHeaderText"
+                       Text=""
+                       FontSize="9"
+                       LineHeight="12"
+                       Foreground="#FFE5A000"
+                       Margin="0,-2,0,4"
+                       IsVisible="False" />
             <Border x:Name="SettingsPanelHost"
-                    Margin="0,0,0,8"
+                    Classes="settings-panel-host"
                     Padding="0"
                     CornerRadius="6"
                     Background="Transparent"
-                    HorizontalAlignment="Stretch"
-                    IsVisible="False">
+                    HorizontalAlignment="Stretch">
                 <settings:SettingsPanel x:Name="SettingsPanelControl" />
             </Border>
             <StackPanel x:Name="CursorProviderSection">
@@ -124,7 +175,8 @@
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="Cursor"
+                        <TextBlock x:Name="CursorProviderLabel"
+                                   Text="Cursor"
                                    Grid.Column="0"
                                    VerticalAlignment="Center"
                                    Margin="0,0,8,0"
@@ -244,7 +296,8 @@
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="OpenAI"
+                        <TextBlock x:Name="OpenAiProviderLabel"
+                                   Text="OpenAI"
                                    Grid.Column="0"
                                    VerticalAlignment="Center"
                                    Margin="0,0,8,0"
@@ -470,7 +523,8 @@
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="Claude"
+                        <TextBlock x:Name="ClaudeProviderLabel"
+                                   Text="Claude"
                                    Grid.Column="0"
                                    VerticalAlignment="Center"
                                    Margin="0,0,8,0"
@@ -696,7 +750,8 @@
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="Gemini"
+                        <TextBlock x:Name="GeminiProviderLabel"
+                                   Text="Gemini"
                                    Grid.Column="0"
                                    VerticalAlignment="Center"
                                    Margin="0,0,8,0"
@@ -925,7 +980,8 @@
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="OpenRouter"
+                        <TextBlock x:Name="OpenRouterProviderLabel"
+                                   Text="OpenRouter"
                                    Grid.Column="0"
                                    VerticalAlignment="Center"
                                    Margin="0,0,8,0"
@@ -999,7 +1055,8 @@
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="OpenCode"
+                        <TextBlock x:Name="OpenCodeProviderLabel"
+                                   Text="OpenCode"
                                    Grid.Column="0"
                                    VerticalAlignment="Center"
                                    Margin="0,0,8,0"
@@ -1197,42 +1254,50 @@
                         Margin="0,6,0,0"
                         Spacing="4"
                         IsVisible="False" />
-            <TextBlock x:Name="LastRefreshedText"
-                       FontSize="8"
-                       LineHeight="11"
-                       Foreground="#44FFFFFF"
-                       HorizontalAlignment="Center"
-                       Margin="0,4,0,0"
-                       IsVisible="False" />
-            <StackPanel Orientation="Horizontal"
-                        Margin="0,9,0,0"
-                        HorizontalAlignment="Center"
-                        Spacing="0">
-                <TextBlock Text="built by "
-                           FontSize="8.5"
-                           LineHeight="12"
+            <Grid Margin="0,6,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="LastRefreshedText"
+                           Grid.Column="0"
+                           FontSize="8"
+                           LineHeight="11"
                            Foreground="#44FFFFFF"
-                           VerticalAlignment="Center" />
-                <TextBlock Text="deac.online"
-                           FontSize="8.5"
-                           LineHeight="12"
-                           Foreground="#55AAAAAA"
-                           Cursor="Hand"
+                           HorizontalAlignment="Left"
                            VerticalAlignment="Center"
-                           PointerPressed="DeacLink_PointerPressed" />
-                <TextBlock Text=" @ "
-                           FontSize="8.5"
-                           LineHeight="12"
-                           Foreground="#44FFFFFF"
-                           VerticalAlignment="Center" />
-                <TextBlock Text="worldbuild.io"
-                           FontSize="8.5"
-                           LineHeight="12"
-                           Foreground="#55AAAAAA"
-                           Cursor="Hand"
-                           VerticalAlignment="Center"
-                           PointerPressed="WorldbuildLink_PointerPressed" />
-            </StackPanel>
+                           IsVisible="False" />
+                <StackPanel Grid.Column="1"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            Spacing="0">
+                    <TextBlock Text="built by "
+                               FontSize="8.5"
+                               LineHeight="12"
+                               Foreground="#44FFFFFF"
+                               VerticalAlignment="Center" />
+                    <TextBlock Text="deac.online"
+                               FontSize="8.5"
+                               LineHeight="12"
+                               Foreground="#55AAAAAA"
+                               Cursor="Hand"
+                               VerticalAlignment="Center"
+                               PointerPressed="DeacLink_PointerPressed" />
+                    <TextBlock Text=" @ "
+                               FontSize="8.5"
+                               LineHeight="12"
+                               Foreground="#44FFFFFF"
+                               VerticalAlignment="Center" />
+                    <TextBlock Text="worldbuild.io"
+                               FontSize="8.5"
+                               LineHeight="12"
+                               Foreground="#55AAAAAA"
+                               Cursor="Hand"
+                               VerticalAlignment="Center"
+                               PointerPressed="WorldbuildLink_PointerPressed" />
+                </StackPanel>
+            </Grid>
         </StackPanel>
     </Border>
 </Window>

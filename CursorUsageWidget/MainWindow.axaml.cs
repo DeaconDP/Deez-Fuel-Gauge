@@ -75,8 +75,11 @@ public partial class MainWindow : Window, ISettingsPanelHost
     private readonly WidgetViewModel _widgetViewModel = new();
     private TrayIconService? _trayIconService;
     private readonly List<DiskBarRow> _diskBarRows = [];
-    private double _settingsAnchorHeight;
-    private bool _compensateSettingsAnchor;
+    private double? _settingsAnchorBottom;
+    private bool _maintainSettingsAnchor;
+    private DispatcherTimer? _settingsAnchorTimer;
+    private bool _settingsPanelAnimationsEnabled;
+    private static readonly TimeSpan SettingsPanelAnimationDuration = TimeSpan.FromMilliseconds(280);
 
     private sealed class DiskBarRow
     {
@@ -138,11 +141,9 @@ public partial class MainWindow : Window, ISettingsPanelHost
         UpdateClaudeProLimitsExpandedState();
         UpdateAntigravityLimitsExpandedState();
         UpdateOpenCodeGoLimitsExpandedState();
-        UpdateSettingsExpandedState();
+        UpdateSettingsExpandedState(animate: false);
         UpdatePinIconState();
         UpdateAllProviderExpandedState();
-
-        SettingsPanelHost.SizeChanged += (_, _) => CompensateSettingsAnchorIfNeeded();
 
         _pollTimer = new DispatcherTimer
         {
@@ -155,6 +156,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
         {
             Dispatcher.UIThread.Post(ApplyInitialPosition, DispatcherPriority.Loaded);
             ApplyRuntimeSettings();
+            _settingsPanelAnimationsEnabled = true;
             _trayIconService = new TrayIconService(
                 () => _ = RefreshAsync(),
                 Close);
@@ -187,6 +189,15 @@ public partial class MainWindow : Window, ISettingsPanelHost
         var (x, y) = WindowAnchorHelper.ComputeCenteredPosition(
             area.X, area.Y, area.Width, area.Height, width, height);
         Position = new PixelPoint(x, y);
+    }
+
+    private void RefreshButton_PointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+            return;
+
+        _ = RefreshAsync();
+        e.Handled = true;
     }
 
     private void PinToggle_PointerPressed(object? sender, PointerPressedEventArgs e)
@@ -225,19 +236,25 @@ public partial class MainWindow : Window, ISettingsPanelHost
         if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
             return;
 
-        var oldHeight = Bounds.Height;
         _isSettingsExpanded = !_isSettingsExpanded;
         UpdateSettingsExpandedState();
-        ScheduleSettingsAnchorCompensation(oldHeight);
+        BeginBottomAnchoredResize();
         SaveSettings();
         e.Handled = true;
     }
 
-    private void UpdateSettingsExpandedState()
+    private void UpdateSettingsExpandedState(bool animate = true)
     {
-        SettingsPanelHost.IsVisible = _isSettingsExpanded;
+        if (_isSettingsExpanded)
+            SettingsPanelHost.Classes.Add("expanded");
+        else
+            SettingsPanelHost.Classes.Remove("expanded");
+
         SettingsIcon.Foreground = new SolidColorBrush(
             _isSettingsExpanded ? Color.FromRgb(0x88, 0xFF, 0x88) : Color.FromRgb(0x44, 0xCC, 0x44));
+
+        if (!animate || !_settingsPanelAnimationsEnabled)
+            ApplySettingsAnchor();
     }
 
     public void OnSettingsLayoutChanged()
@@ -245,32 +262,54 @@ public partial class MainWindow : Window, ISettingsPanelHost
         if (!_isSettingsExpanded)
             return;
 
-        var oldHeight = Bounds.Height;
-        RefreshWindowHeight();
-        ScheduleSettingsAnchorCompensation(oldHeight);
+        BeginBottomAnchoredResize();
     }
 
-    private void ScheduleSettingsAnchorCompensation(double oldHeight)
+    private void BeginBottomAnchoredResize()
     {
-        _settingsAnchorHeight = oldHeight;
-        _compensateSettingsAnchor = true;
+        _settingsAnchorBottom = Position.Y + Bounds.Height;
+        _maintainSettingsAnchor = true;
+        SizeChanged -= OnSizeChangedMaintainSettingsAnchor;
+        SizeChanged += OnSizeChangedMaintainSettingsAnchor;
         RefreshWindowHeight();
-        Dispatcher.UIThread.Post(CompensateSettingsAnchorIfNeeded, DispatcherPriority.Loaded);
+        ApplySettingsAnchor();
+
+        _settingsAnchorTimer?.Stop();
+        _settingsAnchorTimer = new DispatcherTimer { Interval = SettingsPanelAnimationDuration };
+        _settingsAnchorTimer.Tick += OnSettingsAnchorTimerTick;
+        _settingsAnchorTimer.Start();
+
+        Dispatcher.UIThread.Post(ApplySettingsAnchor, DispatcherPriority.Loaded);
     }
 
-    private void CompensateSettingsAnchorIfNeeded()
+    private void OnSettingsAnchorTimerTick(object? sender, EventArgs e)
     {
-        if (!_compensateSettingsAnchor)
+        _settingsAnchorTimer?.Stop();
+        EndBottomAnchoredResize();
+    }
+
+    private void EndBottomAnchoredResize()
+    {
+        _maintainSettingsAnchor = false;
+        SizeChanged -= OnSizeChangedMaintainSettingsAnchor;
+        ApplySettingsAnchor();
+        _settingsAnchorBottom = null;
+    }
+
+    private void OnSizeChangedMaintainSettingsAnchor(object? sender, SizeChangedEventArgs e)
+    {
+        if (_maintainSettingsAnchor)
+            ApplySettingsAnchor();
+    }
+
+    private void ApplySettingsAnchor()
+    {
+        if (_settingsAnchorBottom is not { } anchorBottom)
             return;
 
-        _compensateSettingsAnchor = false;
-        var newHeight = Bounds.Height;
-        if (Math.Abs(newHeight - _settingsAnchorHeight) < 0.5)
-            return;
-
-        Position = new PixelPoint(
-            Position.X,
-            WindowAnchorHelper.CompensateVerticalGrowth(_settingsAnchorHeight, newHeight, Position.Y));
+        var y = WindowAnchorHelper.ComputeBottomAnchoredY(anchorBottom, Bounds.Height);
+        if (Position.Y != y)
+            Position = new PixelPoint(Position.X, y);
     }
 
     public void OnSettingsChanged()
@@ -282,6 +321,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
         if (_lastSnapshot is not null)
             ApplySnapshot(_lastSnapshot);
 
+        UpdateQuotaAlerts();
         RefreshDiskVolumes();
     }
 
@@ -312,6 +352,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
         {
             _isSettingsExpanded = true;
             UpdateSettingsExpandedState();
+            BeginBottomAnchoredResize();
         }
     }
 
@@ -802,7 +843,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
             _lastRefreshResult = result;
             _widgetViewModel.ApplyRefreshResult(result);
             ApplySnapshot(result.Snapshot, result.CursorFetchSucceeded);
-            ApplyDegradedTooltips();
+            UpdateQuotaAlerts();
             SaveSettings();
             _settingsViewModel.UpdateStatusFromSettings(_settings);
             UpdateLastRefreshedLabel();
@@ -810,6 +851,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
         catch
         {
             ApplySnapshot(UsageSnapshot.Error("Can't fetch usage"), cursorFetchSucceeded: false);
+            UpdateQuotaAlerts();
         }
         finally
         {
@@ -892,13 +934,65 @@ public partial class MainWindow : Window, ISettingsPanelHost
         LastRefreshedText.IsVisible = !string.IsNullOrWhiteSpace(label);
     }
 
+    private void UpdateQuotaAlerts()
+    {
+        if (_lastSnapshot is null || _lastSnapshot.IsError)
+            _widgetViewModel.ApplyQuotaAlerts(Array.Empty<QuotaAlert>());
+        else
+            _widgetViewModel.ApplyQuotaAlerts(QuotaAlertEvaluator.Evaluate(_lastSnapshot, _settings));
+
+        ApplyQuotaAlertChrome();
+    }
+
+    private void ApplyQuotaAlertChrome()
+    {
+        var hasAlerts = _widgetViewModel.HasQuotaAlerts;
+        PillBorder.BorderBrush = new SolidColorBrush(
+            hasAlerts ? Color.Parse("#FFE5A000") : Color.Parse("#44FFFFFF"));
+
+        QuotaAlertHeaderText.Text = _widgetViewModel.QuotaAlertHeaderSummary;
+        QuotaAlertHeaderText.IsVisible = hasAlerts;
+        ToolTip.SetTip(QuotaAlertHeaderText, _widgetViewModel.QuotaAlertHeaderTooltip);
+
+        ApplyProviderLabel(CursorProviderLabel, "Cursor", _widgetViewModel.Cursor);
+        ApplyProviderLabel(OpenAiProviderLabel, "OpenAI", _widgetViewModel.OpenAi);
+        ApplyProviderLabel(ClaudeProviderLabel, "Claude", _widgetViewModel.Claude);
+        ApplyProviderLabel(GeminiProviderLabel, "Gemini", _widgetViewModel.Gemini);
+        ApplyProviderLabel(OpenRouterProviderLabel, "OpenRouter", _widgetViewModel.OpenRouter);
+        ApplyProviderLabel(OpenCodeProviderLabel, "OpenCode", _widgetViewModel.OpenCode);
+
+        ApplyProviderHeaderTooltips();
+    }
+
+    private static void ApplyProviderLabel(TextBlock label, string baseName, ProviderSectionViewModel section)
+    {
+        label.Text = baseName + QuotaAlertPresenter.FormatHeadlineBadge(section.HasUnusedQuotaAlert);
+    }
+
+    private void ApplyProviderHeaderTooltips()
+    {
+        SetProviderHeaderTooltip(CursorProviderHeader, _widgetViewModel.Cursor);
+        SetProviderHeaderTooltip(OpenAiProviderHeader, _widgetViewModel.OpenAi);
+        SetProviderHeaderTooltip(ClaudeProviderHeader, _widgetViewModel.Claude);
+        SetProviderHeaderTooltip(GeminiProviderHeader, _widgetViewModel.Gemini);
+        SetProviderHeaderTooltip(OpenRouterProviderHeader, _widgetViewModel.OpenRouter);
+        SetProviderHeaderTooltip(OpenCodeProviderHeader, _widgetViewModel.OpenCode);
+    }
+
+    private static void SetProviderHeaderTooltip(Border header, ProviderSectionViewModel section)
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(section.DegradedMessage))
+            parts.Add(section.DegradedMessage);
+        if (!string.IsNullOrWhiteSpace(section.UnusedQuotaMessage))
+            parts.Add(section.UnusedQuotaMessage);
+
+        ToolTip.SetTip(header, parts.Count > 0 ? string.Join($"{Environment.NewLine}{Environment.NewLine}", parts) : null);
+    }
+
     private void ApplyDegradedTooltips()
     {
-        ToolTip.SetTip(OpenAiProviderHeader, _widgetViewModel.OpenAi.DegradedMessage);
-        ToolTip.SetTip(ClaudeProviderHeader, _widgetViewModel.Claude.DegradedMessage);
-        ToolTip.SetTip(GeminiProviderHeader, _widgetViewModel.Gemini.DegradedMessage);
-        ToolTip.SetTip(OpenRouterProviderHeader, _widgetViewModel.OpenRouter.DegradedMessage);
-        ToolTip.SetTip(OpenCodeProviderHeader, _widgetViewModel.OpenCode.DegradedMessage);
+        ApplyProviderHeaderTooltips();
     }
 
     private void ApplyProviderHeadlines(UsageSnapshot snapshot)

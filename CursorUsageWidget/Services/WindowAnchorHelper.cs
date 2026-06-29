@@ -11,6 +11,12 @@ public static class WindowAnchorHelper
         return currentY - delta;
     }
 
+    /// <summary>
+    /// Returns the window Y position that keeps the bottom edge at <paramref name="anchorBottom"/>.
+    /// </summary>
+    public static int ComputeBottomAnchoredY(double anchorBottom, double height) =>
+        (int)Math.Round(anchorBottom - height);
+
     public static (int X, int Y) ComputeCenteredPosition(
         int workAreaX,
         int workAreaY,

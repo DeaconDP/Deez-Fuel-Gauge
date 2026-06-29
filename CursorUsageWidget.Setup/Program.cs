@@ -22,7 +22,7 @@ try
     var dotnet = MacOsAppPackager.FindDotnet();
     if (dotnet is null)
     {
-        File.AppendAllText(logPath, $"dotnet not found; attempting dotnet-install.sh...{Environment.NewLine}");
+        File.AppendAllText(logPath, $".NET 8 SDK not found; attempting dotnet-install.sh...{Environment.NewLine}");
         dotnet = DotNetInstaller.TryInstallSdk(logPath);
     }
 

@@ -8,29 +8,8 @@ ARM64_OUT="$LAUNCHER_DIR/publish-arm64"
 X64_OUT="$LAUNCHER_DIR/publish-x64"
 NATIVE_LAUNCHER="$LAUNCHER_DIR/setup-and-run-native"
 
-find_dotnet() {
-    if command -v dotnet >/dev/null 2>&1; then
-        command -v dotnet
-        return 0
-    fi
-
-    local candidate
-    for candidate in \
-        "$HOME/.dotnet/dotnet" \
-        "/usr/local/share/dotnet/dotnet" \
-        "/opt/homebrew/bin/dotnet" \
-        "/usr/local/bin/dotnet"
-    do
-        if [[ -x "$candidate" ]]; then
-            echo "$candidate"
-            return 0
-        fi
-    done
-
-    return 1
-}
-
-DOTNET="$(find_dotnet)"
+# shellcheck source=ensure-dotnet8-sdk.sh
+source "$REPO_ROOT/scripts/ensure-dotnet8-sdk.sh"
 ARCH="$(uname -m)"
 
 dotnet_publish() {

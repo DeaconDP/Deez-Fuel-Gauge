@@ -489,6 +489,61 @@
                                           IsChecked="{Binding LaunchAtLogin}" />
                             </controls:SettingsSubsection.Body>
                         </controls:SettingsSubsection>
+                        <controls:SettingsSubsection Title="Unused quota alerts">
+                            <controls:SettingsSubsection.Body>
+                                <StackPanel Spacing="6">
+                                    <CheckBox Content="Warn when quota may expire unused"
+                                              Classes="toggle-checkbox"
+                                              IsChecked="{Binding QuotaAlertsEnabled}" />
+                                    <TextBlock Text="Days before period ends"
+                                               FontSize="9"
+                                               Foreground="#FFAAAAAA"
+                                               Margin="0,2,0,0" />
+                                    <TextBox Text="{Binding QuotaAlertDaysBeforeEndText}"
+                                             Watermark="7"
+                                             FontSize="9" />
+                                    <TextBlock Text="Alert when usage below (%)"
+                                               FontSize="9"
+                                               Foreground="#FFAAAAAA"
+                                               Margin="0,2,0,0" />
+                                    <TextBox Text="{Binding QuotaAlertMaxPercentUsedText}"
+                                             Watermark="75"
+                                             FontSize="9" />
+                                    <TextBlock Text="Sources"
+                                               FontSize="9"
+                                               FontWeight="SemiBold"
+                                               Foreground="#FFAAAAAA"
+                                               Margin="0,2,0,0" />
+                                    <CheckBox Content="Cursor plan"
+                                              Classes="toggle-checkbox"
+                                              IsChecked="{Binding QuotaAlertCursorPlan}" />
+                                    <CheckBox Content="OpenAI (Cursor plan)"
+                                              Classes="toggle-checkbox"
+                                              IsChecked="{Binding QuotaAlertOpenAiCursor}" />
+                                    <CheckBox Content="OpenAI Platform budget"
+                                              Classes="toggle-checkbox"
+                                              IsChecked="{Binding QuotaAlertOpenAiPlatform}" />
+                                    <CheckBox Content="Claude (Cursor plan)"
+                                              Classes="toggle-checkbox"
+                                              IsChecked="{Binding QuotaAlertClaudeCursor}" />
+                                    <CheckBox Content="Claude API Console budget"
+                                              Classes="toggle-checkbox"
+                                              IsChecked="{Binding QuotaAlertClaudeApi}" />
+                                    <CheckBox Content="Gemini (Cursor plan)"
+                                              Classes="toggle-checkbox"
+                                              IsChecked="{Binding QuotaAlertGeminiCursor}" />
+                                    <CheckBox Content="OpenRouter key limit"
+                                              Classes="toggle-checkbox"
+                                              IsChecked="{Binding QuotaAlertOpenRouterKeyLimit}" />
+                                    <CheckBox Content="OpenCode Zen monthly"
+                                              Classes="toggle-checkbox"
+                                              IsChecked="{Binding QuotaAlertOpenCodeZenMonthly}" />
+                                    <CheckBox Content="OpenCode Go monthly"
+                                              Classes="toggle-checkbox"
+                                              IsChecked="{Binding QuotaAlertOpenCodeGoMonthly}" />
+                                </StackPanel>
+                            </controls:SettingsSubsection.Body>
+                        </controls:SettingsSubsection>
                     </StackPanel>
                 </controls:SettingsProviderCard.Body>
             </controls:SettingsProviderCard>

@@ -39,6 +39,16 @@ public sealed class WindowAnchorHelperTests
         Assert.Equal(expectedY, y);
     }
 
+    [Theory]
+    [InlineData(300, 200, 100)]
+    [InlineData(450.5, 280.5, 170)]
+    public void ComputeBottomAnchoredY_keeps_bottom_edge_fixed(double anchorBottom, double height, int expectedY)
+    {
+        var result = WindowAnchorHelper.ComputeBottomAnchoredY(anchorBottom, height);
+        Assert.Equal(expectedY, result);
+        Assert.Equal(anchorBottom, result + height, precision: 5);
+    }
+
     [Fact]
     public void ComputeCenteredPosition_clamps_to_work_area_origin_when_window_is_larger()
     {

@@ -86,6 +86,19 @@ public sealed class SettingsPanelViewModel : ViewModelBase
     private int _refreshIntervalMinutes = 5;
     private bool _launchAtLogin;
 
+    private bool _quotaAlertsEnabled = true;
+    private int _quotaAlertDaysBeforeEnd = 7;
+    private int _quotaAlertMaxPercentUsed = 75;
+    private bool _quotaAlertCursorPlan = true;
+    private bool _quotaAlertOpenAiCursor;
+    private bool _quotaAlertOpenAiPlatform = true;
+    private bool _quotaAlertClaudeCursor;
+    private bool _quotaAlertClaudeApi = true;
+    private bool _quotaAlertGeminiCursor;
+    private bool _quotaAlertOpenRouterKeyLimit = true;
+    private bool _quotaAlertOpenCodeZenMonthly = true;
+    private bool _quotaAlertOpenCodeGoMonthly = true;
+
     private SettingsExpandedProvider _expandedProvider = SettingsExpandedProvider.None;
 
     private ProviderConnectionState _cursorConnectionState = ProviderConnectionState.Off;
@@ -548,6 +561,154 @@ public sealed class SettingsPanelViewModel : ViewModelBase
         }
     }
 
+    public bool QuotaAlertsEnabled
+    {
+        get => _quotaAlertsEnabled;
+        set
+        {
+            if (SetToggle(ref _quotaAlertsEnabled, value))
+                NotifyFieldChanged();
+        }
+    }
+
+    public int QuotaAlertDaysBeforeEnd
+    {
+        get => _quotaAlertDaysBeforeEnd;
+        set
+        {
+            var clamped = Math.Clamp(value, 1, 31);
+            if (SetProperty(ref _quotaAlertDaysBeforeEnd, clamped))
+            {
+                OnPropertyChanged(nameof(QuotaAlertDaysBeforeEndText));
+                NotifyFieldChanged();
+            }
+        }
+    }
+
+    public string QuotaAlertDaysBeforeEndText
+    {
+        get => _quotaAlertDaysBeforeEnd.ToString(CultureInfo.InvariantCulture);
+        set
+        {
+            if (int.TryParse(value?.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var days))
+                QuotaAlertDaysBeforeEnd = days;
+        }
+    }
+
+    public int QuotaAlertMaxPercentUsed
+    {
+        get => _quotaAlertMaxPercentUsed;
+        set
+        {
+            var clamped = Math.Clamp(value, 1, 99);
+            if (SetProperty(ref _quotaAlertMaxPercentUsed, clamped))
+            {
+                OnPropertyChanged(nameof(QuotaAlertMaxPercentUsedText));
+                NotifyFieldChanged();
+            }
+        }
+    }
+
+    public string QuotaAlertMaxPercentUsedText
+    {
+        get => _quotaAlertMaxPercentUsed.ToString(CultureInfo.InvariantCulture);
+        set
+        {
+            if (int.TryParse(value?.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var percent))
+                QuotaAlertMaxPercentUsed = percent;
+        }
+    }
+
+    public bool QuotaAlertCursorPlan
+    {
+        get => _quotaAlertCursorPlan;
+        set
+        {
+            if (SetToggle(ref _quotaAlertCursorPlan, value))
+                NotifyFieldChanged();
+        }
+    }
+
+    public bool QuotaAlertOpenAiCursor
+    {
+        get => _quotaAlertOpenAiCursor;
+        set
+        {
+            if (SetToggle(ref _quotaAlertOpenAiCursor, value))
+                NotifyFieldChanged();
+        }
+    }
+
+    public bool QuotaAlertOpenAiPlatform
+    {
+        get => _quotaAlertOpenAiPlatform;
+        set
+        {
+            if (SetToggle(ref _quotaAlertOpenAiPlatform, value))
+                NotifyFieldChanged();
+        }
+    }
+
+    public bool QuotaAlertClaudeCursor
+    {
+        get => _quotaAlertClaudeCursor;
+        set
+        {
+            if (SetToggle(ref _quotaAlertClaudeCursor, value))
+                NotifyFieldChanged();
+        }
+    }
+
+    public bool QuotaAlertClaudeApi
+    {
+        get => _quotaAlertClaudeApi;
+        set
+        {
+            if (SetToggle(ref _quotaAlertClaudeApi, value))
+                NotifyFieldChanged();
+        }
+    }
+
+    public bool QuotaAlertGeminiCursor
+    {
+        get => _quotaAlertGeminiCursor;
+        set
+        {
+            if (SetToggle(ref _quotaAlertGeminiCursor, value))
+                NotifyFieldChanged();
+        }
+    }
+
+    public bool QuotaAlertOpenRouterKeyLimit
+    {
+        get => _quotaAlertOpenRouterKeyLimit;
+        set
+        {
+            if (SetToggle(ref _quotaAlertOpenRouterKeyLimit, value))
+                NotifyFieldChanged();
+        }
+    }
+
+    public bool QuotaAlertOpenCodeZenMonthly
+    {
+        get => _quotaAlertOpenCodeZenMonthly;
+        set
+        {
+            if (SetToggle(ref _quotaAlertOpenCodeZenMonthly, value))
+                NotifyFieldChanged();
+        }
+    }
+
+    public bool QuotaAlertOpenCodeGoMonthly
+    {
+        get => _quotaAlertOpenCodeGoMonthly;
+        set
+        {
+            if (SetToggle(ref _quotaAlertOpenCodeGoMonthly, value))
+                NotifyFieldChanged();
+        }
+    }
+
     public SettingsExpandedProvider ExpandedProvider
     {
         get => _expandedProvider;
@@ -655,6 +816,22 @@ public sealed class SettingsPanelViewModel : ViewModelBase
             RefreshIntervalMinutes = settings.RefreshIntervalMinutes > 0 ? settings.RefreshIntervalMinutes : 5;
             LaunchAtLogin = settings.LaunchAtLogin;
 
+            var quotaAlerts = settings.QuotaAlerts;
+            QuotaAlertsEnabled = quotaAlerts.Enabled;
+            QuotaAlertDaysBeforeEnd = quotaAlerts.DaysBeforePeriodEnd > 0 ? quotaAlerts.DaysBeforePeriodEnd : 7;
+            QuotaAlertMaxPercentUsed = quotaAlerts.MaxPercentUsed is > 0 and < 100
+                ? quotaAlerts.MaxPercentUsed
+                : 75;
+            QuotaAlertCursorPlan = quotaAlerts.CursorPlan;
+            QuotaAlertOpenAiCursor = quotaAlerts.OpenAiCursor;
+            QuotaAlertOpenAiPlatform = quotaAlerts.OpenAiPlatform;
+            QuotaAlertClaudeCursor = quotaAlerts.ClaudeCursor;
+            QuotaAlertClaudeApi = quotaAlerts.ClaudeApi;
+            QuotaAlertGeminiCursor = quotaAlerts.GeminiCursor;
+            QuotaAlertOpenRouterKeyLimit = quotaAlerts.OpenRouterKeyLimit;
+            QuotaAlertOpenCodeZenMonthly = quotaAlerts.OpenCodeZenMonthly;
+            QuotaAlertOpenCodeGoMonthly = quotaAlerts.OpenCodeGoMonthly;
+
             _expandedProvider = settings.SettingsExpandedProvider;
             NotifyAccordionPropertiesChanged();
 
@@ -726,6 +903,21 @@ public sealed class SettingsPanelViewModel : ViewModelBase
         settings.ShowDiskDetails = ShowDiskDetails;
         settings.RefreshIntervalMinutes = RefreshIntervalMinutes;
         settings.LaunchAtLogin = LaunchAtLogin;
+        settings.QuotaAlerts = new QuotaAlertSettings
+        {
+            Enabled = QuotaAlertsEnabled,
+            DaysBeforePeriodEnd = QuotaAlertDaysBeforeEnd,
+            MaxPercentUsed = QuotaAlertMaxPercentUsed,
+            CursorPlan = QuotaAlertCursorPlan,
+            OpenAiCursor = QuotaAlertOpenAiCursor,
+            OpenAiPlatform = QuotaAlertOpenAiPlatform,
+            ClaudeCursor = QuotaAlertClaudeCursor,
+            ClaudeApi = QuotaAlertClaudeApi,
+            GeminiCursor = QuotaAlertGeminiCursor,
+            OpenRouterKeyLimit = QuotaAlertOpenRouterKeyLimit,
+            OpenCodeZenMonthly = QuotaAlertOpenCodeZenMonthly,
+            OpenCodeGoMonthly = QuotaAlertOpenCodeGoMonthly
+        };
         settings.SettingsExpandedProvider = ExpandedProvider;
     }
 

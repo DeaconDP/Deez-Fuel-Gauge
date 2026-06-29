@@ -15,6 +15,7 @@ public class MacOsPackagingTests
         Assert.True(File.Exists(Path.Combine(repoRoot, "packaging", "icons", "AppIcon.icns")));
         Assert.True(File.Exists(Path.Combine(repoRoot, "scripts", "generate-app-icons.py")));
         Assert.True(File.Exists(Path.Combine(repoRoot, "scripts", "package-macos-app.sh")));
+        Assert.True(File.Exists(Path.Combine(repoRoot, "scripts", "ensure-dotnet8-sdk.sh")));
         Assert.True(File.Exists(Path.Combine(repoRoot, "scripts", "package-macos-release.sh")));
         Assert.True(File.Exists(Path.Combine(repoRoot, "scripts", "refresh-macos-setup-launcher.sh")));
         Assert.True(File.Exists(Path.Combine(repoRoot, "Releases", "assets.macos.json")));
@@ -92,6 +93,38 @@ public class MacOsPackagingTests
             if (Directory.Exists(macOsDir))
                 Directory.Delete(macOsDir, recursive: true);
         }
+    }
+
+    [Fact]
+    public void HasDotNet8Sdk_matches_dotnet_list_sdks_output()
+    {
+        var dotnet = MacOsAppPackager.FindDotnet();
+        if (dotnet is null)
+            return;
+
+        string listedSdks;
+        try
+        {
+            var startInfo = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = dotnet,
+                Arguments = "--list-sdks",
+                RedirectStandardOutput = true,
+                UseShellExecute = false
+            };
+            using var process = System.Diagnostics.Process.Start(startInfo)
+                ?? throw new InvalidOperationException("Failed to start dotnet.");
+            listedSdks = process.StandardOutput.ReadToEnd();
+            process.WaitForExit();
+        }
+        catch
+        {
+            return;
+        }
+
+        var expected = listedSdks.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Any(line => line.StartsWith("8.", StringComparison.Ordinal));
+        Assert.Equal(expected, MacOsAppPackager.HasDotNet8Sdk(dotnet));
     }
 
     [Fact]

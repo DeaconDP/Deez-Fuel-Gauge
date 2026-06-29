@@ -30,4 +30,5 @@ public sealed class WidgetSettings
     public int RefreshIntervalMinutes { get; set; } = 5;
     public bool LaunchAtLogin { get; set; }
     public bool HasCompletedFirstRun { get; set; }
+    public QuotaAlertSettings QuotaAlerts { get; set; } = new();
 }

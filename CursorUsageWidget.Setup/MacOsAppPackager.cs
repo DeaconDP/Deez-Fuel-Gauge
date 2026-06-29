@@ -78,8 +78,26 @@ public static class MacOsAppPackager
         RunProcess("/usr/bin/open", new[] { appPath });
     }
 
-    public static string? FindDotnet()
+    public static string? FindDotnet() =>
+        EnumerateDotnetCandidates().FirstOrDefault(HasDotNet8Sdk);
+
+    public static bool HasDotNet8Sdk(string dotnetPath)
     {
+        try
+        {
+            var output = RunProcessCapture(dotnetPath, new[] { "--list-sdks" });
+            return output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Any(line => line.StartsWith("8.", StringComparison.Ordinal));
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static IEnumerable<string> EnumerateDotnetCandidates()
+    {
+        var seen = new HashSet<string>(StringComparer.Ordinal);
         var path = Environment.GetEnvironmentVariable("PATH") ?? "";
         var extraPaths = new[]
         {
@@ -93,8 +111,8 @@ public static class MacOsAppPackager
         foreach (var directory in extraPaths.Concat(path.Split(':', StringSplitOptions.RemoveEmptyEntries)))
         {
             var candidate = Path.Combine(directory.Trim(), "dotnet");
-            if (File.Exists(candidate))
-                return candidate;
+            if (File.Exists(candidate) && seen.Add(candidate))
+                yield return candidate;
         }
 
         var knownCandidates = new[]
@@ -105,7 +123,11 @@ public static class MacOsAppPackager
             "/usr/local/bin/dotnet"
         };
 
-        return knownCandidates.FirstOrDefault(File.Exists);
+        foreach (var candidate in knownCandidates)
+        {
+            if (File.Exists(candidate) && seen.Add(candidate))
+                yield return candidate;
+        }
     }
 
     public static string FindRepoRoot()
@@ -205,7 +227,7 @@ public static class MacOsAppPackager
         RunProcessOptional("/usr/bin/codesign", new[] { "--force", "--sign", "-", path });
     }
 
-    private static void RunProcess(string fileName, IReadOnlyList<string> arguments)
+    private static string RunProcessCapture(string fileName, IReadOnlyList<string> arguments)
     {
         var startInfo = new ProcessStartInfo
         {
@@ -228,7 +250,12 @@ public static class MacOsAppPackager
         if (process.ExitCode != 0)
             throw new InvalidOperationException(
                 $"{fileName} exited with code {process.ExitCode}.{Environment.NewLine}{stderr}{Environment.NewLine}{stdout}");
+
+        return stdout;
     }
+
+    private static void RunProcess(string fileName, IReadOnlyList<string> arguments) =>
+        _ = RunProcessCapture(fileName, arguments);
 
     private static void RunProcessOptional(string fileName, IReadOnlyList<string> arguments)
     {
