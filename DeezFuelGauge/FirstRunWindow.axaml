@@ -10,10 +10,17 @@
             Padding="16"
             CornerRadius="8">
         <StackPanel Spacing="10">
-            <TextBlock Text="Deez Fuel Gauge"
-                       FontSize="16"
-                       FontWeight="SemiBold"
-                       Foreground="#FF00E5FF" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Image Source="avares://DeezFuelGauge/Assets/app-icon.png"
+                       Width="24"
+                       Height="24"
+                       VerticalAlignment="Center" />
+                <TextBlock Text="Deez Fuel Gauge"
+                           FontSize="16"
+                           FontWeight="SemiBold"
+                           Foreground="#FF00E5FF"
+                           VerticalAlignment="Center" />
+            </StackPanel>
             <TextBlock TextWrapping="Wrap"
                        FontSize="11"
                        Foreground="#FFCCCCCC"

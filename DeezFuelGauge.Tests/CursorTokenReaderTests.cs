@@ -20,6 +20,7 @@ public sealed class CursorTokenReaderTests
         }
         finally
         {
+            SqliteConnection.ClearAllPools();
             if (File.Exists(dbPath))
                 File.Delete(dbPath);
         }

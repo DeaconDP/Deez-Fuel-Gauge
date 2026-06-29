@@ -14,10 +14,12 @@ ARCH="$(uname -m)"
 
 dotnet_publish() {
     local rid="$1"
-    local output="$2"
+    local arch="$2"
+    local output="$3"
     "$DOTNET" publish "$SETUP_PROJECT" \
         -c Release \
         -r "$rid" \
+        --arch "$arch" \
         --self-contained true \
         -p:PublishSingleFile=true \
         -p:IncludeNativeLibrariesForSelfExtract=true \
@@ -25,8 +27,8 @@ dotnet_publish() {
         --nologo
 }
 
-dotnet_publish osx-arm64 "$ARM64_OUT"
-dotnet_publish osx-x64 "$X64_OUT"
+dotnet_publish osx-arm64 arm64 "$ARM64_OUT"
+dotnet_publish osx-x64 x64 "$X64_OUT"
 
 if command -v lipo >/dev/null 2>&1; then
     lipo -create \

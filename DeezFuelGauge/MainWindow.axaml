@@ -94,12 +94,11 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0" Orientation="Horizontal">
-                    <TextBlock Text="&#x1F701;"
-                               FontSize="15"
-                               LineHeight="18"
-                               Foreground="#CC00E5FF"
-                               Margin="0,0,7,0"
-                               VerticalAlignment="Center" />
+                    <Image Source="avares://DeezFuelGauge/Assets/app-icon.png"
+                           Width="18"
+                           Height="18"
+                           Margin="0,0,7,0"
+                           VerticalAlignment="Center" />
                     <TextBlock Text="Deez Fuel Gauge"
                                FontFamily="Segoe UI Semibold, Segoe UI, sans-serif"
                                FontSize="13"

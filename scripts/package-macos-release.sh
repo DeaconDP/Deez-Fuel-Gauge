@@ -47,10 +47,12 @@ fi
 
 dotnet_publish() {
     local rid="$1"
-    local output="$2"
+    local arch="$2"
+    local output="$3"
     "$DOTNET" publish "$PROJECT" \
         -c Release \
         -r "$rid" \
+        --arch "$arch" \
         --self-contained true \
         -p:UseAppHost=true \
         -p:PublishSingleFile=true \
@@ -62,8 +64,8 @@ dotnet_publish() {
 rm -rf "$REPO_ROOT/.publish"
 mkdir -p "$RELEASES_DIR" "$REPO_ROOT/.publish/universal" "$UNIVERSAL_LIB_DIR"
 
-dotnet_publish osx-arm64 "$ARM64_PUBLISH"
-dotnet_publish osx-x64 "$X64_PUBLISH"
+dotnet_publish osx-arm64 arm64 "$ARM64_PUBLISH"
+dotnet_publish osx-x64 x64 "$X64_PUBLISH"
 
 if [[ ! -x "$ARM64_HOST" || ! -x "$X64_HOST" ]]; then
     echo "Published app host was not created." >&2
