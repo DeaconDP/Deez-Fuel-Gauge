@@ -38,7 +38,7 @@ public static class ProviderLimitsPresenter
     {
         var session = Math.Round(sessionPercentUsed);
         var weekly = Math.Round(weeklyPercentUsed);
-        return $"{session.ToString(CultureInfo.InvariantCulture)}% 5h and {weekly.ToString(CultureInfo.InvariantCulture)}% weekly used";
+        return $"{session.ToString(CultureInfo.InvariantCulture)}% 5-hour and {weekly.ToString(CultureInfo.InvariantCulture)}% weekly used";
     }
 
     public static string FormatThreeWindowSummary(double rollingPercentUsed, double weeklyPercentUsed, double monthlyPercentUsed)

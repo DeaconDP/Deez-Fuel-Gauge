@@ -6,7 +6,7 @@ public enum ClaudeProAuthSource
 {
     None,
     ClaudeCodeOAuth,
-    BrowserCookie,
+    AppOAuth,
     SavedSession
 }
 
@@ -15,6 +15,7 @@ public sealed class ClaudeProAuthResult
     public ClaudeProAuthSource Source { get; init; }
     public string? OAuthAccessToken { get; init; }
     public string? SessionCookie { get; init; }
+    public ClaudeOAuthToken? AppOAuthToken { get; init; }
     public string? FailureMessage { get; init; }
 
     public bool HasAuth =>
@@ -26,10 +27,11 @@ public sealed class ClaudeProAuthResult
         OAuthAccessToken = accessToken
     };
 
-    public static ClaudeProAuthResult FromBrowserCookie(string sessionCookie) => new()
+    public static ClaudeProAuthResult FromAppOAuth(ClaudeOAuthToken token) => new()
     {
-        Source = ClaudeProAuthSource.BrowserCookie,
-        SessionCookie = sessionCookie
+        Source = ClaudeProAuthSource.AppOAuth,
+        OAuthAccessToken = token.AccessToken,
+        AppOAuthToken = token
     };
 
     public static ClaudeProAuthResult FromSavedSession(string sessionCookie) => new()
@@ -48,20 +50,20 @@ public sealed class ClaudeProAuthResult
 public sealed class ClaudeProAuthResolver
 {
     private readonly Func<ClaudeCodeOAuthCredential?> _claudeCodeReader;
-    private readonly Func<string?> _browserCookieReader;
+    private readonly Func<string?, ClaudeOAuthToken?> _appOAuthReader;
     private readonly Func<string?, string?> _savedSessionReader;
 
     public ClaudeProAuthResolver(
         Func<ClaudeCodeOAuthCredential?>? claudeCodeReader = null,
-        Func<string?>? browserCookieReader = null,
+        Func<string?, ClaudeOAuthToken?>? appOAuthReader = null,
         Func<string?, string?>? savedSessionReader = null)
     {
         _claudeCodeReader = claudeCodeReader ?? ClaudeCodeTokenReader.Read;
-        _browserCookieReader = browserCookieReader ?? (() => new ClaudeBrowserCookieReader().ReadSessionKey());
+        _appOAuthReader = appOAuthReader ?? ClaudeOAuthTokenStore.Retrieve;
         _savedSessionReader = savedSessionReader ?? (id => CredentialStore.Retrieve(id));
     }
 
-    public ClaudeProAuthResult Resolve(ProviderBillingSettings settings, bool tryBrowserCookies = true)
+    public ClaudeProAuthResult Resolve(ProviderBillingSettings settings)
     {
         var oauth = _claudeCodeReader();
         if (oauth is not null)
@@ -72,32 +74,18 @@ public sealed class ClaudeProAuthResolver
             return ClaudeProAuthResult.FromOAuth(oauth.AccessToken);
         }
 
-        if (tryBrowserCookies)
-        {
-            try
-            {
-                var browserCookie = _browserCookieReader();
-                if (!string.IsNullOrWhiteSpace(browserCookie))
-                    return ClaudeProAuthResult.FromBrowserCookie(browserCookie);
-            }
-            catch (IOException)
-            {
-                return ClaudeProAuthResult.Failed("Close Chrome or Edge, then click Refresh again");
-            }
-            catch (Microsoft.Data.Sqlite.SqliteException)
-            {
-                return ClaudeProAuthResult.Failed("Close Chrome or Edge, then click Refresh again");
-            }
-        }
+        var appToken = _appOAuthReader(settings.ProOAuthCredentialId);
+        if (appToken is not null)
+            return ClaudeProAuthResult.FromAppOAuth(appToken);
 
         var savedSession = _savedSessionReader(settings.ProSessionCredentialId);
         if (!string.IsNullOrWhiteSpace(savedSession))
             return ClaudeProAuthResult.FromSavedSession(savedSession);
 
-        return ClaudeProAuthResult.Failed("Sign in at claude.ai, then click Refresh");
+        return ClaudeProAuthResult.Failed("Sign in with Claude in Settings, or run 'claude login'");
     }
 
-    public static void PersistBrowserSession(ProviderBillingSettings settings, string sessionCookie)
+    public static void PersistSessionKey(ProviderBillingSettings settings, string sessionCookie)
     {
         CredentialStore.Replace(
             "claude-pro",

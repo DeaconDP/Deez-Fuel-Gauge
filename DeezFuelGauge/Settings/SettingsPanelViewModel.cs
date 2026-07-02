@@ -16,13 +16,21 @@ public sealed class SettingsPanelViewModel : ViewModelBase
     private readonly OpenCodeUsageClient _openCodeBilling;
     private readonly Func<CursorTokens> _cursorTokenReader;
     private readonly Func<AntigravityOAuthTokens> _antigravityTokenReader;
+    private readonly ClaudeOAuthLoginService _claudeOAuthLogin;
+    private readonly ExternalSetupLauncher _launcher;
     private ISettingsPanelHost? _host;
     private bool _suppressChangeNotifications;
 
     private string? _openAiCredentialId;
     private string? _openAiProSessionCredentialId;
     private string? _claudeProSessionCredentialId;
+    private string? _claudeProOAuthCredentialId;
     private string? _claudeCredentialId;
+    private string? _claudeOAuthCodeVerifier;
+    private string? _claudeOAuthState;
+    private string? _claudeOAuthRedirectUri;
+    private CancellationTokenSource? _claudeOAuthListenerCts;
+    private ClaudeOAuthCallbackListener? _claudeOAuthListener;
 
     private bool _showCursor = true;
     private bool _showCursorDetails = true;
@@ -53,9 +61,18 @@ public sealed class SettingsPanelViewModel : ViewModelBase
     private bool _showClaudeApiConsoleDetails = true;
     private string _claudeBudget = "";
     private string _claudeApiKeyWatermark = "Admin API key (sk-ant-admin...)";
+    private string _claudeProSessionCookieWatermark = "Session key (sessionKey cookie value)";
     private string _claudeProStatus = "";
     private string _claudeApiConsoleStatus = "";
     private string _claudeCursorPlanStatus = "";
+
+    private bool _claudeProUsageAvailable;
+    private double _claudeProSessionPercent;
+    private double _claudeProWeeklyPercent;
+    private string _claudeProSessionText = "";
+    private string _claudeProWeeklyText = "";
+    private string _claudeProSessionColor = "#FF666666";
+    private string _claudeProWeeklyColor = "#FF666666";
 
     private bool _showGemini = true;
     private bool _showGeminiDetails = true;
@@ -118,7 +135,9 @@ public sealed class SettingsPanelViewModel : ViewModelBase
         OpenRouterUsageClient openRouterBilling,
         OpenCodeUsageClient openCodeBilling,
         Func<CursorTokens>? cursorTokenReader = null,
-        Func<AntigravityOAuthTokens>? antigravityTokenReader = null)
+        Func<AntigravityOAuthTokens>? antigravityTokenReader = null,
+        ClaudeOAuthLoginService? claudeOAuthLogin = null,
+        ExternalSetupLauncher? launcher = null)
     {
         _easySetup = easySetup;
         _openAiBilling = openAiBilling;
@@ -130,6 +149,8 @@ public sealed class SettingsPanelViewModel : ViewModelBase
         _openCodeBilling = openCodeBilling;
         _cursorTokenReader = cursorTokenReader ?? CursorTokenReader.Read;
         _antigravityTokenReader = antigravityTokenReader ?? AntigravityTokenReader.Read;
+        _claudeOAuthLogin = claudeOAuthLogin ?? new ClaudeOAuthLoginService();
+        _launcher = launcher ?? new ExternalSetupLauncher();
     }
 
     public void AttachHost(ISettingsPanelHost host) => _host = host;
@@ -301,7 +322,11 @@ public sealed class SettingsPanelViewModel : ViewModelBase
         set
         {
             if (SetToggle(ref _showClaudePro, value))
+            {
+                OnPropertyChanged(nameof(ShowClaudeProCredentials));
+                OnPropertyChanged(nameof(ShowClaudeSignInButton));
                 UpdateConnectionStates();
+            }
         }
     }
 
@@ -348,11 +373,31 @@ public sealed class SettingsPanelViewModel : ViewModelBase
         }
     }
 
+    public bool HasClaudeCodeAuth => ClaudeCodeTokenReader.Read() is { IsExpired: false };
+
+    public bool HasClaudeAppOAuthSaved => !string.IsNullOrWhiteSpace(_claudeProOAuthCredentialId);
+
     public bool HasClaudeProAuth =>
-        HasClaudeSessionCookieSaved
-        || (ClaudeCodeTokenReader.Read() is { IsExpired: false });
+        HasClaudeSessionCookieSaved || HasClaudeAppOAuthSaved || HasClaudeCodeAuth;
 
     public bool HasClaudeSessionCookieSaved => !string.IsNullOrWhiteSpace(_claudeProSessionCredentialId);
+
+    public bool ShowClaudeSignInButton => ShowClaudePro && !HasClaudeCodeAuth && !HasClaudeAppOAuthSaved;
+
+    public bool IsClaudeOAuthPending => _claudeOAuthCodeVerifier is not null;
+
+    public bool ShowClaudeProCredentials =>
+        ShowClaudePro && !HasClaudeCodeAuth && !HasClaudeAppOAuthSaved && !HasClaudeSessionCookieSaved;
+
+    public string ClaudeProSessionCookieWatermark
+    {
+        get => _claudeProSessionCookieWatermark;
+        private set
+        {
+            if (SetProperty(ref _claudeProSessionCookieWatermark, value))
+                OnPropertyChanged(nameof(HasClaudeSessionCookieSaved));
+        }
+    }
 
     public string ClaudeApiKeyWatermark
     {
@@ -382,6 +427,48 @@ public sealed class SettingsPanelViewModel : ViewModelBase
     {
         get => _claudeCursorPlanStatus;
         private set => SetProperty(ref _claudeCursorPlanStatus, value);
+    }
+
+    public bool ClaudeProUsageAvailable
+    {
+        get => _claudeProUsageAvailable;
+        private set => SetProperty(ref _claudeProUsageAvailable, value);
+    }
+
+    public double ClaudeProSessionPercent
+    {
+        get => _claudeProSessionPercent;
+        private set => SetProperty(ref _claudeProSessionPercent, value);
+    }
+
+    public double ClaudeProWeeklyPercent
+    {
+        get => _claudeProWeeklyPercent;
+        private set => SetProperty(ref _claudeProWeeklyPercent, value);
+    }
+
+    public string ClaudeProSessionText
+    {
+        get => _claudeProSessionText;
+        private set => SetProperty(ref _claudeProSessionText, value);
+    }
+
+    public string ClaudeProWeeklyText
+    {
+        get => _claudeProWeeklyText;
+        private set => SetProperty(ref _claudeProWeeklyText, value);
+    }
+
+    public string ClaudeProSessionColor
+    {
+        get => _claudeProSessionColor;
+        private set => SetProperty(ref _claudeProSessionColor, value);
+    }
+
+    public string ClaudeProWeeklyColor
+    {
+        get => _claudeProWeeklyColor;
+        private set => SetProperty(ref _claudeProWeeklyColor, value);
     }
 
     public bool ShowGemini
@@ -761,6 +848,7 @@ public sealed class SettingsPanelViewModel : ViewModelBase
             _openAiCredentialId = settings.OpenAi.CredentialId;
             _openAiProSessionCredentialId = settings.OpenAi.ProSessionCredentialId;
             _claudeProSessionCredentialId = settings.Claude.ProSessionCredentialId;
+            _claudeProOAuthCredentialId = settings.Claude.ProOAuthCredentialId;
             _claudeCredentialId = settings.Claude.CredentialId;
 
             ShowCursor = settings.Cursor.ShowCursorSource;
@@ -874,6 +962,7 @@ public sealed class SettingsPanelViewModel : ViewModelBase
         settings.Claude.ShowDirectDetails = ShowClaudeApiConsoleDetails;
         settings.Claude.MonthlyBudgetUsd = ParseBudget(ClaudeBudget);
         settings.Claude.ProSessionCredentialId = _claudeProSessionCredentialId;
+        settings.Claude.ProOAuthCredentialId = _claudeProOAuthCredentialId;
         settings.Claude.CredentialId = _claudeCredentialId;
         settings.Claude.ProLastConnectionStatus = NullIfEmpty(ClaudeProStatus);
         settings.Claude.LastConnectionStatus = NullIfEmpty(ClaudeApiConsoleStatus);
@@ -1027,6 +1116,21 @@ public sealed class SettingsPanelViewModel : ViewModelBase
         NotifyFieldChanged();
     }
 
+    public void SaveClaudeProSessionKey(string? text)
+    {
+        SaveProSessionCredential("claude-pro", ref _claudeProSessionCredentialId, text);
+        UpdateCredentialWatermarks();
+        NotifyFieldChanged();
+    }
+
+    public void ClearClaudeProSessionKey()
+    {
+        CredentialStore.Delete(_claudeProSessionCredentialId);
+        _claudeProSessionCredentialId = null;
+        UpdateCredentialWatermarks();
+        NotifyFieldChanged();
+    }
+
     public void ClearOpenAiApiKey()
     {
         CredentialStore.Delete(_openAiCredentialId);
@@ -1101,10 +1205,202 @@ public sealed class SettingsPanelViewModel : ViewModelBase
     {
         settings.Claude.ShowProLimits = true;
         Commit(settings);
-        ClaudeProStatus = await _claudeProBilling.RefreshAndConnectAsync(settings.Claude);
+        var snapshot = await _claudeProBilling.FetchAsync(settings.Claude);
+        ClaudeProStatus = settings.Claude.ProLastConnectionStatus ?? "";
+        ApplyClaudeSnapshot(snapshot);
         _claudeProSessionCredentialId = settings.Claude.ProSessionCredentialId;
+        _claudeProOAuthCredentialId = settings.Claude.ProOAuthCredentialId;
         UpdateCredentialWatermarks();
         await CompleteEasySetupAsync(settings);
+    }
+
+    /// <summary>
+    /// Fetches the latest session/weekly usage without the connect-time side effects, so the
+    /// bars can refresh when the Claude card is opened.
+    /// </summary>
+    public async Task RefreshClaudeUsageAsync(WidgetSettings settings)
+    {
+        if (!HasClaudeProAuth)
+        {
+            ApplyClaudeSnapshot(ClaudeProSnapshot.Unavailable());
+            return;
+        }
+
+        var snapshot = await _claudeProBilling.FetchAsync(settings.Claude);
+        ClaudeProStatus = settings.Claude.ProLastConnectionStatus ?? ClaudeProStatus;
+        ApplyClaudeSnapshot(snapshot);
+    }
+
+    private void ApplyClaudeSnapshot(ClaudeProSnapshot snapshot)
+    {
+        if (!snapshot.IsAvailable)
+        {
+            ClaudeProUsageAvailable = false;
+            ClaudeProSessionPercent = 0;
+            ClaudeProWeeklyPercent = 0;
+            return;
+        }
+
+        ClaudeProSessionPercent = snapshot.SessionPercentUsed;
+        ClaudeProWeeklyPercent = snapshot.WeeklyPercentUsed;
+        ClaudeProSessionColor = ToHexColor(UsageBarColors.GetColorForPercent(snapshot.SessionPercentUsed));
+        ClaudeProWeeklyColor = ToHexColor(UsageBarColors.GetColorForPercent(snapshot.WeeklyPercentUsed));
+        ClaudeProSessionText = FormatUsageLabel(snapshot.SessionPercentUsed, snapshot.SessionResetsAt);
+        ClaudeProWeeklyText = FormatUsageLabel(snapshot.WeeklyPercentUsed, snapshot.WeeklyResetsAt);
+        ClaudeProUsageAvailable = true;
+    }
+
+    private static string FormatUsageLabel(double percentUsed, DateTimeOffset? resetsAt)
+    {
+        var used = Math.Round(percentUsed).ToString(CultureInfo.InvariantCulture) + "% used";
+        return resetsAt is { } reset
+            ? $"{used} · resets {reset.ToLocalTime().ToString("ddd h:mm tt", CultureInfo.CurrentCulture)}"
+            : used;
+    }
+
+    private static string ToHexColor(Avalonia.Media.Color color) =>
+        $"#FF{color.R:X2}{color.G:X2}{color.B:X2}";
+
+    public void BeginClaudeSignIn(WidgetSettings? settings = null)
+    {
+        CancelClaudeSignInListener();
+
+        // Preferred flow: loopback redirect captured by a local listener, matching the
+        // Claude Code CLI's default. Falls back to the manual copy-paste flow when the
+        // port is taken or we have no settings to complete against.
+        // Any localhost port works for the redirect (the CLI templates the port in),
+        // so fall back to an ephemeral port if the default is taken.
+        var listener = settings is not null
+            ? ClaudeOAuthCallbackListener.TryStart(ClaudeOAuthLoginService.DefaultCallbackPort)
+              ?? ClaudeOAuthCallbackListener.TryStart(0)
+            : null;
+        _claudeOAuthListener = listener;
+
+        var start = _claudeOAuthLogin.BeginLogin(listener is null
+            ? null
+            : ClaudeOAuthLoginService.BuildLoopbackRedirectUri(listener.Port));
+        _claudeOAuthCodeVerifier = start.CodeVerifier;
+        _claudeOAuthState = start.State;
+        _claudeOAuthRedirectUri = start.RedirectUri;
+        _launcher.OpenUrl(start.AuthorizeUrl);
+
+        if (listener is not null && settings is not null)
+        {
+            ClaudeProStatus = "Approve the sign-in in your browser — connecting automatically…";
+            _claudeOAuthListenerCts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+            _ = ListenForClaudeCallbackAsync(listener, settings, _claudeOAuthListenerCts.Token);
+        }
+        else
+        {
+            ClaudeProStatus = "Paste the code from your browser below, then click Connect";
+        }
+
+        OnPropertyChanged(nameof(IsClaudeOAuthPending));
+    }
+
+    private async Task ListenForClaudeCallbackAsync(
+        ClaudeOAuthCallbackListener listener,
+        WidgetSettings settings,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await listener.WaitForCallbackAsync(cancellationToken);
+            await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(async () =>
+            {
+                if (result.Error is not null || string.IsNullOrWhiteSpace(result.Code))
+                {
+                    ClaudeProStatus = "Sign-in was not completed — click Sign in with Claude to try again";
+                    return;
+                }
+
+                var pasted = string.IsNullOrEmpty(result.State) ? result.Code : $"{result.Code}#{result.State}";
+                await CompleteClaudeSignInAsync(settings, pasted);
+            });
+        }
+        catch (OperationCanceledException)
+        {
+            // Sign-in abandoned or superseded.
+        }
+        catch
+        {
+            // Listener failures leave the manual paste path available.
+        }
+        finally
+        {
+            listener.Dispose();
+        }
+    }
+
+    private void CancelClaudeSignInListener()
+    {
+        _claudeOAuthListenerCts?.Cancel();
+        _claudeOAuthListenerCts?.Dispose();
+        _claudeOAuthListenerCts = null;
+
+        // Release the port synchronously so a new sign-in attempt can rebind it
+        // immediately — waiting for the listener task's cleanup would race TryStart
+        // and silently push the new attempt onto the manual copy-paste flow.
+        _claudeOAuthListener?.Dispose();
+        _claudeOAuthListener = null;
+    }
+
+    public async Task CompleteClaudeSignInAsync(WidgetSettings settings, string? pastedCode)
+    {
+        if (_claudeOAuthCodeVerifier is null || _claudeOAuthState is null)
+        {
+            ClaudeProStatus = "Click 'Sign in with Claude' first";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(pastedCode))
+        {
+            ClaudeProStatus = "Paste the code from claude.ai first";
+            return;
+        }
+
+        try
+        {
+            var token = await _claudeOAuthLogin.ExchangeCodeAsync(
+                pastedCode,
+                _claudeOAuthCodeVerifier,
+                _claudeOAuthState,
+                _claudeOAuthRedirectUri,
+                CancellationToken.None);
+
+            CancelClaudeSignInListener();
+            ClaudeOAuthTokenStore.Persist(settings.Claude, token);
+            _claudeProOAuthCredentialId = settings.Claude.ProOAuthCredentialId;
+            _claudeOAuthCodeVerifier = null;
+            _claudeOAuthState = null;
+            _claudeOAuthRedirectUri = null;
+
+            settings.Claude.ShowProLimits = true;
+            Commit(settings);
+            var snapshot = await _claudeProBilling.FetchAsync(settings.Claude);
+            ClaudeProStatus = settings.Claude.ProLastConnectionStatus ?? "";
+            ApplyClaudeSnapshot(snapshot);
+            _claudeProOAuthCredentialId = settings.Claude.ProOAuthCredentialId;
+            UpdateCredentialWatermarks();
+            OnPropertyChanged(nameof(IsClaudeOAuthPending));
+            await CompleteEasySetupAsync(settings);
+        }
+        catch (ClaudeOAuthException ex)
+        {
+            ClaudeProStatus = ex.Message;
+        }
+    }
+
+    public void DisconnectClaudeOAuth(WidgetSettings settings)
+    {
+        ClaudeOAuthTokenStore.Clear(settings.Claude);
+        _claudeProOAuthCredentialId = null;
+        settings.Claude.ProLastConnectionStatus = null;
+        ClaudeProStatus = "";
+        ApplyClaudeSnapshot(ClaudeProSnapshot.Unavailable());
+        UpdateCredentialWatermarks();
+        Commit(settings);
+        _host?.OnSettingsChanged();
     }
 
     public async Task RunEasySetupClaudeAsync(WidgetSettings settings)
@@ -1232,17 +1528,22 @@ public sealed class SettingsPanelViewModel : ViewModelBase
         OpenAiApiKeyWatermark = BuildWatermark("Admin API key", _openAiCredentialId);
         OpenAiSessionCookieWatermark = BuildWatermark("ChatGPT session cookie (optional fallback)", _openAiProSessionCredentialId);
         ClaudeApiKeyWatermark = BuildWatermark("Admin API key (sk-ant-admin...)", _claudeCredentialId);
+        ClaudeProSessionCookieWatermark = BuildWatermark("Session key (sessionKey cookie value)", _claudeProSessionCredentialId);
         OpenRouterApiKeyWatermark = BuildWatermark("API key (sk-or-...)", _openRouterCredentialId);
         OpenCodeSessionWatermark = BuildWatermark("opencode.ai auth cookie", _openCodeProSessionCredentialId);
         OnPropertyChanged(nameof(HasOpenAiApiKeySaved));
         OnPropertyChanged(nameof(HasOpenAiSessionCookieSaved));
         OnPropertyChanged(nameof(HasClaudeSessionCookieSaved));
+        OnPropertyChanged(nameof(HasClaudeCodeAuth));
+        OnPropertyChanged(nameof(HasClaudeAppOAuthSaved));
         OnPropertyChanged(nameof(HasClaudeProAuth));
         OnPropertyChanged(nameof(HasClaudeApiKeySaved));
         OnPropertyChanged(nameof(HasOpenRouterApiKeySaved));
         OnPropertyChanged(nameof(HasOpenCodeSessionSaved));
         OnPropertyChanged(nameof(ShowOpenAiDirectCredentials));
         OnPropertyChanged(nameof(ShowCodexCredentials));
+        OnPropertyChanged(nameof(ShowClaudeSignInButton));
+        OnPropertyChanged(nameof(ShowClaudeProCredentials));
         OnPropertyChanged(nameof(ShowClaudeApiConsoleCredentials));
         OnPropertyChanged(nameof(ShowOpenRouterCredentials));
         OnPropertyChanged(nameof(HasCodexAutoAuth));

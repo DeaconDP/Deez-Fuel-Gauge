@@ -206,7 +206,6 @@ public sealed class SettingsPanelViewModelTests
             new HttpClient(new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.Unauthorized))),
             new ClaudeProAuthResolver(
                 claudeCodeReader: () => null,
-                browserCookieReader: () => null,
                 savedSessionReader: _ => null));
 
         var service = new ProviderEasySetupService(claudePro: claudePro);
@@ -233,7 +232,96 @@ public sealed class SettingsPanelViewModelTests
         Assert.True(settings.Claude.ShowCursorSource);
         Assert.True(settings.Claude.ShowDetails);
         Assert.True(settings.Claude.ShowProLimits);
-        Assert.Contains("Sign in at claude.ai", viewModel.ClaudeProStatus);
+        Assert.Contains("claude login", viewModel.ClaudeProStatus);
+    }
+
+    [Fact]
+    public void BeginClaudeSignIn_opens_authorize_url_and_marks_pending()
+    {
+        var launcher = new RecordingLauncher();
+        var oauthLogin = new ClaudeOAuthLoginService(new HttpClient(new StubHttpHandler(
+            _ => new HttpResponseMessage(HttpStatusCode.OK))));
+        var viewModel = CreateViewModelWithClaudeOAuth(oauthLogin, launcher);
+        viewModel.Load(new WidgetSettings());
+
+        Assert.False(viewModel.IsClaudeOAuthPending);
+
+        viewModel.BeginClaudeSignIn();
+
+        Assert.True(viewModel.IsClaudeOAuthPending);
+        Assert.Single(launcher.OpenedUrls);
+        Assert.StartsWith("https://claude.com/cai/oauth/authorize?", launcher.OpenedUrls[0]);
+    }
+
+    [Fact]
+    public async Task CompleteClaudeSignInAsync_persists_token_and_connects()
+    {
+        var handler = new StubHttpHandler(request =>
+        {
+            if (request.RequestUri!.AbsolutePath == "/v1/oauth/token")
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(
+                        """{"access_token":"app-token","refresh_token":"app-refresh","expires_in":28800}""",
+                        Encoding.UTF8,
+                        "application/json")
+                };
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    """{"five_hour":{"utilization":0.1},"seven_day":{"utilization":0.2}}""",
+                    Encoding.UTF8,
+                    "application/json")
+            };
+        });
+
+        var httpClient = new HttpClient(handler);
+        var oauthLogin = new ClaudeOAuthLoginService(httpClient);
+        var launcher = new RecordingLauncher();
+        var claudePro = new ClaudeProUsageClient(httpClient);
+        var viewModel = CreateViewModelWithClaudeOAuth(oauthLogin, launcher, claudePro);
+
+        var settings = new WidgetSettings();
+        viewModel.Load(settings);
+        viewModel.BeginClaudeSignIn();
+
+        try
+        {
+            await viewModel.CompleteClaudeSignInAsync(settings, "auth-code-without-state-suffix");
+
+            Assert.True(viewModel.HasClaudeAppOAuthSaved);
+            Assert.False(viewModel.IsClaudeOAuthPending);
+            Assert.Equal("Connected", viewModel.ClaudeProStatus);
+        }
+        finally
+        {
+            CredentialStore.Delete(settings.Claude.ProOAuthCredentialId);
+        }
+    }
+
+    [Fact]
+    public void DisconnectClaudeOAuth_clears_saved_token()
+    {
+        var viewModel = CreateViewModelWithClaudeOAuth(
+            new ClaudeOAuthLoginService(new HttpClient(new StubHttpHandler(
+                _ => new HttpResponseMessage(HttpStatusCode.OK)))),
+            new RecordingLauncher());
+
+        var settings = new WidgetSettings();
+        settings.Claude.ProOAuthCredentialId = CredentialStore.Store(
+            "claude-pro-oauth",
+            """{"AccessToken":"tok","RefreshToken":"ref","ExpiresAtUnixMs":9999999999999}""");
+        viewModel.Load(settings);
+
+        Assert.True(viewModel.HasClaudeAppOAuthSaved);
+
+        viewModel.DisconnectClaudeOAuth(settings);
+
+        Assert.False(viewModel.HasClaudeAppOAuthSaved);
+        Assert.Null(settings.Claude.ProOAuthCredentialId);
     }
 
     [Fact]
@@ -284,7 +372,7 @@ public sealed class SettingsPanelViewModelTests
     }
 
     [Fact]
-    public async Task RefreshClaudeProAsync_updates_status_and_persists_session()
+    public async Task RefreshClaudeProAsync_updates_status_using_saved_session_key()
     {
         var handler = new StubHttpHandler(request =>
         {
@@ -312,8 +400,7 @@ public sealed class SettingsPanelViewModelTests
             new HttpClient(handler),
             new ClaudeProAuthResolver(
                 claudeCodeReader: () => null,
-                browserCookieReader: () => "browser-session",
-                savedSessionReader: _ => null));
+                savedSessionReader: _ => "pasted-session-key"));
 
         var viewModel = new SettingsPanelViewModel(
             new ProviderEasySetupService(),
@@ -327,6 +414,8 @@ public sealed class SettingsPanelViewModelTests
             () => new CursorTokens());
 
         var settings = new WidgetSettings();
+        settings.Claude.ProSessionCredentialId = CredentialStore.Store("claude-pro", "pasted-session-key");
+        viewModel.Load(settings);
 
         try
         {
@@ -334,7 +423,10 @@ public sealed class SettingsPanelViewModelTests
 
             Assert.Equal("Connected", viewModel.ClaudeProStatus);
             Assert.True(viewModel.HasClaudeSessionCookieSaved);
-            Assert.Equal("browser-session", CredentialStore.Retrieve(settings.Claude.ProSessionCredentialId));
+            Assert.True(viewModel.ClaudeProUsageAvailable);
+            Assert.Equal(20, viewModel.ClaudeProSessionPercent, 1);
+            Assert.Equal(30, viewModel.ClaudeProWeeklyPercent, 1);
+            Assert.Contains("20% used", viewModel.ClaudeProSessionText);
         }
         finally
         {
@@ -353,6 +445,30 @@ public sealed class SettingsPanelViewModelTests
             new OpenRouterUsageClient(),
             new OpenCodeUsageClient(),
             () => new CursorTokens());
+
+    private static SettingsPanelViewModel CreateViewModelWithClaudeOAuth(
+        ClaudeOAuthLoginService oauthLogin,
+        ExternalSetupLauncher launcher,
+        ClaudeProUsageClient? claudePro = null) =>
+        new(
+            new ProviderEasySetupService(),
+            new OpenAiBillingClient(),
+            new CodexUsageClient(),
+            new AnthropicBillingClient(),
+            claudePro ?? new ClaudeProUsageClient(),
+            new AntigravityUsageClient(),
+            new OpenRouterUsageClient(),
+            new OpenCodeUsageClient(),
+            () => new CursorTokens(),
+            claudeOAuthLogin: oauthLogin,
+            launcher: launcher);
+
+    private sealed class RecordingLauncher : ExternalSetupLauncher
+    {
+        public List<string> OpenedUrls { get; } = [];
+
+        public override void OpenUrl(string url) => OpenedUrls.Add(url);
+    }
 
     private sealed class StubHttpHandler : HttpMessageHandler
     {

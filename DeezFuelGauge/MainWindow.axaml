@@ -591,7 +591,7 @@
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="Claude Pro"
+                        <TextBlock Text="Plan usage"
                                    Grid.Column="0"
                                    VerticalAlignment="Center"
                                    Margin="0,0,8,0"
@@ -640,7 +640,7 @@
                         <StackPanel Spacing="10">
                             <StackPanel>
                                 <Grid Margin="0,0,0,4">
-                                    <TextBlock Text="5h"
+                                    <TextBlock Text="5-hour limit"
                                                FontSize="10"
                                                LineHeight="13"
                                                Foreground="#FFE8E8E8"
@@ -669,7 +669,7 @@
                             </StackPanel>
                             <StackPanel>
                                 <Grid Margin="0,0,0,4">
-                                    <TextBlock Text="Weekly"
+                                    <TextBlock Text="Weekly · All models"
                                                FontSize="10"
                                                LineHeight="13"
                                                Foreground="#FFE8E8E8"

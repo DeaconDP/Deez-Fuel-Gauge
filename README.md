@@ -53,7 +53,6 @@ If you upgraded from Cursor Usage Widget, settings are copied automatically from
 | “App can’t be opened” / Gatekeeper | Right-click the app → **Open**, or **System Settings → Privacy & Security → Open Anyway** |
 | Setup fails immediately | Open `~/Library/Logs/DeezFuelGauge/setup.log` for the exact error |
 | .NET SDK missing | Re-run **`setup-and-run.app`** (it attempts auto-install) or install the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) manually |
-| Claude browser session not detected | Ensure Chrome, Edge, or Brave is logged into claude.ai; macOS may prompt for Keychain access once per browser |
 
 ## Usage
 
@@ -70,7 +69,7 @@ Click the **gear** in the widget header to configure what is shown. Settings are
 |----------|--------------------------|-----------------------------|
 | **Cursor** | Sign in to Cursor IDE on this machine — no API key needed | — |
 | **OpenAI** | Aggregated from your Cursor plan | **Codex limits** (ChatGPT Plus/Pro 5h + weekly) via `~/.codex/auth.json` or session cookie; optional **Platform** Admin API key + budget |
-| **Claude** | Aggregated from your Cursor plan | **Pro/Max limits** via Setup, Open + Refresh (Claude Code login, Chrome/Edge session, or saved session); optional **API Console** Admin key + budget |
+| **Claude** | Aggregated from your Cursor plan | **Pro/Max limits** (Plan usage: 5-hour + weekly) via Sign in with Claude, Claude Code CLI login, or a pasted session key; optional **API Console** Admin key + budget |
 | **Gemini** | Aggregated from your Cursor plan | **Antigravity limits** (Gemini Models + Claude/GPT groups, 5h + weekly) auto-read from local Antigravity login |
 | **OpenRouter** | — | **Credits & limits** via OpenRouter API key |
 | **OpenCode** | — | **Zen** credits and **Go** subscription limits via opencode.ai auth cookie + workspace ID |
@@ -94,7 +93,7 @@ Click the **gear** in the widget header to configure what is shown. Settings are
 
 **OpenAI (Platform, optional):** create an [organization admin key](https://platform.openai.com) with `api.usage.read` scope for org spend tracking against a monthly budget. This is separate from ChatGPT/Codex subscription limits.
 
-**Claude (Pro/Max):** click **Open** in settings to sign in at claude.ai, then click **Refresh**. The widget reads your session from Chrome, Edge, or Brave automatically on **Windows and macOS**, from Claude Code login (`~/.claude/.credentials.json` or macOS Keychain) when present, or from a saved session. macOS may show a one-time Keychain prompt when reading browser cookies. If Refresh fails, close your browser and try again. Uses undocumented claude.ai endpoints and may change without notice.
+**Claude (Pro/Max):** click **Sign in with Claude** in the **Plan usage** section — this opens the same Anthropic-hosted login page Claude Code CLI itself uses, and, once you approve it, ask you to paste back a short code shown in the browser. Paste it and click **Connect**; the widget stores the resulting access/refresh token encrypted and refreshes it automatically, so you only sign in once. If you already run the [Claude Code CLI](https://github.com/anthropics/claude-code) (`claude login`), the widget reads its local credentials automatically instead and Sign in with Claude isn't needed. As a last-resort fallback (e.g. on machines where the sign-in page can't be reached), you can paste a `sessionKey` cookie value from claude.ai DevTools under **Advanced**. Uses claude.ai/api.anthropic.com endpoints; the OAuth client is the same one Claude Code CLI uses but is not officially documented by Anthropic, so this may change without notice.
 
 **Claude (API Console, advanced):** create an [Admin API key](https://console.anthropic.com) (`sk-ant-admin...`) and optional monthly budget for org spend tracking. This is separate from Claude Pro/Max subscription limits.
 
@@ -160,7 +159,7 @@ Produces `Releases/deez-fuel-gauge-win-Portable.zip`.
 2. Calls Cursor's unofficial `GetCurrentPeriodUsage` API (Pro/Ultra/Team plans), or falls back to `GET /auth/usage` for legacy Enterprise request-based quotas.
 3. Optionally enriches OpenAI / Claude / Gemini bars from Cursor's aggregated usage events.
 4. Optionally fetches **Codex / ChatGPT Plus** 5-hour and weekly limits from `chatgpt.com` when Codex auth or a session cookie is available.
-5. Optionally fetches **Claude Pro/Max** session and weekly limits via Claude Code OAuth, browser session detection, or a saved session when configured.
+5. Optionally fetches **Claude Pro/Max** session and weekly limits via Sign in with Claude (an OAuth login the widget performs itself), Claude Code CLI OAuth, or a manually pasted session key when configured.
 6. Optionally fetches **Antigravity** grouped Gemini and Claude/GPT 5-hour and weekly limits from Google Cloud Code when Antigravity is signed in locally.
 7. Optionally fetches **direct** OpenAI Platform / Claude API Console billing via provider admin APIs when configured in settings.
 

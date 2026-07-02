@@ -10,17 +10,25 @@ public sealed class ClaudeProUsageClient : IDisposable
     private const string BaseUrl = "https://claude.ai";
     private const string OAuthUsageUrl = "https://api.anthropic.com/api/oauth/usage";
 
+    // The OAuth usage endpoint routes any request without a claude-code User-Agent to an
+    // aggressively rate-limited bucket that returns persistent 429s. Sending the same client
+    // identity Claude Code uses is what lets the request through.
+    private const string ClientUserAgent = "claude-code/2.0.14";
+
     private readonly HttpClient _http;
     private readonly bool _ownsHttp;
     private readonly ClaudeProAuthResolver _authResolver;
+    private readonly ClaudeOAuthLoginService _oauthLogin;
 
     public ClaudeProUsageClient(
         HttpClient? http = null,
-        ClaudeProAuthResolver? authResolver = null)
+        ClaudeProAuthResolver? authResolver = null,
+        ClaudeOAuthLoginService? oauthLogin = null)
     {
         _ownsHttp = http is null;
         _http = http ?? new HttpClient();
         _authResolver = authResolver ?? new ClaudeProAuthResolver();
+        _oauthLogin = oauthLogin ?? new ClaudeOAuthLoginService(_http);
     }
 
     public async Task<ClaudeProSnapshot> FetchAsync(
@@ -29,7 +37,7 @@ public sealed class ClaudeProUsageClient : IDisposable
     {
         try
         {
-            var auth = _authResolver.Resolve(settings, tryBrowserCookies: true);
+            var auth = _authResolver.Resolve(settings);
             if (!auth.HasAuth)
             {
                 settings.ProLastConnectionStatus = auth.FailureMessage ?? "Not connected";
@@ -58,12 +66,9 @@ public sealed class ClaudeProUsageClient : IDisposable
     {
         try
         {
-            var auth = _authResolver.Resolve(settings, tryBrowserCookies: true);
+            var auth = _authResolver.Resolve(settings);
             if (!auth.HasAuth)
-                return auth.FailureMessage ?? "Sign in at claude.ai, then click Refresh";
-
-            if (auth.Source == ClaudeProAuthSource.BrowserCookie && !string.IsNullOrWhiteSpace(auth.SessionCookie))
-                ClaudeProAuthResolver.PersistBrowserSession(settings, auth.SessionCookie);
+                return auth.FailureMessage ?? "Sign in with Claude in Settings, or run 'claude login'";
 
             var usage = await FetchWithAuthAsync(auth, settings, cancellationToken);
             settings.ProLastConnectionStatus = usage.IsAvailable ? "Connected" : (usage.StatusMessage ?? "Unavailable");
@@ -85,9 +90,9 @@ public sealed class ClaudeProUsageClient : IDisposable
         ProviderBillingSettings settings,
         CancellationToken cancellationToken = default)
     {
-        var auth = _authResolver.Resolve(settings, tryBrowserCookies: true);
+        var auth = _authResolver.Resolve(settings);
         if (!auth.HasAuth)
-            return auth.FailureMessage ?? "Sign in at claude.ai, then click Refresh";
+            return auth.FailureMessage ?? "Sign in with Claude in Settings, or run 'claude login'";
 
         try
         {
@@ -170,20 +175,45 @@ public sealed class ClaudeProUsageClient : IDisposable
         ProviderBillingSettings settings,
         CancellationToken cancellationToken)
     {
+        if (auth.Source == ClaudeProAuthSource.AppOAuth && auth.AppOAuthToken is { } appToken)
+            return await FetchAppOAuthUsageAsync(appToken, settings, cancellationToken);
+
         if (!string.IsNullOrWhiteSpace(auth.OAuthAccessToken))
             return await FetchOAuthUsageAsync(auth.OAuthAccessToken, cancellationToken);
 
         if (string.IsNullOrWhiteSpace(auth.SessionCookie))
-            throw new ClaudeProUsageException("Sign in at claude.ai, then click Refresh");
+            throw new ClaudeProUsageException("Sign in with Claude in Settings, or run 'claude login'");
 
         var orgUuid = await FetchOrgUuidAsync(auth.SessionCookie, cancellationToken);
         if (string.IsNullOrWhiteSpace(orgUuid))
             throw new ClaudeProUsageException("No organization found");
 
-        if (auth.Source == ClaudeProAuthSource.BrowserCookie)
-            ClaudeProAuthResolver.PersistBrowserSession(settings, auth.SessionCookie);
-
         return await FetchSessionUsageAsync(auth.SessionCookie, orgUuid, cancellationToken);
+    }
+
+    private async Task<ClaudeProSnapshot> FetchAppOAuthUsageAsync(
+        ClaudeOAuthToken token,
+        ProviderBillingSettings settings,
+        CancellationToken cancellationToken)
+    {
+        if (!token.IsExpired)
+            return await FetchOAuthUsageAsync(token.AccessToken, cancellationToken);
+
+        if (string.IsNullOrWhiteSpace(token.RefreshToken))
+            throw new ClaudeProUsageException("Claude sign-in expired — sign in with Claude again in Settings");
+
+        ClaudeOAuthToken refreshed;
+        try
+        {
+            refreshed = await _oauthLogin.RefreshAsync(token.RefreshToken, cancellationToken);
+        }
+        catch (ClaudeOAuthException ex)
+        {
+            throw new ClaudeProUsageException(ex.Message);
+        }
+
+        ClaudeOAuthTokenStore.Persist(settings, refreshed);
+        return await FetchOAuthUsageAsync(refreshed.AccessToken, cancellationToken);
     }
 
     private async Task<ClaudeProSnapshot> FetchOAuthUsageAsync(string accessToken, CancellationToken cancellationToken)
@@ -191,6 +221,7 @@ public sealed class ClaudeProUsageClient : IDisposable
         using var request = new HttpRequestMessage(HttpMethod.Get, OAuthUsageUrl);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         request.Headers.TryAddWithoutValidation("anthropic-beta", "oauth-2025-04-20");
+        request.Headers.TryAddWithoutValidation("User-Agent", ClientUserAgent);
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
         using var response = await _http.SendAsync(request, cancellationToken);
@@ -283,6 +314,9 @@ internal sealed class ClaudeProUsageException : Exception
     {
         if (status is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden)
             return new ClaudeProUsageException("Session expired — sign in at claude.ai, then click Refresh");
+
+        if (status is System.Net.HttpStatusCode.TooManyRequests)
+            return new ClaudeProUsageException("Rate limited by Claude — wait a moment, then click Refresh");
 
         try
         {

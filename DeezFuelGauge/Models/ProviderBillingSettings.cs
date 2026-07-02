@@ -15,6 +15,8 @@ public sealed class ProviderBillingSettings
 
     public string? ProSessionCredentialId { get; set; }
 
+    public string? ProOAuthCredentialId { get; set; }
+
     public bool ShowApiConsoleBilling { get; set; }
 
     public string? ProLastConnectionStatus { get; set; }

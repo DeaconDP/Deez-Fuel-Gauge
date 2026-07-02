@@ -87,7 +87,7 @@ public sealed class ProviderEasySetupService
             return new EasySetupResult(status);
 
         _launcher.OpenClaudeAi();
-        const string message = "Sign in at claude.ai, then click Refresh";
+        const string message = "Run 'claude login', or paste a session key in Settings, then click Refresh";
         settings.Claude.ProLastConnectionStatus = message;
         return new EasySetupResult(message, OpenedExternalUrl: true);
     }

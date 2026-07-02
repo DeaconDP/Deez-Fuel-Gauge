@@ -119,7 +119,6 @@ public sealed class ProviderEasySetupServiceTests
                 new HttpClient(new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.OK))),
                 new ClaudeProAuthResolver(
                     claudeCodeReader: () => null,
-                    browserCookieReader: () => null,
                     savedSessionReader: _ => null)),
             launcher: launcher);
 
@@ -198,7 +197,6 @@ public sealed class ProviderEasySetupServiceTests
                 new HttpClient(handler),
                 new ClaudeProAuthResolver(
                     claudeCodeReader: () => new ClaudeCodeOAuthCredential { AccessToken = "oauth-token" },
-                    browserCookieReader: () => null,
                     savedSessionReader: _ => null)),
             launcher: launcher);
 

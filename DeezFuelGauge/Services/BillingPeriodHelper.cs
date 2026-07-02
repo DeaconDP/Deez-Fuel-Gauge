@@ -26,14 +26,15 @@ internal static class BillingPeriodHelper
         return (startMs.Value, endMs.Value);
     }
 
-    public static DateTimeOffset ResolveCursorCycleEnd(long? billingCycleEndMs) =>
+    public static DateTimeOffset ResolveCursorCycleEnd(long? billingCycleEndMs, DateTimeOffset? reference = null) =>
         billingCycleEndMs is > 0
             ? DateTimeOffset.FromUnixTimeMilliseconds(billingCycleEndMs.Value)
-            : CurrentCalendarMonthEndUtc();
+            : CurrentCalendarMonthEndUtc(reference);
 
-    public static DateTimeOffset CurrentCalendarMonthEndUtc()
+    public static DateTimeOffset CurrentCalendarMonthEndUtc(DateTimeOffset? reference = null)
     {
-        var (_, endUnix) = CurrentCalendarMonthUtc();
-        return DateTimeOffset.FromUnixTimeSeconds(endUnix);
+        var now = reference ?? DateTimeOffset.UtcNow;
+        var start = new DateTimeOffset(now.Year, now.Month, 1, 0, 0, 0, TimeSpan.Zero);
+        return start.AddMonths(1);
     }
 }

@@ -16,8 +16,8 @@ public static class QuotaAlertEvaluator
 
         var evaluatedAt = now ?? DateTimeOffset.UtcNow;
         var results = new List<QuotaAlert>();
-        var cursorCycleEnd = BillingPeriodHelper.ResolveCursorCycleEnd(snapshot.BillingCycleEndMs);
-        var utcMonthEnd = BillingPeriodHelper.CurrentCalendarMonthEndUtc();
+        var cursorCycleEnd = BillingPeriodHelper.ResolveCursorCycleEnd(snapshot.BillingCycleEndMs, evaluatedAt);
+        var utcMonthEnd = BillingPeriodHelper.CurrentCalendarMonthEndUtc(evaluatedAt);
 
         TryAdd(
             results,

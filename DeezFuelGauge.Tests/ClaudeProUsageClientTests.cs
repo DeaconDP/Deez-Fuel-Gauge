@@ -123,6 +123,10 @@ public sealed class ClaudeProUsageClientTests
             Assert.Equal("/api/oauth/usage", request.RequestUri!.AbsolutePath);
             Assert.Equal("Bearer", request.Headers.Authorization?.Scheme);
             Assert.Equal("oauth-token", request.Headers.Authorization?.Parameter);
+            // Without a claude-code User-Agent the endpoint returns persistent 429s.
+            Assert.Contains(
+                request.Headers.UserAgent,
+                product => product.Product?.Name == "claude-code");
 
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
@@ -137,7 +141,6 @@ public sealed class ClaudeProUsageClientTests
             new HttpClient(handler),
             new ClaudeProAuthResolver(
                 claudeCodeReader: () => new ClaudeCodeOAuthCredential { AccessToken = "oauth-token" },
-                browserCookieReader: () => null,
                 savedSessionReader: _ => null));
 
         var settings = new ProviderBillingSettings();
@@ -149,7 +152,7 @@ public sealed class ClaudeProUsageClientTests
     }
 
     [Fact]
-    public async Task RefreshAndConnectAsync_persists_browser_cookie()
+    public async Task RefreshAndConnectAsync_uses_saved_session_key()
     {
         var handler = new StubHttpHandler(request =>
         {
@@ -177,22 +180,74 @@ public sealed class ClaudeProUsageClientTests
             new HttpClient(handler),
             new ClaudeProAuthResolver(
                 claudeCodeReader: () => null,
-                browserCookieReader: () => "browser-session",
-                savedSessionReader: _ => null));
+                savedSessionReader: _ => "pasted-session-key"));
 
         var settings = new ProviderBillingSettings();
 
+        var status = await client.RefreshAndConnectAsync(settings);
+
+        Assert.Equal("Connected", status);
+    }
+
+    [Fact]
+    public async Task FetchAsync_refreshes_expired_app_oauth_token_and_persists_it()
+    {
+        var handler = new StubHttpHandler(request =>
+        {
+            if (request.RequestUri!.AbsolutePath == "/v1/oauth/token")
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(
+                        """{"access_token":"fresh-token","refresh_token":"fresh-refresh","expires_in":28800}""",
+                        Encoding.UTF8,
+                        "application/json")
+                };
+            }
+
+            Assert.Equal("Bearer", request.Headers.Authorization?.Scheme);
+            Assert.Equal("fresh-token", request.Headers.Authorization?.Parameter);
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    """{"five_hour":{"utilization":0.4},"seven_day":{"utilization":0.6}}""",
+                    Encoding.UTF8,
+                    "application/json")
+            };
+        });
+
+        var settings = new ProviderBillingSettings();
+        var expiredToken = new ClaudeOAuthToken
+        {
+            AccessToken = "expired-token",
+            RefreshToken = "old-refresh",
+            ExpiresAtUnixMs = DateTimeOffset.UtcNow.AddMinutes(-5).ToUnixTimeMilliseconds()
+        };
+
+        var httpClient = new HttpClient(handler);
+        var client = new ClaudeProUsageClient(
+            httpClient,
+            new ClaudeProAuthResolver(
+                claudeCodeReader: () => null,
+                appOAuthReader: _ => expiredToken,
+                savedSessionReader: _ => null),
+            new ClaudeOAuthLoginService(httpClient));
+
         try
         {
-            var status = await client.RefreshAndConnectAsync(settings);
+            var snapshot = await client.FetchAsync(settings);
 
-            Assert.Equal("Connected", status);
-            Assert.False(string.IsNullOrWhiteSpace(settings.ProSessionCredentialId));
-            Assert.Equal("browser-session", CredentialStore.Retrieve(settings.ProSessionCredentialId));
+            Assert.True(snapshot.IsAvailable);
+            Assert.Equal(40, snapshot.SessionPercentUsed, 1);
+            Assert.Equal(60, snapshot.WeeklyPercentUsed, 1);
+
+            var persisted = ClaudeOAuthTokenStore.Retrieve(settings.ProOAuthCredentialId);
+            Assert.NotNull(persisted);
+            Assert.Equal("fresh-token", persisted!.AccessToken);
         }
         finally
         {
-            CredentialStore.Delete(settings.ProSessionCredentialId);
+            CredentialStore.Delete(settings.ProOAuthCredentialId);
         }
     }
 

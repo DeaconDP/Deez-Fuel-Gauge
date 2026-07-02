@@ -11,7 +11,6 @@ public sealed class ClaudeProAuthResolverTests
     {
         var resolver = new ClaudeProAuthResolver(
             claudeCodeReader: () => new ClaudeCodeOAuthCredential { AccessToken = "oauth-token" },
-            browserCookieReader: () => "browser-cookie",
             savedSessionReader: _ => "saved-session");
 
         var result = resolver.Resolve(new ProviderBillingSettings());
@@ -21,25 +20,10 @@ public sealed class ClaudeProAuthResolverTests
     }
 
     [Fact]
-    public void Resolve_uses_browser_cookie_when_oauth_missing()
+    public void Resolve_uses_saved_session_when_oauth_missing()
     {
         var resolver = new ClaudeProAuthResolver(
             claudeCodeReader: () => null,
-            browserCookieReader: () => "browser-cookie",
-            savedSessionReader: _ => "saved-session");
-
-        var result = resolver.Resolve(new ProviderBillingSettings());
-
-        Assert.Equal(ClaudeProAuthSource.BrowserCookie, result.Source);
-        Assert.Equal("browser-cookie", result.SessionCookie);
-    }
-
-    [Fact]
-    public void Resolve_uses_saved_session_when_other_sources_missing()
-    {
-        var resolver = new ClaudeProAuthResolver(
-            claudeCodeReader: () => null,
-            browserCookieReader: () => null,
             savedSessionReader: _ => "saved-session");
 
         var result = resolver.Resolve(new ProviderBillingSettings());
@@ -49,27 +33,55 @@ public sealed class ClaudeProAuthResolverTests
     }
 
     [Fact]
+    public void Resolve_prefers_app_oauth_over_saved_session_when_claude_code_missing()
+    {
+        var appToken = new ClaudeOAuthToken { AccessToken = "app-oauth-token", ExpiresAtUnixMs = long.MaxValue };
+        var resolver = new ClaudeProAuthResolver(
+            claudeCodeReader: () => null,
+            appOAuthReader: _ => appToken,
+            savedSessionReader: _ => "saved-session");
+
+        var result = resolver.Resolve(new ProviderBillingSettings());
+
+        Assert.Equal(ClaudeProAuthSource.AppOAuth, result.Source);
+        Assert.Equal("app-oauth-token", result.OAuthAccessToken);
+        Assert.Same(appToken, result.AppOAuthToken);
+    }
+
+    [Fact]
+    public void Resolve_returns_expired_message_when_claude_code_token_expired()
+    {
+        var resolver = new ClaudeProAuthResolver(
+            claudeCodeReader: () => new ClaudeCodeOAuthCredential { AccessToken = "oauth-token", ExpiresAt = 0 },
+            savedSessionReader: _ => "saved-session");
+
+        var result = resolver.Resolve(new ProviderBillingSettings());
+
+        Assert.False(result.HasAuth);
+        Assert.Contains("claude login", result.FailureMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Resolve_returns_failure_when_no_auth_found()
     {
         var resolver = new ClaudeProAuthResolver(
             claudeCodeReader: () => null,
-            browserCookieReader: () => null,
             savedSessionReader: _ => null);
 
         var result = resolver.Resolve(new ProviderBillingSettings());
 
         Assert.False(result.HasAuth);
-        Assert.Contains("Refresh", result.FailureMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("claude login", result.FailureMessage, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public void PersistBrowserSession_stores_encrypted_credential_id()
+    public void PersistSessionKey_stores_encrypted_credential_id()
     {
         var settings = new ProviderBillingSettings();
 
         try
         {
-            ClaudeProAuthResolver.PersistBrowserSession(settings, "session-key");
+            ClaudeProAuthResolver.PersistSessionKey(settings, "session-key");
 
             Assert.False(string.IsNullOrWhiteSpace(settings.ProSessionCredentialId));
             Assert.Equal("session-key", CredentialStore.Retrieve(settings.ProSessionCredentialId));

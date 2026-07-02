@@ -1,3 +1,4 @@
+using System.Net;
 using DeezFuelGauge.Models;
 using DeezFuelGauge.Services;
 using Xunit;
@@ -43,11 +44,40 @@ public sealed class DirectBillingServiceTests
         };
 
         var source = new UsageSnapshot { PercentUsed = 10 };
-        using var service = new DirectBillingService();
+        using var service = CreateOfflineService();
         var enriched = await service.EnrichAsync(source, settings);
 
         Assert.Equal(10, enriched.PercentUsed);
         Assert.False(enriched.Codex.IsAvailable);
         Assert.False(enriched.ClaudePro.IsAvailable);
+    }
+
+    // Builds a service whose clients see no stored credentials and whose HTTP requests all
+    // fail, so results don't depend on what's signed in on the machine running the tests.
+    private static DirectBillingService CreateOfflineService()
+    {
+        var http = new HttpClient(new UnauthorizedHttpHandler());
+        return new DirectBillingService(
+            new OpenAiBillingClient(http),
+            new CodexUsageClient(http, authFilePathResolver: () => null),
+            new AnthropicBillingClient(http),
+            new ClaudeProUsageClient(http, new ClaudeProAuthResolver(
+                claudeCodeReader: () => null,
+                appOAuthReader: _ => null,
+                savedSessionReader: _ => null)),
+            new AntigravityUsageClient(http, tokenReader: () => new AntigravityOAuthTokens()),
+            new OpenRouterUsageClient(http),
+            new OpenCodeUsageClient(http));
+    }
+
+    private sealed class UnauthorizedHttpHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new HttpResponseMessage(HttpStatusCode.Unauthorized)
+            {
+                Content = new StringContent("{}")
+            });
     }
 }

@@ -51,8 +51,12 @@ public partial class SettingsPanel : UserControl
     private void OpenAiHeader_PointerPressed(object? sender, PointerPressedEventArgs e) =>
         ToggleHeader(SettingsExpandedProvider.OpenAi, e);
 
-    private void ClaudeHeader_PointerPressed(object? sender, PointerPressedEventArgs e) =>
+    private async void ClaudeHeader_PointerPressed(object? sender, PointerPressedEventArgs e)
+    {
         ToggleHeader(SettingsExpandedProvider.Claude, e);
+        if (ViewModel.IsClaudeExpanded && _settings is not null)
+            await ViewModel.RefreshClaudeUsageAsync(_settings);
+    }
 
     private void GeminiHeader_PointerPressed(object? sender, PointerPressedEventArgs e) =>
         ToggleHeader(SettingsExpandedProvider.Gemini, e);
@@ -101,11 +105,33 @@ public partial class SettingsPanel : UserControl
         ClearTextBox(box);
     }
 
+    private void ClaudeProSessionKeyBox_LostFocus(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not TextBox box)
+            return;
+
+        ViewModel.SaveClaudeProSessionKey(box.Text);
+        ClearTextBox(box);
+    }
+
     private void ClearOpenAiApiKey_Click(object? sender, RoutedEventArgs e) => ViewModel.ClearOpenAiApiKey();
 
     private void ClearOpenAiSessionCookie_Click(object? sender, RoutedEventArgs e) => ViewModel.ClearOpenAiSessionCookie();
 
     private void ClearClaudeApiKey_Click(object? sender, RoutedEventArgs e) => ViewModel.ClearClaudeApiKey();
+
+    private void ClearClaudeProSessionKey_Click(object? sender, RoutedEventArgs e) => ViewModel.ClearClaudeProSessionKey();
+
+    private void SignInWithClaude_Click(object? sender, RoutedEventArgs e) => ViewModel.BeginClaudeSignIn(RequireSettings());
+
+    private async void ConnectClaudeOAuthCode_Click(object? sender, RoutedEventArgs e)
+    {
+        await ViewModel.CompleteClaudeSignInAsync(RequireSettings(), ClaudeOAuthCodeBox.Text);
+        ClearTextBox(ClaudeOAuthCodeBox);
+    }
+
+    private void DisconnectClaudeOAuth_Click(object? sender, RoutedEventArgs e) =>
+        ViewModel.DisconnectClaudeOAuth(RequireSettings());
 
     private void OpenRouterApiKeyBox_LostFocus(object? sender, RoutedEventArgs e)
     {
@@ -128,8 +154,6 @@ public partial class SettingsPanel : UserControl
     }
 
     private void ClearOpenCodeSessionCookie_Click(object? sender, RoutedEventArgs e) => ViewModel.ClearOpenCodeSessionCookie();
-
-    private void OpenClaudeAi_Click(object? sender, RoutedEventArgs e) => ViewModel.OpenClaudeAi();
 
     private void OpenOpenCode_Click(object? sender, RoutedEventArgs e) => ViewModel.OpenOpenCode();
 
@@ -168,9 +192,6 @@ public partial class SettingsPanel : UserControl
 
     private async void EasySetupOpenRouter_Click(object? sender, RoutedEventArgs e) =>
         await ViewModel.RunEasySetupOpenRouterAsync(RequireSettings());
-
-    private async void EasySetupClaude_Click(object? sender, RoutedEventArgs e) =>
-        await ViewModel.RunEasySetupClaudeAsync(RequireSettings());
 
     private async void EasySetupOpenCode_Click(object? sender, RoutedEventArgs e) =>
         await ViewModel.RunEasySetupOpenCodeAsync(RequireSettings());

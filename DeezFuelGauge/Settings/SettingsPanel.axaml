@@ -197,34 +197,127 @@
 
                         <Border Classes="subsection-divider" />
 
-                        <controls:SettingsSubsection Title="Claude Pro"
+                        <controls:SettingsSubsection Title="Plan usage"
                                                      Status="{Binding ClaudeProStatus}"
-                                                     HelpText="Sign in at claude.ai, then click Refresh. Also reads Claude Code login (~/.claude/.credentials.json) when present.">
+                                                     HelpText="Signs in automatically when Claude Code (~/.claude) is present. Otherwise click Sign in with Claude.">
                             <controls:SettingsSubsection.Actions>
-                                <StackPanel Orientation="Horizontal">
-                                    <Button Content="Setup"
-                                            Classes="action-button"
-                                            Click="EasySetupClaude_Click" />
-                                    <Button Content="Open"
-                                            Classes="action-button"
-                                            Click="OpenClaudeAi_Click" />
-                                    <Button Content="Refresh"
-                                            Classes="action-button"
-                                            Click="RefreshClaudePro_Click" />
-                                </StackPanel>
+                                <Button Content="Refresh"
+                                        Classes="action-button"
+                                        Click="RefreshClaudePro_Click" />
                             </controls:SettingsSubsection.Actions>
                             <controls:SettingsSubsection.Body>
-                                <WrapPanel Orientation="Horizontal">
-                                    <CheckBox Content="Show"
-                                              Classes="toggle-checkbox"
-                                              IsChecked="{Binding ShowClaudePro}" />
-                                    <CheckBox Content="Details"
-                                              Classes="toggle-checkbox"
-                                              IsChecked="{Binding ShowClaudeProDetails}" />
-                                    <CheckBox Content="5h / week"
-                                              Classes="toggle-checkbox"
-                                              IsChecked="{Binding ShowClaudeProBreakdown}" />
-                                </WrapPanel>
+                                <StackPanel Spacing="2">
+                                    <StackPanel Spacing="6"
+                                                Margin="0,2,0,4"
+                                                IsVisible="{Binding ClaudeProUsageAvailable}">
+                                        <StackPanel Spacing="3">
+                                            <Grid ColumnDefinitions="*,Auto">
+                                                <TextBlock Text="Current session · 5h"
+                                                           FontSize="9"
+                                                           FontWeight="SemiBold"
+                                                           Foreground="#FFE8E8E8"
+                                                           VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="1"
+                                                           Text="{Binding ClaudeProSessionText}"
+                                                           FontSize="8"
+                                                           Foreground="#FFAAAAAA"
+                                                           VerticalAlignment="Center" />
+                                            </Grid>
+                                            <ProgressBar Minimum="0"
+                                                         Maximum="100"
+                                                         Value="{Binding ClaudeProSessionPercent}"
+                                                         Foreground="{Binding ClaudeProSessionColor}"
+                                                         Background="#33FFFFFF"
+                                                         Height="6"
+                                                         CornerRadius="3" />
+                                        </StackPanel>
+                                        <StackPanel Spacing="3">
+                                            <Grid ColumnDefinitions="*,Auto">
+                                                <TextBlock Text="Weekly"
+                                                           FontSize="9"
+                                                           FontWeight="SemiBold"
+                                                           Foreground="#FFE8E8E8"
+                                                           VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="1"
+                                                           Text="{Binding ClaudeProWeeklyText}"
+                                                           FontSize="8"
+                                                           Foreground="#FFAAAAAA"
+                                                           VerticalAlignment="Center" />
+                                            </Grid>
+                                            <ProgressBar Minimum="0"
+                                                         Maximum="100"
+                                                         Value="{Binding ClaudeProWeeklyPercent}"
+                                                         Foreground="{Binding ClaudeProWeeklyColor}"
+                                                         Background="#33FFFFFF"
+                                                         Height="6"
+                                                         CornerRadius="3" />
+                                        </StackPanel>
+                                        <Border Classes="subsection-divider" />
+                                    </StackPanel>
+                                    <WrapPanel Orientation="Horizontal">
+                                        <CheckBox Content="Show"
+                                                  Classes="toggle-checkbox"
+                                                  IsChecked="{Binding ShowClaudePro}" />
+                                        <CheckBox Content="Details"
+                                                  Classes="toggle-checkbox"
+                                                  IsChecked="{Binding ShowClaudeProDetails}" />
+                                        <CheckBox Content="5h / week"
+                                                  Classes="toggle-checkbox"
+                                                  IsChecked="{Binding ShowClaudeProBreakdown}" />
+                                    </WrapPanel>
+                                    <StackPanel Orientation="Horizontal"
+                                                Spacing="4"
+                                                IsVisible="{Binding ShowClaudeSignInButton}">
+                                        <Button Content="Sign in with Claude"
+                                                Classes="action-button"
+                                                Click="SignInWithClaude_Click" />
+                                    </StackPanel>
+                                    <StackPanel Spacing="2" IsVisible="{Binding IsClaudeOAuthPending}">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <TextBox x:Name="ClaudeOAuthCodeBox"
+                                                     Grid.Column="0"
+                                                     Watermark="Paste code from browser (code#state)"
+                                                     FontSize="9" />
+                                            <Button Grid.Column="1"
+                                                    Content="Connect"
+                                                    FontSize="8"
+                                                    Padding="4,2"
+                                                    Margin="4,0,0,0"
+                                                    Click="ConnectClaudeOAuthCode_Click" />
+                                        </Grid>
+                                        <TextBlock Text="Approve the sign-in in your browser, copy the code it shows, paste it here, then click Connect."
+                                                   FontSize="8"
+                                                   Foreground="#FF666666"
+                                                   TextWrapping="Wrap" />
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal"
+                                                Spacing="4"
+                                                IsVisible="{Binding HasClaudeAppOAuthSaved}">
+                                        <Button Content="Disconnect"
+                                                Classes="action-button"
+                                                Click="DisconnectClaudeOAuth_Click" />
+                                    </StackPanel>
+                                    <StackPanel Spacing="2" IsVisible="{Binding ShowClaudeProCredentials}">
+                                        <TextBlock Text="Advanced: paste a session key instead"
+                                                   FontSize="8"
+                                                   Foreground="#FF666666" />
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <TextBox x:Name="ClaudeProSessionKeyBox"
+                                                     Grid.Column="0"
+                                                     Watermark="{Binding ClaudeProSessionCookieWatermark}"
+                                                     PasswordChar="•"
+                                                     FontSize="9"
+                                                     LostFocus="ClaudeProSessionKeyBox_LostFocus" />
+                                            <Button Grid.Column="1"
+                                                    Content="Clear"
+                                                    FontSize="8"
+                                                    Padding="4,2"
+                                                    Margin="4,0,0,0"
+                                                    IsVisible="{Binding HasClaudeSessionCookieSaved}"
+                                                    Click="ClearClaudeProSessionKey_Click" />
+                                        </Grid>
+                                    </StackPanel>
+                                </StackPanel>
                             </controls:SettingsSubsection.Body>
                         </controls:SettingsSubsection>
 
