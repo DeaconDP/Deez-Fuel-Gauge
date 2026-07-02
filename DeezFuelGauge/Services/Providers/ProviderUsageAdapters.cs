@@ -25,23 +25,6 @@ public sealed class CodexUsageAdapter : IProviderUsageAdapter<CodexSnapshot>
         _client.FetchAsync(_settings, cancellationToken);
 }
 
-public sealed class ClaudeProUsageAdapter : IProviderUsageAdapter<ClaudeProSnapshot>
-{
-    private readonly ClaudeProUsageClient _client;
-    private readonly ProviderBillingSettings _settings;
-
-    public ClaudeProUsageAdapter(ClaudeProUsageClient client, ProviderBillingSettings settings)
-    {
-        _client = client;
-        _settings = settings;
-    }
-
-    public string ProviderKey => "claude-pro";
-
-    public Task<ClaudeProSnapshot> FetchAsync(CancellationToken cancellationToken = default) =>
-        _client.FetchAsync(_settings, cancellationToken);
-}
-
 public sealed class AntigravityUsageAdapter : IProviderUsageAdapter<AntigravitySnapshot>
 {
     private readonly AntigravityUsageClient _client;

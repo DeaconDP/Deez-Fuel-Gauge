@@ -9,8 +9,6 @@ public sealed class QuotaAlertSettings
     public bool CursorPlan { get; set; } = true;
     public bool OpenAiCursor { get; set; }
     public bool OpenAiPlatform { get; set; } = true;
-    public bool ClaudeCursor { get; set; }
-    public bool ClaudeApi { get; set; } = true;
     public bool GeminiCursor { get; set; }
     public bool OpenRouterKeyLimit { get; set; } = true;
     public bool OpenCodeZenMonthly { get; set; } = true;

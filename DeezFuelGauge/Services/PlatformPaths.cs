@@ -61,7 +61,12 @@ public static class PlatformPaths
     public static string SettingsDirectory =>
         Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "deez-fuel-gauge");
+            AppBranding.SettingsSlug);
+
+    public static string LegacySettingsDirectory =>
+        Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            AppBranding.LegacySettingsSlug);
 
     public static string GeminiConfigDirectory =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".gemini");

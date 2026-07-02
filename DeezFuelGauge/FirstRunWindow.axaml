@@ -24,7 +24,7 @@
             <TextBlock TextWrapping="Wrap"
                        FontSize="11"
                        Foreground="#FFCCCCCC"
-                       Text="Track Cursor plan usage and optional provider limits from one overlay. Open settings to connect OpenAI Codex, Claude Pro, Antigravity, OpenRouter, or OpenCode — no terminal required for most providers." />
+                       Text="Track Cursor plan usage and optional provider limits from one overlay. Open settings to connect OpenAI Codex, Antigravity, OpenRouter, or OpenCode — no terminal required for most providers." />
             <StackPanel Orientation="Horizontal"
                         HorizontalAlignment="Right"
                         Spacing="8">
