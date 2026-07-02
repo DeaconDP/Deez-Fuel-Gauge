@@ -1,7 +1,45 @@
+using System.Runtime.InteropServices;
+
 namespace DeezFuelGauge.Services;
 
 public static class PlatformPaths
 {
+    public static IReadOnlyList<string> CursorExecutablePaths
+    {
+        get
+        {
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            {
+                return ["/Applications/Cursor.app"];
+            }
+
+            var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            return
+            [
+                Path.Combine(localAppData, "Programs", "cursor", "Cursor.exe"),
+                Path.Combine(localAppData, "cursor", "Cursor.exe")
+            ];
+        }
+    }
+
+    public static IReadOnlyList<string> AntigravityIdeExecutablePaths
+    {
+        get
+        {
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            {
+                return ["/Applications/Antigravity IDE.app"];
+            }
+
+            var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            return
+            [
+                Path.Combine(localAppData, "Programs", "Antigravity IDE", "Antigravity IDE.exe"),
+                Path.Combine(localAppData, "Antigravity IDE", "Antigravity IDE.exe")
+            ];
+        }
+    }
+
     public static string CursorStateDatabasePath =>
         Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -30,18 +68,9 @@ public static class PlatformPaths
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             AppBranding.LegacySettingsSlug);
 
-    public static string ClaudeConfigDirectory
-    {
-        get
-        {
-            var configDir = Environment.GetEnvironmentVariable("CLAUDE_CONFIG_DIR");
-            if (!string.IsNullOrWhiteSpace(configDir))
-                return configDir;
+    public static string GeminiConfigDirectory =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".gemini");
 
-            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".claude");
-        }
-    }
-
-    public static string ClaudeCodeCredentialsPath =>
-        Path.Combine(ClaudeConfigDirectory, ".credentials.json");
+    public static string GeminiOAuthCredentialsPath =>
+        Path.Combine(GeminiConfigDirectory, "oauth_creds.json");
 }

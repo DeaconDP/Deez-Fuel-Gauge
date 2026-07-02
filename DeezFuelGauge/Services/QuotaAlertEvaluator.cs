@@ -16,8 +16,8 @@ public static class QuotaAlertEvaluator
 
         var evaluatedAt = now ?? DateTimeOffset.UtcNow;
         var results = new List<QuotaAlert>();
-        var cursorCycleEnd = BillingPeriodHelper.ResolveCursorCycleEnd(snapshot.BillingCycleEndMs);
-        var utcMonthEnd = BillingPeriodHelper.CurrentCalendarMonthEndUtc();
+        var cursorCycleEnd = BillingPeriodHelper.ResolveCursorCycleEnd(snapshot.BillingCycleEndMs, evaluatedAt);
+        var utcMonthEnd = BillingPeriodHelper.CurrentCalendarMonthEndUtc(evaluatedAt);
 
         TryAdd(
             results,
@@ -56,32 +56,6 @@ public static class QuotaAlertEvaluator
             "openai-platform",
             "openai",
             "OpenAI Platform");
-
-        TryAdd(
-            results,
-            alerts.ClaudeCursor,
-            settings.Claude.ShowCursorSource && snapshot.Claude.IsAvailable,
-            snapshot.Claude.PercentUsed,
-            cursorCycleEnd,
-            evaluatedAt,
-            alerts,
-            "claude-cursor",
-            "claude",
-            "Claude (Cursor plan)");
-
-        TryAdd(
-            results,
-            alerts.ClaudeApi,
-            settings.Claude.ShowApiConsoleBilling
-            && snapshot.ClaudeDirect.IsAvailable
-            && settings.Claude.MonthlyBudgetUsd is > 0,
-            snapshot.ClaudeDirect.PercentUsed,
-            cursorCycleEnd,
-            evaluatedAt,
-            alerts,
-            "claude-api",
-            "claude",
-            "Claude API Console");
 
         TryAdd(
             results,

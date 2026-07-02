@@ -6,7 +6,7 @@ namespace DeezFuelGauge.Tests;
 
 public sealed class AntigravityUsageClientTests
 {
-    private const string SampleQuotaSummaryJson = """
+    internal const string SampleQuotaSummaryJson = """
         {
           "quota_groups": [
             {
@@ -93,6 +93,44 @@ public sealed class AntigravityUsageClientTests
         var tokens = AntigravityTokenReader.ParseOAuthEnvelope("not-valid-base64!!!");
         Assert.Null(tokens.AccessToken);
         Assert.Null(tokens.RefreshToken);
+    }
+
+    [Fact]
+    public void ParseUserQuota_maps_per_model_buckets_to_gemini_group()
+    {
+        const string json = """
+            {
+              "buckets": [
+                {
+                  "modelId": "gemini-2.5-pro",
+                  "remainingFraction": 0.965,
+                  "resetTime": "2026-07-01T12:00:00Z"
+                },
+                {
+                  "modelId": "gemini-2.5-flash",
+                  "remainingFraction": 0.50,
+                  "resetTime": "2026-07-08T12:00:00Z"
+                }
+              ]
+            }
+            """;
+
+        using var document = JsonDocument.Parse(json);
+        var snapshot = AntigravityUsageClient.ParseUserQuota(document.RootElement, "Pro");
+
+        Assert.True(snapshot.IsAvailable);
+        Assert.Equal("Pro", snapshot.PlanLabel);
+        Assert.True(snapshot.Gemini.IsAvailable);
+        Assert.Equal(96.5, snapshot.Gemini.SessionPercentRemaining);
+        Assert.Equal(50, snapshot.Gemini.WeeklyPercentRemaining);
+        Assert.False(snapshot.ThirdParty.IsAvailable);
+    }
+
+    [Fact]
+    public void IsGeminiModelId_matches_gemini_models()
+    {
+        Assert.True(AntigravityUsageClient.IsGeminiModelId("gemini-2.5-pro"));
+        Assert.False(AntigravityUsageClient.IsGeminiModelId("gpt-4o"));
     }
 
     [Fact]

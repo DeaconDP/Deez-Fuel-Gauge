@@ -18,7 +18,6 @@ public sealed class WidgetViewModel
 {
     public ProviderSectionViewModel Cursor { get; } = new() { Title = "Cursor" };
     public ProviderSectionViewModel OpenAi { get; } = new() { Title = "OpenAI" };
-    public ProviderSectionViewModel Claude { get; } = new() { Title = "Claude" };
     public ProviderSectionViewModel Gemini { get; } = new() { Title = "Gemini" };
     public ProviderSectionViewModel OpenRouter { get; } = new() { Title = "OpenRouter" };
     public ProviderSectionViewModel OpenCode { get; } = new() { Title = "OpenCode" };
@@ -70,7 +69,6 @@ public sealed class WidgetViewModel
     private void ClearDegradedStates()
     {
         OpenAi.DegradedMessage = null;
-        Claude.DegradedMessage = null;
         Gemini.DegradedMessage = null;
         OpenRouter.DegradedMessage = null;
         OpenCode.DegradedMessage = null;
@@ -80,7 +78,6 @@ public sealed class WidgetViewModel
     {
         Cursor.UnusedQuotaMessage = null;
         OpenAi.UnusedQuotaMessage = null;
-        Claude.UnusedQuotaMessage = null;
         Gemini.UnusedQuotaMessage = null;
         OpenRouter.UnusedQuotaMessage = null;
         OpenCode.UnusedQuotaMessage = null;
@@ -95,9 +92,6 @@ public sealed class WidgetViewModel
                 break;
             case "openai":
                 OpenAi.UnusedQuotaMessage = message;
-                break;
-            case "claude":
-                Claude.UnusedQuotaMessage = message;
                 break;
             case "gemini":
                 Gemini.UnusedQuotaMessage = message;
@@ -118,10 +112,6 @@ public sealed class WidgetViewModel
             case "openai-platform":
             case "codex":
                 OpenAi.DegradedMessage ??= message;
-                break;
-            case "claude-pro":
-            case "claude-api":
-                Claude.DegradedMessage ??= message;
                 break;
             case "antigravity":
                 Gemini.DegradedMessage ??= message;

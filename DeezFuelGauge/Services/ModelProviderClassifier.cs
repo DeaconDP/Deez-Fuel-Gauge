@@ -4,7 +4,6 @@ public enum ModelProvider
 {
     Unknown,
     OpenAi,
-    Claude,
     Gemini
 }
 
@@ -16,9 +15,6 @@ public static class ModelProviderClassifier
             return ModelProvider.Unknown;
 
         var model = modelName.Trim().ToLowerInvariant();
-
-        if (model.StartsWith("claude") || model.Contains("anthropic"))
-            return ModelProvider.Claude;
 
         if (model.StartsWith("gemini") || model.Contains("google"))
             return ModelProvider.Gemini;

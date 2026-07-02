@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Text.Json;
 using DeezFuelGauge.Models;
+using static DeezFuelGauge.Models.OpenRouterSnapshot;
 
 namespace DeezFuelGauge.Services;
 
@@ -28,7 +29,9 @@ public sealed class OpenRouterUsageClient : IDisposable
         try
         {
             var keyData = await FetchKeyAsync(apiKey, cancellationToken);
-            var credits = await TryFetchCreditsAsync(apiKey, cancellationToken);
+            var managementKey = CredentialStore.Retrieve(settings.ManagementCredentialId);
+            var credits = await TryFetchCreditsAsync(managementKey, cancellationToken)
+                          ?? await TryFetchCreditsAsync(apiKey, cancellationToken);
             var snapshot = MergeResponses(keyData, credits);
             settings.LastConnectionStatus = snapshot.IsAvailable ? "Connected" : (snapshot.StatusMessage ?? "Unavailable");
             return snapshot;
@@ -45,16 +48,23 @@ public sealed class OpenRouterUsageClient : IDisposable
         }
     }
 
-    public async Task<string> TestConnectionAsync(string apiKey, CancellationToken cancellationToken = default)
+    public Task<string> TestConnectionAsync(string apiKey, CancellationToken cancellationToken = default) =>
+        TestConnectionAsync(apiKey, managementKey: null, cancellationToken);
+
+    public async Task<string> TestConnectionAsync(
+        string apiKey,
+        string? managementKey,
+        CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(apiKey))
             return "API key required";
 
         try
         {
-            var snapshot = MergeResponses(
-                await FetchKeyAsync(apiKey, cancellationToken),
-                await TryFetchCreditsAsync(apiKey, cancellationToken));
+            var keyData = await FetchKeyAsync(apiKey, cancellationToken);
+            var credits = await TryFetchCreditsAsync(managementKey, cancellationToken)
+                          ?? await TryFetchCreditsAsync(apiKey, cancellationToken);
+            var snapshot = MergeResponses(keyData, credits);
             return snapshot.IsAvailable ? "Connected" : (snapshot.StatusMessage ?? "Unavailable");
         }
         catch (OpenRouterUsageException ex)
@@ -67,16 +77,26 @@ public sealed class OpenRouterUsageClient : IDisposable
         }
     }
 
-    internal static OpenRouterSnapshot MergeResponses(KeyResponseData key, CreditsResponseData? credits)
+    internal static OpenRouterSnapshot MergeResponses(KeyResponseData key, ClientCreditsResponseData? credits)
     {
         double? balance = credits?.BalanceUsd;
-        return OpenRouterSnapshot.FromResponses(
-            balance,
+        var billing = new KeyBillingData(
             key.LimitUsd,
             key.LimitRemainingUsd,
+            key.LimitReset,
+            key.IsFreeTier,
+            key.AllTimeUsageUsd,
             key.DailySpendUsd,
             key.WeeklySpendUsd,
-            key.MonthlySpendUsd);
+            key.MonthlySpendUsd,
+            key.IncludeByokInLimit,
+            key.ByokDailySpendUsd);
+
+        CreditsResponseData? snapshotCredits = credits is { } c
+            ? new CreditsResponseData(c.BalanceUsd, c.TotalCredits, c.TotalUsage)
+            : null;
+
+        return OpenRouterSnapshot.FromResponses(balance, billing, snapshotCredits);
     }
 
     internal static KeyResponseData ParseKeyResponse(JsonElement root)
@@ -86,21 +106,40 @@ public sealed class OpenRouterUsageClient : IDisposable
 
         var limit = ReadNullableDouble(data, "limit");
         var limitRemaining = ReadNullableDouble(data, "limit_remaining");
+        var limitReset = data.TryGetProperty("limit_reset", out var limitResetEl) && limitResetEl.ValueKind == JsonValueKind.String
+            ? limitResetEl.GetString()
+            : null;
+        var isFreeTier = data.TryGetProperty("is_free_tier", out var freeTierEl)
+                         && freeTierEl.ValueKind == JsonValueKind.True;
+        var allTimeUsage = ReadDouble(data, "usage");
         var daily = ReadDouble(data, "usage_daily");
         var weekly = ReadDouble(data, "usage_weekly");
         var monthly = ReadDouble(data, "usage_monthly");
+        var includeByok = data.TryGetProperty("include_byok_in_limit", out var includeByokEl)
+                          && includeByokEl.ValueKind == JsonValueKind.True;
+        var byokDaily = ReadDouble(data, "byok_usage_daily");
 
-        return new KeyResponseData(limit, limitRemaining, daily, weekly, monthly);
+        return new KeyResponseData(
+            limit,
+            limitRemaining,
+            limitReset,
+            isFreeTier,
+            allTimeUsage,
+            daily,
+            weekly,
+            monthly,
+            includeByok,
+            byokDaily);
     }
 
-    internal static CreditsResponseData? ParseCreditsResponse(JsonElement root)
+    internal static ClientCreditsResponseData? ParseCreditsResponse(JsonElement root)
     {
         if (!root.TryGetProperty("data", out var data))
             return null;
 
         var totalCredits = ReadDouble(data, "total_credits");
         var totalUsage = ReadDouble(data, "total_usage");
-        return new CreditsResponseData(totalCredits - totalUsage);
+        return new ClientCreditsResponseData(totalCredits - totalUsage, totalCredits, totalUsage);
     }
 
     private async Task<KeyResponseData> FetchKeyAsync(string apiKey, CancellationToken cancellationToken)
@@ -120,8 +159,11 @@ public sealed class OpenRouterUsageClient : IDisposable
         return ParseKeyResponse(doc.RootElement);
     }
 
-    private async Task<CreditsResponseData?> TryFetchCreditsAsync(string apiKey, CancellationToken cancellationToken)
+    private async Task<ClientCreditsResponseData?> TryFetchCreditsAsync(string? apiKey, CancellationToken cancellationToken)
     {
+        if (string.IsNullOrWhiteSpace(apiKey))
+            return null;
+
         using var request = new HttpRequestMessage(HttpMethod.Get, $"{BaseUrl}/credits");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey.Trim());
 
@@ -159,11 +201,16 @@ public sealed class OpenRouterUsageClient : IDisposable
     internal readonly record struct KeyResponseData(
         double? LimitUsd,
         double? LimitRemainingUsd,
+        string? LimitReset,
+        bool IsFreeTier,
+        double AllTimeUsageUsd,
         double DailySpendUsd,
         double WeeklySpendUsd,
-        double MonthlySpendUsd);
+        double MonthlySpendUsd,
+        bool IncludeByokInLimit,
+        double ByokDailySpendUsd);
 
-    internal readonly record struct CreditsResponseData(double BalanceUsd);
+    internal readonly record struct ClientCreditsResponseData(double BalanceUsd, double TotalCredits, double TotalUsage);
 }
 
 public sealed class OpenRouterUsageException : Exception

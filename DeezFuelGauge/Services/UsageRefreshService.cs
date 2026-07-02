@@ -68,12 +68,6 @@ public sealed class UsageRefreshService : IDisposable
         if (settings.OpenAi.ShowProLimits)
             statuses["codex"] = StatusFromCodex(snapshot.Codex);
 
-        if (settings.Claude.ShowProLimits)
-            statuses["claude-pro"] = StatusFromClaudePro(snapshot.ClaudePro);
-
-        if (settings.Claude.ShowApiConsoleBilling)
-            statuses["claude-api"] = StatusFromDirect(snapshot.ClaudeDirect);
-
         if (settings.Gemini.ShowProLimits)
             statuses["antigravity"] = StatusFromAntigravity(snapshot.Antigravity);
 
@@ -92,11 +86,6 @@ public sealed class UsageRefreshService : IDisposable
             : ProviderRefreshStatus.Failed(snapshot.StatusMessage ?? "Unavailable", degraded: true);
 
     private static ProviderRefreshStatus StatusFromCodex(CodexSnapshot snapshot) =>
-        snapshot.IsAvailable
-            ? ProviderRefreshStatus.Ok()
-            : ProviderRefreshStatus.Failed(snapshot.StatusMessage ?? "Unavailable", degraded: true);
-
-    private static ProviderRefreshStatus StatusFromClaudePro(ClaudeProSnapshot snapshot) =>
         snapshot.IsAvailable
             ? ProviderRefreshStatus.Ok()
             : ProviderRefreshStatus.Failed(snapshot.StatusMessage ?? "Unavailable", degraded: true);

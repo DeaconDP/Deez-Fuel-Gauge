@@ -90,9 +90,6 @@ public static class ProviderLimitsPresenter
         return string.Join(" · ", parts);
     }
 
-    public static string FormatClaudeProFooter(ClaudeProSnapshot pro) =>
-        pro.IsAvailable ? FormatResetTimes(pro.SessionResetsAt, pro.WeeklyResetsAt) : "";
-
     public static string FormatCodexFooter(CodexSnapshot codex)
     {
         if (!codex.IsAvailable)

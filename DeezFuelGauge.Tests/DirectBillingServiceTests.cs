@@ -1,3 +1,4 @@
+using System.Net;
 using DeezFuelGauge.Models;
 using DeezFuelGauge.Services;
 using Xunit;
@@ -12,18 +13,16 @@ public sealed class DirectBillingServiceTests
         var settings = new WidgetSettings
         {
             OpenAi = new ProviderBillingSettings { ShowProLimits = false },
-            Claude = new ProviderBillingSettings { ShowProLimits = false },
             Gemini = new ProviderBillingSettings { ShowProLimits = false },
             OpenRouter = new ProviderBillingSettings { ShowProLimits = false },
             OpenCode = new ProviderBillingSettings { ShowProLimits = false, ShowDirectSource = false }
         };
 
         var source = new UsageSnapshot { PercentUsed = 42 };
-        using var service = new DirectBillingService();
+        using var service = CreateServiceWithoutLocalAuth();
         var enriched = await service.EnrichAsync(source, settings);
 
         Assert.False(enriched.Codex.IsAvailable);
-        Assert.False(enriched.ClaudePro.IsAvailable);
         Assert.False(enriched.Antigravity.IsAvailable);
         Assert.False(enriched.OpenRouter.IsAvailable);
         Assert.False(enriched.OpenCode.IsAvailable);
@@ -36,18 +35,50 @@ public sealed class DirectBillingServiceTests
         var settings = new WidgetSettings
         {
             OpenAi = new ProviderBillingSettings { ShowProLimits = true },
-            Claude = new ProviderBillingSettings { ShowProLimits = true },
             Gemini = new ProviderBillingSettings { ShowProLimits = true },
             OpenRouter = new ProviderBillingSettings { ShowProLimits = true },
             OpenCode = new ProviderBillingSettings { ShowProLimits = true, ShowDirectSource = true }
         };
 
         var source = new UsageSnapshot { PercentUsed = 10 };
-        using var service = new DirectBillingService();
+        using var service = CreateServiceWithoutLocalAuth();
         var enriched = await service.EnrichAsync(source, settings);
 
         Assert.Equal(10, enriched.PercentUsed);
         Assert.False(enriched.Codex.IsAvailable);
-        Assert.False(enriched.ClaudePro.IsAvailable);
+        Assert.False(enriched.Antigravity.IsAvailable);
+    }
+
+    private static DirectBillingService CreateServiceWithoutLocalAuth()
+    {
+        var failingHttp = new HttpClient(new AlwaysNotFoundHandler());
+        var emptyTokens = new AntigravityOAuthTokens();
+
+        return new DirectBillingService(
+            codex: new CodexUsageClient(
+                failingHttp,
+                authFilePathResolver: () => null,
+                authResolver: new CodexAuthResolver(
+                    authFileReader: () => null,
+                    browserCookieReader: () => null,
+                    savedSessionReader: _ => null)),
+            antigravity: new AntigravityUsageClient(
+                failingHttp,
+                authResolver: new GeminiAuthResolver(() => emptyTokens, () => emptyTokens)),
+            openRouter: new OpenRouterUsageClient(failingHttp),
+            openCode: new OpenCodeUsageClient(
+                failingHttp,
+                authResolver: new OpenCodeAuthResolver(
+                    apiKeyReader: () => null,
+                    browserCookieReader: () => null,
+                    savedSessionReader: _ => null)));
+    }
+
+    private sealed class AlwaysNotFoundHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
     }
 }

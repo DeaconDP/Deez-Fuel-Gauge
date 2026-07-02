@@ -41,15 +41,4 @@ public class PlatformPathsTests
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             path));
     }
-
-    [Fact]
-    public void ClaudeCodeCredentialsPath_uses_claude_config_directory()
-    {
-        var path = PlatformPaths.ClaudeCodeCredentialsPath;
-
-        Assert.EndsWith(Path.Combine(".claude", ".credentials.json"), path);
-        Assert.StartsWith(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            path);
-    }
 }

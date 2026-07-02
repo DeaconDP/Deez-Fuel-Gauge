@@ -41,6 +41,9 @@ public sealed class ProviderBillingSettings
 
     public string? CredentialId { get; set; }
 
+    /// <summary>Optional management API key for account-wide credit balance (OpenRouter).</summary>
+    public string? ManagementCredentialId { get; set; }
+
     public string? LastConnectionStatus { get; set; }
 
     [JsonIgnore]

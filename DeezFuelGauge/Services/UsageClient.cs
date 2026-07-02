@@ -72,14 +72,13 @@ public sealed class UsageClient : IDisposable
             BillingCycleStartMs = snapshot.BillingCycleStartMs,
             BillingCycleEndMs = snapshot.BillingCycleEndMs,
             OpenAi = breakdown.Value.OpenAi,
-            Claude = breakdown.Value.Claude,
             Gemini = breakdown.Value.Gemini,
             IsError = snapshot.IsError,
             ErrorMessage = snapshot.ErrorMessage
         };
     }
 
-    private async Task<(ProviderUsageSnapshot OpenAi, ProviderUsageSnapshot Claude, ProviderUsageSnapshot Gemini)?>
+    private async Task<(ProviderUsageSnapshot OpenAi, ProviderUsageSnapshot Gemini)?>
         TryGetProviderBreakdownAsync(UsageSnapshot snapshot, CancellationToken cancellationToken)
     {
         if (snapshot.PlanLimitCents is not > 0
@@ -98,7 +97,6 @@ public sealed class UsageClient : IDisposable
         var spendByProvider = new Dictionary<ModelProvider, double>
         {
             [ModelProvider.OpenAi] = 0,
-            [ModelProvider.Claude] = 0,
             [ModelProvider.Gemini] = 0
         };
 
@@ -114,7 +112,6 @@ public sealed class UsageClient : IDisposable
         var limit = snapshot.PlanLimitCents.Value;
         return (
             ProviderUsageSnapshot.FromSpend(spendByProvider[ModelProvider.OpenAi], limit),
-            ProviderUsageSnapshot.FromSpend(spendByProvider[ModelProvider.Claude], limit),
             ProviderUsageSnapshot.FromSpend(spendByProvider[ModelProvider.Gemini], limit));
     }
 

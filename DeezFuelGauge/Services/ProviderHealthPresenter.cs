@@ -6,8 +6,6 @@ public static class ProviderHealthPresenter
     {
         ["openai-platform"] = "OpenAI Platform",
         ["codex"] = "Codex",
-        ["claude-pro"] = "Claude Pro",
-        ["claude-api"] = "Claude API Console",
         ["antigravity"] = "Antigravity",
         ["openrouter"] = "OpenRouter",
         ["opencode"] = "OpenCode"

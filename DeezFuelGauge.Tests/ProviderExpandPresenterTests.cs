@@ -14,7 +14,6 @@ public sealed class ProviderExpandPresenterTests
 
         Assert.False(state.Cursor);
         Assert.True(state.OpenAi);
-        Assert.False(state.Claude);
         Assert.False(state.Gemini);
         Assert.False(state.OpenRouter);
         Assert.False(state.OpenCode);
@@ -25,7 +24,7 @@ public sealed class ProviderExpandPresenterTests
     {
         var state = ProviderExpandPresenter.Toggle(
             ProviderSection.OpenAi,
-            new ProviderExpandState(false, true, false, false, false, false));
+            new ProviderExpandState(false, true, false, false, false));
 
         Assert.False(state.OpenAi);
     }
@@ -34,13 +33,12 @@ public sealed class ProviderExpandPresenterTests
     public void Toggle_accordion_collapses_other_providers_when_expanding()
     {
         var state = ProviderExpandPresenter.Toggle(
-            ProviderSection.Claude,
-            new ProviderExpandState(true, false, false, false, false, false));
+            ProviderSection.Gemini,
+            new ProviderExpandState(true, false, false, false, false));
 
         Assert.False(state.Cursor);
         Assert.False(state.OpenAi);
-        Assert.True(state.Claude);
-        Assert.False(state.Gemini);
+        Assert.True(state.Gemini);
     }
 
     [Fact]
@@ -50,7 +48,6 @@ public sealed class ProviderExpandPresenterTests
 
         Assert.False(state.Cursor);
         Assert.False(state.OpenAi);
-        Assert.False(state.Claude);
         Assert.True(state.Gemini);
         Assert.False(state.OpenRouter);
         Assert.False(state.OpenCode);
