@@ -45,10 +45,9 @@ Click the **gear** in the widget header to configure what is shown:
 |----------|--------------------------|-----------------------------|
 | **Cursor** | Sign in to Cursor IDE on this machine — no API key needed | — |
 | **OpenAI** | Aggregated from your Cursor plan | **Codex limits** (ChatGPT Plus/Pro 5h + weekly) via `~/.codex/auth.json` or session cookie; optional **Platform** Admin API key + budget |
-| **Claude** | Aggregated from your Cursor plan | **Pro/Max limits** via Open + Refresh (Claude Code login, Chrome/Edge session, or saved session); optional **API Console** Admin key + budget |
-| **Gemini** | Aggregated from your Cursor plan | **Antigravity limits** (Gemini Models + Claude/GPT groups, 5h + weekly) auto-read from local Antigravity login |
+| **Gemini** | Aggregated from your Cursor plan | **Gemini limits** (5h + weekly) via Antigravity IDE or Gemini CLI (`gemini login` → `~/.gemini/oauth_creds.json`) |
 
-- Toggle **Show Cursor usage** / **Show Codex limits** / **Show Claude Pro limits** / **Show Antigravity limits** / **Show direct API usage** independently per provider.
+- Toggle **Show Cursor usage** / **Show Codex limits** / **Show Gemini limits** / **Show direct API usage** independently per provider.
 - **Easy setup** (per provider section) turns on subscription-limit bars, checks local auth, runs the same connection tests as **Test**, and opens login pages or `codex login` when manual steps are still needed.
 - **Spend details** shows remaining quota (Cursor) or dollar/token breakdown (direct).
 - Use **Test** buttons to verify API keys without waiting for the 5-minute refresh.
@@ -58,11 +57,7 @@ Click the **gear** in the widget header to configure what is shown:
 
 **OpenAI (Platform, optional):** create an [organization admin key](https://platform.openai.com) with `api.usage.read` scope for org spend tracking against a monthly budget. This is separate from ChatGPT/Codex subscription limits.
 
-**Claude (Pro/Max):** click **Open** in settings to sign in at claude.ai, then click **Refresh**. The widget reads your session from Chrome or Edge automatically, or from Claude Code login (`~/.claude/.credentials.json`) when present. If Refresh fails, close your browser and try again. Uses undocumented claude.ai endpoints and may change without notice.
-
-**Claude (API Console, advanced):** create an [Admin API key](https://console.anthropic.com) (`sk-ant-admin...`) and optional monthly budget for org spend tracking. This is separate from Claude Pro/Max subscription limits.
-
-**Gemini (Antigravity):** sign in to [Antigravity](https://antigravity.google/) on this machine once. The widget reads your local Antigravity OAuth session and shows the same grouped **Gemini Models** and **Claude and GPT models** 5-hour and weekly limits as Antigravity's Model Quota screen. No API keys or project IDs needed. Uses undocumented Google Cloud Code endpoints and may change without notice.
+**Gemini (limits):** sign in to **Antigravity IDE** on this machine, or run **`gemini login`** with the [Gemini CLI](https://github.com/google-gemini/gemini-cli) (`npm i -g @google/gemini-cli`). Connect tries Gemini CLI first when installed, otherwise launches Antigravity IDE. The widget reads your local OAuth session and shows grouped **Gemini Models** and **Claude and GPT models** 5-hour and weekly limits (Antigravity), or per-model Gemini CLI quotas as a fallback. No API keys or project IDs needed. Uses undocumented Google Cloud Code endpoints and may change without notice.
 
 ### Settings location
 
@@ -93,11 +88,10 @@ Encrypted API keys: `credentials/` in the same folder.
    - **Windows:** `%APPDATA%\Cursor\User\globalStorage\state.vscdb`
    - **macOS:** `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb`
 2. Calls Cursor's unofficial `GetCurrentPeriodUsage` API (Pro/Ultra/Team plans), or falls back to `GET /auth/usage` for legacy Enterprise request-based quotas.
-3. Optionally enriches OpenAI / Claude / Gemini bars from Cursor's aggregated usage events.
+3. Optionally enriches OpenAI / Gemini bars from Cursor's aggregated usage events.
 4. Optionally fetches **Codex / ChatGPT Plus** 5-hour and weekly limits from `chatgpt.com` when Codex auth or a session cookie is available.
-5. Optionally fetches **Claude Pro/Max** session and weekly limits via Claude Code OAuth, browser session detection, or a saved session when configured.
-6. Optionally fetches **Antigravity** grouped Gemini and Claude/GPT 5-hour and weekly limits from Google Cloud Code when Antigravity is signed in locally.
-7. Optionally fetches **direct** OpenAI Platform / Claude API Console billing via provider admin APIs when configured in settings.
+5. Optionally fetches **Antigravity** grouped Gemini and third-party 5-hour and weekly limits from Google Cloud Code when Antigravity is signed in locally.
+6. Optionally fetches **direct** OpenAI Platform billing via provider admin APIs when configured in settings.
 
 ## Disclaimer
 

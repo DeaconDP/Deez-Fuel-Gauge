@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Text;
 using CursorUsageWidget.Models;
 using CursorUsageWidget.Services;
@@ -43,29 +43,50 @@ public sealed class ProviderEasySetupServiceTests
         Assert.True(settings.Cursor.ShowDetails);
         Assert.True(settings.ShowBreakdown);
         Assert.Equal("Connected via Cursor session", result.StatusMessage);
+        Assert.Equal("Connected via Cursor session", settings.Cursor.LastConnectionStatus);
     }
 
     [Fact]
-    public void SetupCursor_reports_missing_cursor_session()
+    public void SetupCursor_launches_ide_when_session_missing()
     {
         var settings = new WidgetSettings();
+        var launcher = new RecordingLauncher();
         var service = new ProviderEasySetupService(
-            cursorTokenReader: () => new CursorTokens());
+            cursorTokenReader: () => new CursorTokens(),
+            launcher: launcher);
 
         var result = service.SetupCursor(settings);
 
-        Assert.Equal("Sign in to Cursor IDE on this machine", result.StatusMessage);
+        Assert.True(launcher.LaunchedCursorIde);
+        Assert.Contains("Test", result.StatusMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(result.StatusMessage, settings.Cursor.LastConnectionStatus);
     }
 
     [Fact]
-    public async Task SetupOpenAi_enables_subscription_toggles_and_tests_codex_auth_file()
+    public async Task SetupOpenAi_enables_cursor_spend_only()
+    {
+        var settings = new WidgetSettings { OpenAi = { ShowDirectSource = true, ShowProLimits = false } };
+        var service = new ProviderEasySetupService(
+            cursorTokenReader: () => new CursorTokens { AccessToken = "token" });
+
+        var result = await service.SetupOpenAiAsync(settings);
+
+        Assert.True(settings.OpenAi.ShowCursorSource);
+        Assert.True(settings.OpenAi.ShowDetails);
+        Assert.True(settings.OpenAi.ShowDirectSource);
+        Assert.False(settings.OpenAi.ShowProLimits);
+        Assert.Equal("Via Cursor: connected", result.StatusMessage);
+    }
+
+    [Fact]
+    public async Task SetupCodex_enables_codex_and_tests_auth_file()
     {
         var authPath = Path.Combine(Path.GetTempPath(), $"codex-easy-setup-{Guid.NewGuid():N}.json");
         await File.WriteAllTextAsync(authPath, SampleAuthJson);
 
         try
         {
-            var settings = new WidgetSettings { OpenAi = { ShowDirectSource = false } };
+            var settings = new WidgetSettings { OpenAi = { ShowCursorSource = false } };
             var handler = new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent(SampleUsageJson, Encoding.UTF8, "application/json")
@@ -74,12 +95,10 @@ public sealed class ProviderEasySetupServiceTests
             var launcher = new RecordingLauncher();
             var service = new ProviderEasySetupService(codex: codex, launcher: launcher);
 
-            var result = await service.SetupOpenAiAsync(settings);
+            var result = await service.SetupCodexAsync(settings);
 
-            Assert.True(settings.OpenAi.ShowCursorSource);
-            Assert.True(settings.OpenAi.ShowDetails);
+            Assert.False(settings.OpenAi.ShowCursorSource);
             Assert.True(settings.OpenAi.ShowProLimits);
-            Assert.False(settings.OpenAi.ShowDirectSource);
             Assert.Equal("Connected (Plus)", result.StatusMessage);
             Assert.Equal("Codex: Connected (Plus)", settings.OpenAi.ProLastConnectionStatus);
             Assert.False(launcher.LaunchedCodexLogin);
@@ -92,15 +111,19 @@ public sealed class ProviderEasySetupServiceTests
     }
 
     [Fact]
-    public async Task SetupOpenAi_launches_codex_login_when_auth_missing()
+    public async Task SetupCodex_launches_codex_login_when_auth_missing()
     {
         var settings = new WidgetSettings();
         var launcher = new RecordingLauncher();
         var codex = new CodexUsageClient(new HttpClient(new StubHttpHandler(_ =>
             new HttpResponseMessage(HttpStatusCode.OK))), () => null);
-        var service = new ProviderEasySetupService(codex: codex, launcher: launcher);
+        var emptyResolver = new CodexAuthResolver(
+            authFileReader: () => null,
+            browserCookieReader: () => null,
+            savedSessionReader: _ => null);
+        var service = new ProviderEasySetupService(codex: codex, launcher: launcher, codexAuthResolver: emptyResolver);
 
-        var result = await service.SetupOpenAiAsync(settings);
+        var result = await service.SetupCodexAsync(settings);
 
         Assert.True(launcher.LaunchedCodexLogin);
         Assert.Contains("https://chatgpt.com", launcher.OpenedUrls);
@@ -108,123 +131,62 @@ public sealed class ProviderEasySetupServiceTests
         Assert.True(result.OpenedExternalUrl);
         Assert.Contains("codex login", result.StatusMessage, StringComparison.OrdinalIgnoreCase);
     }
-
     [Fact]
-    public async Task SetupClaude_opens_claude_when_auth_missing()
-    {
-        var settings = new WidgetSettings();
-        var launcher = new RecordingLauncher();
-        var service = new ProviderEasySetupService(
-            claudePro: new ClaudeProUsageClient(
-                new HttpClient(new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.OK))),
-                new ClaudeProAuthResolver(
-                    claudeCodeReader: () => null,
-                    browserCookieReader: () => null,
-                    savedSessionReader: _ => null)),
-            launcher: launcher);
-
-        var result = await service.SetupClaudeAsync(settings);
-
-        Assert.True(settings.Claude.ShowProLimits);
-        Assert.False(settings.Claude.ShowApiConsoleBilling);
-        Assert.Contains("https://claude.ai/settings/usage", launcher.OpenedUrls);
-        Assert.Contains("Refresh", result.StatusMessage, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public async Task SetupClaude_tests_existing_session_cookie()
-    {
-        var settings = new WidgetSettings
-        {
-            Claude = { ProSessionCredentialId = CredentialStore.Store("claude-pro-test", "session-key") }
-        };
-
-        try
-        {
-            var handler = new StubHttpHandler(request =>
-            {
-                if (request.RequestUri!.AbsolutePath == "/api/account")
-                {
-                    return new HttpResponseMessage(HttpStatusCode.OK)
-                    {
-                        Content = new StringContent(
-                            """{"memberships":[{"organization":{"uuid":"org-1"}}]}""",
-                            Encoding.UTF8,
-                            "application/json")
-                    };
-                }
-
-                return new HttpResponseMessage(HttpStatusCode.OK)
-                {
-                    Content = new StringContent(
-                        """{"five_hour":{"utilization":0.1},"seven_day":{"utilization":20}}""",
-                        Encoding.UTF8,
-                        "application/json")
-                };
-            });
-
-            var service = new ProviderEasySetupService(
-                claudePro: new ClaudeProUsageClient(new HttpClient(handler)),
-                launcher: new RecordingLauncher());
-
-            var result = await service.SetupClaudeAsync(settings);
-
-            Assert.Equal("Connected", result.StatusMessage);
-        }
-        finally
-        {
-            CredentialStore.Delete(settings.Claude.ProSessionCredentialId);
-        }
-    }
-
-    [Fact]
-    public async Task SetupClaude_connects_via_claude_code_oauth()
-    {
-        var handler = new StubHttpHandler(request =>
-        {
-            Assert.Equal("/api/oauth/usage", request.RequestUri!.AbsolutePath);
-            return new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new StringContent(
-                    """{"five_hour":{"utilization":0.5},"seven_day":{"utilization":0.6}}""",
-                    Encoding.UTF8,
-                    "application/json")
-            };
-        });
-
-        var launcher = new RecordingLauncher();
-        var service = new ProviderEasySetupService(
-            claudePro: new ClaudeProUsageClient(
-                new HttpClient(handler),
-                new ClaudeProAuthResolver(
-                    claudeCodeReader: () => new ClaudeCodeOAuthCredential { AccessToken = "oauth-token" },
-                    browserCookieReader: () => null,
-                    savedSessionReader: _ => null)),
-            launcher: launcher);
-
-        var result = await service.SetupClaudeAsync(new WidgetSettings());
-
-        Assert.Equal("Connected", result.StatusMessage);
-        Assert.Empty(launcher.OpenedUrls);
-    }
-
-    [Fact]
-    public async Task SetupGemini_opens_antigravity_when_tokens_missing()
+    public async Task SetupGemini_launches_antigravity_ide_when_tokens_missing()
     {
         var settings = new WidgetSettings();
         var launcher = new RecordingLauncher();
         var service = new ProviderEasySetupService(
             antigravity: new AntigravityUsageClient(
                 new HttpClient(new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.OK))),
-                () => new AntigravityOAuthTokens()),
+                new GeminiAuthResolver(
+                    antigravityReader: () => new AntigravityOAuthTokens(),
+                    geminiCliReader: () => new AntigravityOAuthTokens())),
             launcher: launcher,
-            antigravityTokenReader: () => new AntigravityOAuthTokens());
+            geminiAuthResolver: new GeminiAuthResolver(
+                antigravityReader: () => new AntigravityOAuthTokens(),
+                geminiCliReader: () => new AntigravityOAuthTokens()));
 
         var result = await service.SetupGeminiAsync(settings);
 
         Assert.True(settings.Gemini.ShowProLimits);
-        Assert.Contains("https://antigravity.google/", launcher.OpenedUrls);
-        Assert.Equal("Sign in to Antigravity on this machine", result.StatusMessage);
+        Assert.True(launcher.LaunchedAntigravityIde);
+        Assert.Contains("Antigravity IDE", result.StatusMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task SetupGemini_tests_connection_when_cli_auth_present()
+    {
+        var handler = new StubHttpHandler(request =>
+        {
+            if (request.RequestUri!.AbsolutePath.Contains("loadCodeAssist", StringComparison.Ordinal))
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(
+                        """{"cloudaicompanionProject":"proj-1","currentTier":{"id":"standard-tier"}}""",
+                        System.Text.Encoding.UTF8,
+                        "application/json")
+                };
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(AntigravityUsageClientTests.SampleQuotaSummaryJson, System.Text.Encoding.UTF8, "application/json")
+            };
+        });
+
+        var authResolver = new GeminiAuthResolver(
+            antigravityReader: () => new AntigravityOAuthTokens(),
+            geminiCliReader: () => new AntigravityOAuthTokens { AccessToken = "cli-token" });
+
+        var service = new ProviderEasySetupService(
+            antigravity: new AntigravityUsageClient(new HttpClient(handler), authResolver),
+            geminiAuthResolver: authResolver);
+
+        var result = await service.SetupGeminiAsync(new WidgetSettings());
+
+        Assert.StartsWith("Connected", result.StatusMessage, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -264,11 +226,31 @@ public sealed class ProviderEasySetupServiceTests
     {
         public bool LaunchedCodexLogin { get; private set; }
 
+        public bool LaunchedAntigravityIde { get; private set; }
+
+        public bool LaunchedCursorIde { get; private set; }
+
         public List<string> OpenedUrls { get; } = [];
 
         public override void OpenUrl(string url) => OpenedUrls.Add(url);
 
-        public override void LaunchCodexLogin() => LaunchedCodexLogin = true;
+        public override bool TryLaunchCodexLogin()
+        {
+            LaunchedCodexLogin = true;
+            return true;
+        }
+
+        public override AppLaunchResult LaunchAntigravityIde()
+        {
+            LaunchedAntigravityIde = true;
+            return AppLaunchResult.Launched;
+        }
+
+        public override AppLaunchResult LaunchCursorIde()
+        {
+            LaunchedCursorIde = true;
+            return AppLaunchResult.Launched;
+        }
     }
 
     private sealed class StubHttpHandler : HttpMessageHandler

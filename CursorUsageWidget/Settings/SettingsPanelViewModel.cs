@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.Globalization;
 using CursorUsageWidget.Models;
 using CursorUsageWidget.Services;
@@ -9,478 +10,51 @@ public sealed class SettingsPanelViewModel : ViewModelBase
     private readonly ProviderEasySetupService _easySetup;
     private readonly OpenAiBillingClient _openAiBilling;
     private readonly CodexUsageClient _codexBilling;
-    private readonly AnthropicBillingClient _anthropicBilling;
-    private readonly ClaudeProUsageClient _claudeProBilling;
+    private readonly CodexAuthResolver _codexAuthResolver;
     private readonly AntigravityUsageClient _antigravityBilling;
     private readonly OpenRouterUsageClient _openRouterBilling;
     private readonly OpenCodeUsageClient _openCodeBilling;
+    private readonly OpenCodeAuthResolver _openCodeAuthResolver;
+    private readonly GeminiAuthResolver _geminiAuthResolver;
     private readonly Func<CursorTokens> _cursorTokenReader;
-    private readonly Func<AntigravityOAuthTokens> _antigravityTokenReader;
     private ISettingsPanelHost? _host;
     private bool _suppressChangeNotifications;
+    private bool _updatingDerivedState;
+    private SettingsExpandedProvider _expandedProvider = SettingsExpandedProvider.None;
 
     private string? _openAiCredentialId;
     private string? _openAiProSessionCredentialId;
-    private string? _claudeProSessionCredentialId;
-    private string? _claudeCredentialId;
-
-    private bool _showCursor = true;
-    private bool _showCursorDetails = true;
-    private bool _showBreakdown = true;
-    private string _cursorStatus = "";
-
-    private bool _showOpenAi = true;
-    private bool _showOpenAiDetails = true;
-    private bool _showOpenAiDirect;
-    private bool _showOpenAiDirectDetails = true;
-    private bool _showCodexLimits = true;
-    private bool _showCodexDetails = true;
-    private bool _showCodexBreakdown = true;
-    private string _openAiOrgId = "";
-    private string _openAiBudget = "";
-    private string _openAiApiKeyWatermark = "Admin API key";
-    private string _openAiSessionCookieWatermark = "ChatGPT session cookie (optional fallback)";
-    private string _openAiStatus = "";
-    private string _codexStatus = "";
-
-    private bool _showClaude = true;
-    private bool _showClaudeDetails = true;
-    private bool _showClaudePro = true;
-    private bool _showClaudeProDetails = true;
-    private bool _showClaudeProBreakdown = true;
-    private bool _showClaudeApiConsole;
-    private bool _showClaudeApiConsoleDetails = true;
-    private string _claudeBudget = "";
-    private string _claudeApiKeyWatermark = "Admin API key (sk-ant-admin...)";
-    private string _claudeProStatus = "";
-    private string _claudeApiConsoleStatus = "";
-
-    private bool _showGemini = true;
-    private bool _showGeminiDetails = true;
-    private bool _showAntigravityLimits = true;
-    private bool _showAntigravityDetails = true;
-    private bool _showAntigravityBreakdown = true;
-    private string _antigravityStatus = "";
-
-    private bool _showOpenRouterLimits = true;
-    private bool _showOpenRouterDetails = true;
-    private string _openRouterApiKeyWatermark = "API key (sk-or-...)";
-    private string _openRouterStatus = "";
     private string? _openRouterCredentialId;
-
-    private bool _showOpenCodeZen = true;
-    private bool _showOpenCodeGo = true;
-    private bool _showOpenCodeZenDetails = true;
-    private bool _showOpenCodeGoDetails = true;
-    private bool _showOpenCodeGoBreakdown = true;
-    private string _openCodeWorkspaceId = "";
-    private string _openCodeSessionWatermark = "opencode.ai auth cookie";
-    private string _openCodeStatus = "";
+    private string? _openRouterManagementCredentialId;
     private string? _openCodeProSessionCredentialId;
-
-    private bool _showDiskDrives = true;
-    private bool _showDiskDetails = true;
-
-    private SettingsExpandedProvider _expandedProvider = SettingsExpandedProvider.None;
-
-    private ProviderConnectionState _cursorConnectionState = ProviderConnectionState.Off;
-    private ProviderConnectionState _openAiHeaderState = ProviderConnectionState.Off;
-    private ProviderConnectionState _claudeHeaderState = ProviderConnectionState.Off;
-    private ProviderConnectionState _geminiHeaderState = ProviderConnectionState.Off;
-    private ProviderConnectionState _openRouterHeaderState = ProviderConnectionState.Off;
-    private ProviderConnectionState _openCodeHeaderState = ProviderConnectionState.Off;
+    private string? _openCodeWorkspaceId;
 
     public SettingsPanelViewModel(
         ProviderEasySetupService easySetup,
         OpenAiBillingClient openAiBilling,
         CodexUsageClient codexBilling,
-        AnthropicBillingClient anthropicBilling,
-        ClaudeProUsageClient claudeProBilling,
         AntigravityUsageClient antigravityBilling,
         OpenRouterUsageClient openRouterBilling,
         OpenCodeUsageClient openCodeBilling,
         Func<CursorTokens>? cursorTokenReader = null,
-        Func<AntigravityOAuthTokens>? antigravityTokenReader = null)
+        GeminiAuthResolver? geminiAuthResolver = null)
     {
         _easySetup = easySetup;
         _openAiBilling = openAiBilling;
         _codexBilling = codexBilling;
-        _anthropicBilling = anthropicBilling;
-        _claudeProBilling = claudeProBilling;
+        _codexAuthResolver = new CodexAuthResolver(
+            authFileReader: () => CodexUsageClient.TryReadLocalAuthFile(out var auth, null) ? auth : null);
         _antigravityBilling = antigravityBilling;
         _openRouterBilling = openRouterBilling;
         _openCodeBilling = openCodeBilling;
+        _openCodeAuthResolver = new OpenCodeAuthResolver();
         _cursorTokenReader = cursorTokenReader ?? CursorTokenReader.Read;
-        _antigravityTokenReader = antigravityTokenReader ?? AntigravityTokenReader.Read;
+        _geminiAuthResolver = geminiAuthResolver ?? new GeminiAuthResolver();
     }
+
+    public ObservableCollection<ProviderSettingsSectionViewModel> Sections { get; } = [];
 
     public void AttachHost(ISettingsPanelHost host) => _host = host;
-
-    public bool ShowCursor
-    {
-        get => _showCursor;
-        set => SetToggle(ref _showCursor, value);
-    }
-
-    public bool ShowCursorDetails
-    {
-        get => _showCursorDetails;
-        set => SetToggle(ref _showCursorDetails, value);
-    }
-
-    public bool ShowBreakdown
-    {
-        get => _showBreakdown;
-        set => SetToggle(ref _showBreakdown, value);
-    }
-
-    public string CursorStatus
-    {
-        get => _cursorStatus;
-        set => SetProperty(ref _cursorStatus, value);
-    }
-
-    public bool ShowOpenAi
-    {
-        get => _showOpenAi;
-        set => SetToggle(ref _showOpenAi, value);
-    }
-
-    public bool ShowOpenAiDetails
-    {
-        get => _showOpenAiDetails;
-        set => SetToggle(ref _showOpenAiDetails, value);
-    }
-
-    public bool ShowOpenAiDirect
-    {
-        get => _showOpenAiDirect;
-        set
-        {
-            if (SetToggle(ref _showOpenAiDirect, value))
-            {
-                OnPropertyChanged(nameof(ShowOpenAiDirectCredentials));
-                UpdateConnectionStates();
-            }
-        }
-    }
-
-    public bool ShowOpenAiDirectDetails
-    {
-        get => _showOpenAiDirectDetails;
-        set => SetToggle(ref _showOpenAiDirectDetails, value);
-    }
-
-    public bool ShowCodexLimits
-    {
-        get => _showCodexLimits;
-        set
-        {
-            if (SetToggle(ref _showCodexLimits, value))
-            {
-                OnPropertyChanged(nameof(ShowCodexCredentials));
-                UpdateConnectionStates();
-            }
-        }
-    }
-
-    public bool ShowCodexDetails
-    {
-        get => _showCodexDetails;
-        set => SetToggle(ref _showCodexDetails, value);
-    }
-
-    public bool ShowCodexBreakdown
-    {
-        get => _showCodexBreakdown;
-        set => SetToggle(ref _showCodexBreakdown, value);
-    }
-
-    public string OpenAiOrgId
-    {
-        get => _openAiOrgId;
-        set
-        {
-            if (SetProperty(ref _openAiOrgId, value))
-                NotifyFieldChanged();
-        }
-    }
-
-    public string OpenAiBudget
-    {
-        get => _openAiBudget;
-        set
-        {
-            if (SetProperty(ref _openAiBudget, value))
-                NotifyFieldChanged();
-        }
-    }
-
-    public string OpenAiApiKeyWatermark
-    {
-        get => _openAiApiKeyWatermark;
-        private set
-        {
-            if (SetProperty(ref _openAiApiKeyWatermark, value))
-                OnPropertyChanged(nameof(HasOpenAiApiKeySaved));
-        }
-    }
-
-    public bool HasOpenAiApiKeySaved => !string.IsNullOrWhiteSpace(_openAiCredentialId);
-
-    public bool ShowOpenAiDirectCredentials => ShowOpenAiDirect && !HasOpenAiApiKeySaved;
-
-    public bool HasCodexAutoAuth => _codexBilling.HasLocalAuthFile();
-
-    public bool ShowCodexCredentials =>
-        ShowCodexLimits && !HasCodexAutoAuth && !HasOpenAiSessionCookieSaved;
-
-    public string OpenAiSessionCookieWatermark
-    {
-        get => _openAiSessionCookieWatermark;
-        private set
-        {
-            if (SetProperty(ref _openAiSessionCookieWatermark, value))
-                OnPropertyChanged(nameof(HasOpenAiSessionCookieSaved));
-        }
-    }
-
-    public bool HasOpenAiSessionCookieSaved => !string.IsNullOrWhiteSpace(_openAiProSessionCredentialId);
-
-    public string OpenAiStatus
-    {
-        get => _openAiStatus;
-        set => SetProperty(ref _openAiStatus, value);
-    }
-
-    public string CodexStatus
-    {
-        get => _codexStatus;
-        set => SetProperty(ref _codexStatus, value);
-    }
-
-    public bool ShowClaude
-    {
-        get => _showClaude;
-        set => SetToggle(ref _showClaude, value);
-    }
-
-    public bool ShowClaudeDetails
-    {
-        get => _showClaudeDetails;
-        set => SetToggle(ref _showClaudeDetails, value);
-    }
-
-    public bool ShowClaudePro
-    {
-        get => _showClaudePro;
-        set
-        {
-            if (SetToggle(ref _showClaudePro, value))
-                UpdateConnectionStates();
-        }
-    }
-
-    public bool ShowClaudeProDetails
-    {
-        get => _showClaudeProDetails;
-        set => SetToggle(ref _showClaudeProDetails, value);
-    }
-
-    public bool ShowClaudeProBreakdown
-    {
-        get => _showClaudeProBreakdown;
-        set => SetToggle(ref _showClaudeProBreakdown, value);
-    }
-
-    public bool ShowClaudeApiConsole
-    {
-        get => _showClaudeApiConsole;
-        set
-        {
-            if (SetToggle(ref _showClaudeApiConsole, value))
-            {
-                OnPropertyChanged(nameof(ShowClaudeApiConsoleCredentials));
-                UpdateConnectionStates();
-            }
-        }
-    }
-
-    public bool ShowClaudeApiConsoleCredentials => ShowClaudeApiConsole && !HasClaudeApiKeySaved;
-
-    public bool ShowClaudeApiConsoleDetails
-    {
-        get => _showClaudeApiConsoleDetails;
-        set => SetToggle(ref _showClaudeApiConsoleDetails, value);
-    }
-
-    public string ClaudeBudget
-    {
-        get => _claudeBudget;
-        set
-        {
-            if (SetProperty(ref _claudeBudget, value))
-                NotifyFieldChanged();
-        }
-    }
-
-    public bool HasClaudeProAuth =>
-        HasClaudeSessionCookieSaved
-        || (ClaudeCodeTokenReader.Read() is { IsExpired: false });
-
-    public bool HasClaudeSessionCookieSaved => !string.IsNullOrWhiteSpace(_claudeProSessionCredentialId);
-
-    public string ClaudeApiKeyWatermark
-    {
-        get => _claudeApiKeyWatermark;
-        private set
-        {
-            if (SetProperty(ref _claudeApiKeyWatermark, value))
-                OnPropertyChanged(nameof(HasClaudeApiKeySaved));
-        }
-    }
-
-    public bool HasClaudeApiKeySaved => !string.IsNullOrWhiteSpace(_claudeCredentialId);
-
-    public string ClaudeProStatus
-    {
-        get => _claudeProStatus;
-        set => SetProperty(ref _claudeProStatus, value);
-    }
-
-    public string ClaudeApiConsoleStatus
-    {
-        get => _claudeApiConsoleStatus;
-        set => SetProperty(ref _claudeApiConsoleStatus, value);
-    }
-
-    public bool ShowGemini
-    {
-        get => _showGemini;
-        set => SetToggle(ref _showGemini, value);
-    }
-
-    public bool ShowGeminiDetails
-    {
-        get => _showGeminiDetails;
-        set => SetToggle(ref _showGeminiDetails, value);
-    }
-
-    public bool ShowAntigravityLimits
-    {
-        get => _showAntigravityLimits;
-        set => SetToggle(ref _showAntigravityLimits, value);
-    }
-
-    public bool ShowAntigravityDetails
-    {
-        get => _showAntigravityDetails;
-        set => SetToggle(ref _showAntigravityDetails, value);
-    }
-
-    public bool ShowAntigravityBreakdown
-    {
-        get => _showAntigravityBreakdown;
-        set => SetToggle(ref _showAntigravityBreakdown, value);
-    }
-
-    public string AntigravityStatus
-    {
-        get => _antigravityStatus;
-        set => SetProperty(ref _antigravityStatus, value);
-    }
-
-    public bool ShowOpenRouterLimits
-    {
-        get => _showOpenRouterLimits;
-        set => SetToggle(ref _showOpenRouterLimits, value);
-    }
-
-    public bool ShowOpenRouterDetails
-    {
-        get => _showOpenRouterDetails;
-        set => SetToggle(ref _showOpenRouterDetails, value);
-    }
-
-    public string OpenRouterApiKeyWatermark
-    {
-        get => _openRouterApiKeyWatermark;
-        private set => SetProperty(ref _openRouterApiKeyWatermark, value);
-    }
-
-    public string OpenRouterStatus
-    {
-        get => _openRouterStatus;
-        set => SetProperty(ref _openRouterStatus, value);
-    }
-
-    public bool HasOpenRouterApiKeySaved => !string.IsNullOrWhiteSpace(_openRouterCredentialId);
-
-    public bool ShowOpenCodeZen
-    {
-        get => _showOpenCodeZen;
-        set => SetToggle(ref _showOpenCodeZen, value);
-    }
-
-    public bool ShowOpenCodeGo
-    {
-        get => _showOpenCodeGo;
-        set => SetToggle(ref _showOpenCodeGo, value);
-    }
-
-    public bool ShowOpenCodeZenDetails
-    {
-        get => _showOpenCodeZenDetails;
-        set => SetToggle(ref _showOpenCodeZenDetails, value);
-    }
-
-    public bool ShowOpenCodeGoDetails
-    {
-        get => _showOpenCodeGoDetails;
-        set => SetToggle(ref _showOpenCodeGoDetails, value);
-    }
-
-    public bool ShowOpenCodeGoBreakdown
-    {
-        get => _showOpenCodeGoBreakdown;
-        set => SetToggle(ref _showOpenCodeGoBreakdown, value);
-    }
-
-    public string OpenCodeWorkspaceId
-    {
-        get => _openCodeWorkspaceId;
-        set => SetProperty(ref _openCodeWorkspaceId, value);
-    }
-
-    public string OpenCodeSessionWatermark
-    {
-        get => _openCodeSessionWatermark;
-        private set => SetProperty(ref _openCodeSessionWatermark, value);
-    }
-
-    public string OpenCodeStatus
-    {
-        get => _openCodeStatus;
-        set => SetProperty(ref _openCodeStatus, value);
-    }
-
-    public bool HasOpenCodeSessionSaved => !string.IsNullOrWhiteSpace(_openCodeProSessionCredentialId);
-
-    public bool ShowDiskDrives
-    {
-        get => _showDiskDrives;
-        set
-        {
-            if (SetToggle(ref _showDiskDrives, value))
-                OnPropertyChanged(nameof(DiskHeaderColor));
-        }
-    }
-
-    public bool ShowDiskDetails
-    {
-        get => _showDiskDetails;
-        set => SetToggle(ref _showDiskDetails, value);
-    }
 
     public SettingsExpandedProvider ExpandedProvider
     {
@@ -490,35 +64,352 @@ public sealed class SettingsPanelViewModel : ViewModelBase
             if (!SetProperty(ref _expandedProvider, value))
                 return;
 
-            NotifyAccordionPropertiesChanged();
+            foreach (var section in Sections)
+                section.IsExpanded = section.ProviderId == value;
+
             _host?.OnSettingsLayoutChanged();
         }
     }
 
     public bool IsCursorExpanded => ExpandedProvider == SettingsExpandedProvider.Cursor;
     public bool IsOpenAiExpanded => ExpandedProvider == SettingsExpandedProvider.OpenAi;
-    public bool IsClaudeExpanded => ExpandedProvider == SettingsExpandedProvider.Claude;
     public bool IsGeminiExpanded => ExpandedProvider == SettingsExpandedProvider.Gemini;
     public bool IsOpenRouterExpanded => ExpandedProvider == SettingsExpandedProvider.OpenRouter;
     public bool IsOpenCodeExpanded => ExpandedProvider == SettingsExpandedProvider.OpenCode;
     public bool IsDiskExpanded => ExpandedProvider == SettingsExpandedProvider.Disk;
 
-    public string CursorChevron => IsCursorExpanded ? "▴" : "▾";
-    public string OpenAiChevron => IsOpenAiExpanded ? "▴" : "▾";
-    public string ClaudeChevron => IsClaudeExpanded ? "▴" : "▾";
-    public string GeminiChevron => IsGeminiExpanded ? "▴" : "▾";
-    public string OpenRouterChevron => IsOpenRouterExpanded ? "▴" : "▾";
-    public string OpenCodeChevron => IsOpenCodeExpanded ? "▴" : "▾";
-    public string DiskChevron => IsDiskExpanded ? "▴" : "▾";
+    public bool ShowCursor
+    {
+        get => GetCursorMain().IsEnabled;
+        set => SetSourceEnabled(GetCursorMain(), value);
+    }
 
-    public string CursorHeaderColor => ProviderConnectionStateHelper.ToColor(_cursorConnectionState);
-    public string OpenAiHeaderColor => ProviderConnectionStateHelper.ToColor(_openAiHeaderState);
-    public string ClaudeHeaderColor => ProviderConnectionStateHelper.ToColor(_claudeHeaderState);
-    public string GeminiHeaderColor => ProviderConnectionStateHelper.ToColor(_geminiHeaderState);
-    public string OpenRouterHeaderColor => ProviderConnectionStateHelper.ToColor(_openRouterHeaderState);
-    public string OpenCodeHeaderColor => ProviderConnectionStateHelper.ToColor(_openCodeHeaderState);
-    public string DiskHeaderColor => ProviderConnectionStateHelper.ToColor(
-        ShowDiskDrives ? ProviderConnectionState.Connected : ProviderConnectionState.Off);
+    public bool ShowCursorDetails
+    {
+        get => GetCursorMain().ShowDetails;
+        set => SetSourceDetail(GetCursorMain(), value);
+    }
+
+    public bool ShowBreakdown
+    {
+        get => GetCursorBreakdown().ShowBreakdown;
+        set
+        {
+            var breakdown = GetCursorBreakdown();
+            if (SetPropertyOnSource(breakdown, breakdown.ShowBreakdown, value, nameof(ProviderSourceViewModel.ShowBreakdown)))
+                NotifyChanged();
+        }
+    }
+
+    public string CursorStatus
+    {
+        get => GetCursorMain().Status;
+        set => SetSourceStatus(GetCursorMain(), value);
+    }
+
+    public bool ShowOpenAi
+    {
+        get => GetSource(ProviderSourceKind.OpenAiViaCursor).IsEnabled;
+        set => SetSourceEnabled(GetSource(ProviderSourceKind.OpenAiViaCursor), value);
+    }
+
+    public bool ShowOpenAiDetails
+    {
+        get => GetSource(ProviderSourceKind.OpenAiViaCursor).ShowDetails;
+        set => SetSourceDetail(GetSource(ProviderSourceKind.OpenAiViaCursor), value);
+    }
+
+    public bool ShowOpenAiDirect
+    {
+        get => GetSource(ProviderSourceKind.OpenAiDirect).IsEnabled;
+        set => SetSourceEnabled(GetSource(ProviderSourceKind.OpenAiDirect), value);
+    }
+
+    public bool ShowOpenAiDirectDetails
+    {
+        get => GetSource(ProviderSourceKind.OpenAiDirect).ShowDetails;
+        set => SetSourceDetail(GetSource(ProviderSourceKind.OpenAiDirect), value);
+    }
+
+    public bool ShowCodexLimits
+    {
+        get => GetSource(ProviderSourceKind.OpenAiCodex).IsEnabled;
+        set => SetSourceEnabled(GetSource(ProviderSourceKind.OpenAiCodex), value);
+    }
+
+    public bool ShowCodexDetails
+    {
+        get => GetSource(ProviderSourceKind.OpenAiCodex).ShowDetails;
+        set => SetSourceDetail(GetSource(ProviderSourceKind.OpenAiCodex), value);
+    }
+
+    public bool ShowCodexBreakdown
+    {
+        get => GetSource(ProviderSourceKind.OpenAiCodex).ShowLimits;
+        set
+        {
+            var source = GetSource(ProviderSourceKind.OpenAiCodex);
+            if (SetPropertyOnSource(source, source.ShowLimits, value, nameof(ProviderSourceViewModel.ShowLimits)))
+                NotifyChanged();
+        }
+    }
+
+    public string OpenAiOrgId
+    {
+        get => GetSource(ProviderSourceKind.OpenAiDirect).OrgId;
+        set
+        {
+            var source = GetSource(ProviderSourceKind.OpenAiDirect);
+            if (source.OrgId != value)
+            {
+                source.OrgId = value;
+                NotifyChanged();
+            }
+        }
+    }
+
+    public string OpenAiBudget
+    {
+        get => GetSource(ProviderSourceKind.OpenAiDirect).Budget;
+        set
+        {
+            var source = GetSource(ProviderSourceKind.OpenAiDirect);
+            if (source.Budget != value)
+            {
+                source.Budget = value;
+                NotifyChanged();
+            }
+        }
+    }
+
+    public string OpenAiStatus
+    {
+        get => GetSource(ProviderSourceKind.OpenAiViaCursor).Status;
+        set => SetSourceStatus(GetSource(ProviderSourceKind.OpenAiViaCursor), value);
+    }
+
+    public string CodexStatus
+    {
+        get => GetSource(ProviderSourceKind.OpenAiCodex).Status;
+        set => SetSourceStatus(GetSource(ProviderSourceKind.OpenAiCodex), value);
+    }
+
+    public bool ShowGemini
+    {
+        get => GetSource(ProviderSourceKind.GeminiViaCursor).IsEnabled;
+        set => SetSourceEnabled(GetSource(ProviderSourceKind.GeminiViaCursor), value);
+    }
+
+    public bool ShowGeminiDetails
+    {
+        get => GetSource(ProviderSourceKind.GeminiViaCursor).ShowDetails;
+        set => SetSourceDetail(GetSource(ProviderSourceKind.GeminiViaCursor), value);
+    }
+
+    public bool ShowAntigravityLimits
+    {
+        get => GetSource(ProviderSourceKind.AntigravityLimits).IsEnabled;
+        set => SetSourceEnabled(GetSource(ProviderSourceKind.AntigravityLimits), value);
+    }
+
+    public bool ShowAntigravityDetails
+    {
+        get => GetSource(ProviderSourceKind.AntigravityLimits).ShowDetails;
+        set => SetSourceDetail(GetSource(ProviderSourceKind.AntigravityLimits), value);
+    }
+
+    public bool ShowAntigravityBreakdown
+    {
+        get => GetSource(ProviderSourceKind.AntigravityLimits).ShowLimits;
+        set
+        {
+            var source = GetSource(ProviderSourceKind.AntigravityLimits);
+            if (SetPropertyOnSource(source, source.ShowLimits, value, nameof(ProviderSourceViewModel.ShowLimits)))
+                NotifyChanged();
+        }
+    }
+
+    public string AntigravityStatus
+    {
+        get => GetSource(ProviderSourceKind.AntigravityLimits).Status;
+        set => SetSourceStatus(GetSource(ProviderSourceKind.AntigravityLimits), value);
+    }
+
+    public bool ShowOpenRouterLimits
+    {
+        get => ProviderFeatureFlags.OpenRouterEnabled
+            && GetSource(ProviderSourceKind.OpenRouterCredits).IsEnabled;
+        set
+        {
+            if (ProviderFeatureFlags.OpenRouterEnabled)
+                SetSourceEnabled(GetSource(ProviderSourceKind.OpenRouterCredits), value);
+        }
+    }
+
+    public bool ShowOpenRouterDetails
+    {
+        get => ProviderFeatureFlags.OpenRouterEnabled
+            && GetSource(ProviderSourceKind.OpenRouterCredits).ShowDetails;
+        set
+        {
+            if (ProviderFeatureFlags.OpenRouterEnabled)
+                SetSourceDetail(GetSource(ProviderSourceKind.OpenRouterCredits), value);
+        }
+    }
+
+    public string OpenRouterStatus
+    {
+        get => ProviderFeatureFlags.OpenRouterEnabled
+            ? GetSource(ProviderSourceKind.OpenRouterCredits).Status
+            : "";
+        set
+        {
+            if (ProviderFeatureFlags.OpenRouterEnabled)
+                SetSourceStatus(GetSource(ProviderSourceKind.OpenRouterCredits), value);
+        }
+    }
+
+    public bool ShowOpenCodeZen
+    {
+        get => GetSource(ProviderSourceKind.OpenCodeZen).IsEnabled;
+        set => SetSourceEnabled(GetSource(ProviderSourceKind.OpenCodeZen), value);
+    }
+
+    public bool ShowOpenCodeGo
+    {
+        get => GetSource(ProviderSourceKind.OpenCodeGo).IsEnabled;
+        set => SetSourceEnabled(GetSource(ProviderSourceKind.OpenCodeGo), value);
+    }
+
+    public bool ShowOpenCodeZenDetails
+    {
+        get => GetSource(ProviderSourceKind.OpenCodeZen).ShowDetails;
+        set => SetSourceDetail(GetSource(ProviderSourceKind.OpenCodeZen), value);
+    }
+
+    public bool ShowOpenCodeGoDetails
+    {
+        get => GetSource(ProviderSourceKind.OpenCodeGo).ShowDetails;
+        set => SetSourceDetail(GetSource(ProviderSourceKind.OpenCodeGo), value);
+    }
+
+    public bool ShowOpenCodeGoBreakdown
+    {
+        get => GetSource(ProviderSourceKind.OpenCodeGo).ShowLimits;
+        set
+        {
+            var source = GetSource(ProviderSourceKind.OpenCodeGo);
+            if (SetPropertyOnSource(source, source.ShowLimits, value, nameof(ProviderSourceViewModel.ShowLimits)))
+                NotifyChanged();
+        }
+    }
+
+    public string OpenCodeWorkspaceId
+    {
+        get => Sections.Count > 0
+            ? GetSource(ProviderSourceKind.OpenCodeGo).WorkspaceId
+            : (_openCodeWorkspaceId ?? "");
+        set
+        {
+            _openCodeWorkspaceId = value;
+            if (Sections.Count == 0)
+                return;
+
+            var source = GetSource(ProviderSourceKind.OpenCodeGo);
+            if (source.WorkspaceId != value)
+            {
+                source.WorkspaceId = value;
+                NotifyChanged();
+            }
+        }
+    }
+
+    public string OpenCodeStatus
+    {
+        get => GetSource(ProviderSourceKind.OpenCodeZen).Status;
+        set => SetSourceStatus(GetSource(ProviderSourceKind.OpenCodeZen), value);
+    }
+
+    public bool ShowDiskDrives
+    {
+        get => GetSource(ProviderSourceKind.DiskDrives).IsEnabled;
+        set => SetSourceEnabled(GetSource(ProviderSourceKind.DiskDrives), value);
+    }
+
+    public bool ShowDiskDetails
+    {
+        get => GetSource(ProviderSourceKind.DiskDrives).ShowDetails;
+        set => SetSourceDetail(GetSource(ProviderSourceKind.DiskDrives), value);
+    }
+
+    public string OpenAiApiKeyWatermark => BuildWatermark("Admin API key", _openAiCredentialId);
+    public string OpenAiSessionCookieWatermark => BuildWatermark("ChatGPT session cookie", _openAiProSessionCredentialId);
+    public string OpenRouterApiKeyWatermark => BuildWatermark("API key (sk-or-...)", _openRouterCredentialId);
+    public string OpenRouterManagementApiKeyWatermark =>
+        BuildWatermark("Management key (optional, for balance)", _openRouterManagementCredentialId);
+    public string OpenCodeSessionWatermark => BuildWatermark("opencode.ai auth cookie", _openCodeProSessionCredentialId);
+
+    public bool HasOpenAiApiKeySaved => !string.IsNullOrWhiteSpace(_openAiCredentialId);
+    public bool HasOpenAiSessionCookieSaved => !string.IsNullOrWhiteSpace(_openAiProSessionCredentialId);
+    public bool HasOpenRouterApiKeySaved => !string.IsNullOrWhiteSpace(_openRouterCredentialId);
+    public bool HasOpenRouterManagementApiKeySaved => !string.IsNullOrWhiteSpace(_openRouterManagementCredentialId);
+    public bool HasOpenCodeSessionSaved => !string.IsNullOrWhiteSpace(_openCodeProSessionCredentialId);
+
+    public bool HasOpenCodeAutoAuth =>
+        _openCodeAuthResolver.HasDetectableAuth(CreateOpenCodeBillingSettings());
+
+    public bool HasOpenCodeAutoAuthFor(ProviderBillingSettings openCode) =>
+        _openCodeAuthResolver.HasDetectableAuth(openCode);
+
+    public bool HasOpenCodeApiKeyAuth => _openCodeAuthResolver.HasApiKeyAuth();
+
+    public string OpenCodeAutoAuthSummary => OpenCodeAutoAuthSummaryFor(CreateOpenCodeBillingSettings());
+
+    public string OpenCodeAutoAuthSummaryFor(ProviderBillingSettings openCode) => HasOpenCodeAutoAuthFor(openCode)
+        ? (_openCodeAuthResolver.Resolve(openCode, tryBrowserCookies: false).Source switch
+        {
+            OpenCodeAuthSource.ApiKey => "Signed in via OpenCode CLI",
+            OpenCodeAuthSource.SavedSession => "Signed in via saved session",
+            _ => "Signed in via browser"
+        })
+        : "";
+
+    public bool ShowOpenCodeCredentials =>
+        (ShowOpenCodeZen || ShowOpenCodeGo)
+        && !HasOpenCodeAutoAuth
+        && !HasOpenCodeSessionSaved;
+
+    public bool ShowOpenCodeCredentialsFor(ProviderBillingSettings openCode) =>
+        (openCode.ShowDirectSource || openCode.ShowProLimits)
+        && !HasOpenCodeAutoAuthFor(openCode)
+        && !HasOpenCodeSessionSaved;
+
+    public bool HasCodexAutoAuth => _codexAuthResolver.HasDetectableAuth(CreateOpenAiBillingSettings());
+
+    public string CodexAutoAuthSummary => HasCodexAutoAuth
+        ? (_codexAuthResolver.Resolve(CreateOpenAiBillingSettings(), tryBrowserCookies: false).Source switch
+        {
+            CodexAuthSource.AuthFile => "Signed in via Codex CLI",
+            CodexAuthSource.SavedSession => "Signed in via saved session",
+            _ => "Signed in via browser"
+        })
+        : "";
+
+    public bool ShowCodexCredentials =>
+        ShowCodexLimits && !HasCodexAutoAuth && !HasOpenAiSessionCookieSaved;
+
+    public bool ShowOpenAiDirectCredentials => ShowOpenAiDirect && !HasOpenAiApiKeySaved;
+
+    public bool HasGeminiAutoAuth => _geminiAuthResolver.HasDetectableAuth();
+
+    public string GeminiAutoAuthSummary => HasGeminiAutoAuth
+        ? (_geminiAuthResolver.DetectedSource() switch
+        {
+            GeminiAuthSource.Antigravity => "Signed in via Antigravity IDE",
+            GeminiAuthSource.GeminiCli => "Signed in via Gemini CLI",
+            _ => "Signed in"
+        })
+        : "";
 
     public void ToggleExpandedProvider(SettingsExpandedProvider provider) =>
         ExpandedProvider = ExpandedProvider == provider ? SettingsExpandedProvider.None : provider;
@@ -530,66 +421,19 @@ public sealed class SettingsPanelViewModel : ViewModelBase
         {
             _openAiCredentialId = settings.OpenAi.CredentialId;
             _openAiProSessionCredentialId = settings.OpenAi.ProSessionCredentialId;
-            _claudeProSessionCredentialId = settings.Claude.ProSessionCredentialId;
-            _claudeCredentialId = settings.Claude.CredentialId;
-
-            ShowCursor = settings.Cursor.ShowCursorSource;
-            ShowCursorDetails = settings.Cursor.ShowDetails;
-            ShowBreakdown = settings.ShowBreakdown;
-
-            ShowOpenAi = settings.OpenAi.ShowCursorSource;
-            ShowOpenAiDetails = settings.OpenAi.ShowDetails;
-            ShowOpenAiDirect = settings.OpenAi.ShowDirectSource;
-            ShowOpenAiDirectDetails = settings.OpenAi.EffectiveShowDirectDetails;
-            ShowCodexLimits = settings.OpenAi.ShowProLimits;
-            ShowCodexDetails = settings.OpenAi.EffectiveShowProDetails;
-            ShowCodexBreakdown = settings.OpenAi.ShowProBreakdown;
-            OpenAiOrgId = settings.OpenAi.OrganizationId ?? "";
-            OpenAiBudget = FormatBudget(settings.OpenAi.MonthlyBudgetUsd);
-            OpenAiStatus = settings.OpenAi.LastConnectionStatus ?? "";
-            CodexStatus = settings.OpenAi.ProLastConnectionStatus ?? "";
-
-            ShowClaude = settings.Claude.ShowCursorSource;
-            ShowClaudeDetails = settings.Claude.ShowDetails;
-            ShowClaudePro = settings.Claude.ShowProLimits;
-            ShowClaudeProDetails = settings.Claude.EffectiveShowProDetails;
-            ShowClaudeProBreakdown = settings.Claude.ShowProBreakdown;
-            ShowClaudeApiConsole = settings.Claude.ShowApiConsoleBilling;
-            ShowClaudeApiConsoleDetails = settings.Claude.EffectiveShowDirectDetails;
-            ClaudeBudget = FormatBudget(settings.Claude.MonthlyBudgetUsd);
-            ClaudeProStatus = settings.Claude.ProLastConnectionStatus ?? "";
-            ClaudeApiConsoleStatus = settings.Claude.LastConnectionStatus ?? "";
-
-            ShowGemini = settings.Gemini.ShowCursorSource;
-            ShowGeminiDetails = settings.Gemini.ShowDetails;
-            ShowAntigravityLimits = settings.Gemini.ShowProLimits;
-            ShowAntigravityDetails = settings.Gemini.EffectiveShowProDetails;
-            ShowAntigravityBreakdown = settings.Gemini.ShowProBreakdown;
-            AntigravityStatus = settings.Gemini.ProLastConnectionStatus ?? "";
-
             _openRouterCredentialId = settings.OpenRouter.CredentialId;
-            ShowOpenRouterLimits = settings.OpenRouter.ShowProLimits;
-            ShowOpenRouterDetails = settings.OpenRouter.ShowDetails;
-            OpenRouterStatus = settings.OpenRouter.LastConnectionStatus ?? "";
-
+            _openRouterManagementCredentialId = settings.OpenRouter.ManagementCredentialId;
             _openCodeProSessionCredentialId = settings.OpenCode.ProSessionCredentialId;
-            ShowOpenCodeZen = settings.OpenCode.ShowDirectSource;
-            ShowOpenCodeGo = settings.OpenCode.ShowProLimits;
-            ShowOpenCodeZenDetails = settings.OpenCode.ShowDetails;
-            ShowOpenCodeGoDetails = settings.OpenCode.EffectiveShowProDetails;
-            ShowOpenCodeGoBreakdown = settings.OpenCode.ShowProBreakdown;
-            OpenCodeWorkspaceId = settings.OpenCode.WorkspaceId ?? "";
-            OpenCodeStatus = settings.OpenCode.ProLastConnectionStatus ?? "";
+            _openCodeWorkspaceId = settings.OpenCode.WorkspaceId;
 
-            ShowDiskDrives = settings.ShowDiskDrives;
-            ShowDiskDetails = settings.ShowDiskDetails;
-
+            SettingsSectionMapper.PopulateSections(Sections, settings, this);
             _expandedProvider = settings.SettingsExpandedProvider;
-            NotifyAccordionPropertiesChanged();
 
-            UpdateCredentialWatermarks();
-            UpdateCursorConnectionStatus();
+            UpdateCredentialDerivedState();
             UpdateConnectionStates();
+            WireSectionNotifications();
+            OnPropertyChanged(nameof(ExpandedProvider));
+            NotifyAccordionPropertiesChanged();
         }
         finally
         {
@@ -599,69 +443,43 @@ public sealed class SettingsPanelViewModel : ViewModelBase
 
     public void Commit(WidgetSettings settings)
     {
-        settings.Cursor.ShowCursorSource = ShowCursor;
-        settings.Cursor.ShowDetails = ShowCursorDetails;
-        settings.ShowBreakdown = ShowBreakdown;
+        SettingsSectionMapper.ApplyToSettings(Sections, settings, ExpandedProvider);
 
-        settings.OpenAi.ShowCursorSource = ShowOpenAi;
-        settings.OpenAi.ShowDetails = ShowOpenAiDetails;
-        settings.OpenAi.ShowDirectSource = ShowOpenAiDirect;
-        settings.OpenAi.ShowDirectDetails = ShowOpenAiDirectDetails;
-        settings.OpenAi.ShowProLimits = ShowCodexLimits;
-        settings.OpenAi.ShowProDetails = ShowCodexDetails;
-        settings.OpenAi.ShowProBreakdown = ShowCodexBreakdown;
-        settings.OpenAi.OrganizationId = NullIfEmpty(OpenAiOrgId);
-        settings.OpenAi.MonthlyBudgetUsd = ParseBudget(OpenAiBudget);
         settings.OpenAi.CredentialId = _openAiCredentialId;
         settings.OpenAi.ProSessionCredentialId = _openAiProSessionCredentialId;
-        settings.OpenAi.LastConnectionStatus = NullIfEmpty(OpenAiStatus);
-        settings.OpenAi.ProLastConnectionStatus = NullIfEmpty(CodexStatus);
-
-        settings.Claude.ShowCursorSource = ShowClaude;
-        settings.Claude.ShowDetails = ShowClaudeDetails;
-        settings.Claude.ShowProLimits = ShowClaudePro;
-        settings.Claude.ShowProDetails = ShowClaudeProDetails;
-        settings.Claude.ShowProBreakdown = ShowClaudeProBreakdown;
-        settings.Claude.ShowApiConsoleBilling = ShowClaudeApiConsole;
-        settings.Claude.ShowDirectDetails = ShowClaudeApiConsoleDetails;
-        settings.Claude.MonthlyBudgetUsd = ParseBudget(ClaudeBudget);
-        settings.Claude.ProSessionCredentialId = _claudeProSessionCredentialId;
-        settings.Claude.CredentialId = _claudeCredentialId;
-        settings.Claude.ProLastConnectionStatus = NullIfEmpty(ClaudeProStatus);
-        settings.Claude.LastConnectionStatus = NullIfEmpty(ClaudeApiConsoleStatus);
-
-        settings.Gemini.ShowCursorSource = ShowGemini;
-        settings.Gemini.ShowDetails = ShowGeminiDetails;
-        settings.Gemini.ShowProLimits = ShowAntigravityLimits;
-        settings.Gemini.ShowProDetails = ShowAntigravityDetails;
-        settings.Gemini.ShowProBreakdown = ShowAntigravityBreakdown;
-        settings.Gemini.ProLastConnectionStatus = NullIfEmpty(AntigravityStatus);
-
-        settings.OpenRouter.ShowProLimits = ShowOpenRouterLimits;
-        settings.OpenRouter.ShowDetails = ShowOpenRouterDetails;
         settings.OpenRouter.CredentialId = _openRouterCredentialId;
-        settings.OpenRouter.LastConnectionStatus = NullIfEmpty(OpenRouterStatus);
-
-        settings.OpenCode.ShowDirectSource = ShowOpenCodeZen;
-        settings.OpenCode.ShowProLimits = ShowOpenCodeGo;
-        settings.OpenCode.ShowDetails = ShowOpenCodeZenDetails;
-        settings.OpenCode.ShowProDetails = ShowOpenCodeGoDetails;
-        settings.OpenCode.ShowProBreakdown = ShowOpenCodeGoBreakdown;
-        settings.OpenCode.WorkspaceId = NullIfEmpty(OpenCodeWorkspaceId);
+        settings.OpenRouter.ManagementCredentialId = _openRouterManagementCredentialId;
         settings.OpenCode.ProSessionCredentialId = _openCodeProSessionCredentialId;
-        settings.OpenCode.ProLastConnectionStatus = NullIfEmpty(OpenCodeStatus);
+    }
 
-        settings.ShowDiskDrives = ShowDiskDrives;
-        settings.ShowDiskDetails = ShowDiskDetails;
-        settings.SettingsExpandedProvider = ExpandedProvider;
+    public string ResolveCursorStatus()
+    {
+        var tokens = _cursorTokenReader();
+        return string.IsNullOrWhiteSpace(tokens.AccessToken)
+            ? "Not signed in to Cursor"
+            : "Connected via Cursor session";
+    }
+
+    public void UpdateStatusFromSettings(WidgetSettings settings)
+    {
+        if (Sections.Count == 0)
+            return;
+
+        CursorStatus = settings.Cursor.LastConnectionStatus ?? ResolveCursorStatus();
+        OpenAiStatus = settings.OpenAi.LastConnectionStatus ?? OpenAiStatus;
+        CodexStatus = settings.OpenAi.ProLastConnectionStatus ?? CodexStatus;
+        AntigravityStatus = settings.Gemini.ProLastConnectionStatus ?? AntigravityStatus;
+        if (ProviderFeatureFlags.OpenRouterEnabled)
+            OpenRouterStatus = settings.OpenRouter.LastConnectionStatus ?? OpenRouterStatus;
+        OpenCodeStatus = settings.OpenCode.ProLastConnectionStatus ?? OpenCodeStatus;
+        UpdateConnectionStates();
     }
 
     public void UpdateCursorConnectionStatus()
     {
-        var tokens = _cursorTokenReader();
-        CursorStatus = string.IsNullOrWhiteSpace(tokens.AccessToken)
-            ? "Not signed in to Cursor"
-            : "Connected via Cursor session";
+        var status = ResolveCursorStatus();
+        if (string.IsNullOrWhiteSpace(GetCursorMain().Status))
+            SetSourceStatus(GetCursorMain(), status, notify: false);
         UpdateConnectionStates();
     }
 
@@ -669,181 +487,263 @@ public sealed class SettingsPanelViewModel : ViewModelBase
     {
         var hasCursorToken = !string.IsNullOrWhiteSpace(_cursorTokenReader().AccessToken);
 
-        _cursorConnectionState = ProviderConnectionStateHelper.FromConnected(
-            ShowCursor, hasCursorToken);
-
+        var cursorNative = ProviderConnectionStateHelper.FromConnected(ShowCursor, hasCursorToken);
         var openAiCursor = ProviderConnectionStateHelper.FromConnected(ShowOpenAi, hasCursorToken);
-        var openAiDirect = ProviderConnectionStateHelper.FromConnected(
-            ShowOpenAiDirect,
-            HasOpenAiApiKeySaved);
+        var geminiCursor = ProviderConnectionStateHelper.FromConnected(ShowGemini, hasCursorToken);
+        SetSectionColor(
+            SettingsExpandedProvider.Cursor,
+            ProviderConnectionStateHelper.Aggregate(cursorNative, openAiCursor, geminiCursor));
+
+        var openAiDirect = ProviderConnectionStateHelper.FromConnected(ShowOpenAiDirect, HasOpenAiApiKeySaved);
         var openAiCodex = ProviderConnectionStateHelper.FromConnected(
             ShowCodexLimits,
             HasCodexAutoAuth || HasOpenAiSessionCookieSaved);
-        _openAiHeaderState = ProviderConnectionStateHelper.Aggregate(
-            openAiCursor, openAiDirect, openAiCodex);
+        SetSectionColor(
+            SettingsExpandedProvider.OpenAi,
+            ProviderConnectionStateHelper.Aggregate(openAiDirect, openAiCodex));
 
-        var claudeCursor = ProviderConnectionStateHelper.FromConnected(ShowClaude, hasCursorToken);
-        var claudePro = ProviderConnectionStateHelper.FromConnected(
-            ShowClaudePro,
-            HasClaudeProAuth);
-        var claudeApi = ProviderConnectionStateHelper.FromConnected(
-            ShowClaudeApiConsole,
-            HasClaudeApiKeySaved);
-        _claudeHeaderState = ProviderConnectionStateHelper.Aggregate(
-            claudeCursor, claudePro, claudeApi);
+        var geminiLimits = ProviderConnectionStateHelper.FromConnected(ShowAntigravityLimits, HasGeminiAutoAuth);
+        SetSectionColor(
+            SettingsExpandedProvider.Gemini,
+            geminiLimits);
 
-        var geminiCursor = ProviderConnectionStateHelper.FromConnected(ShowGemini, hasCursorToken);
-        var antigravityTokens = _antigravityTokenReader();
-        var hasAntigravity = !string.IsNullOrWhiteSpace(antigravityTokens.AccessToken)
-                             || !string.IsNullOrWhiteSpace(antigravityTokens.RefreshToken);
-        var geminiAntigravity = ProviderConnectionStateHelper.FromConnected(
-            ShowAntigravityLimits, hasAntigravity);
-        _geminiHeaderState = ProviderConnectionStateHelper.Aggregate(
-            geminiCursor, geminiAntigravity);
+        if (ProviderFeatureFlags.OpenRouterEnabled)
+        {
+            SetSectionColor(
+                SettingsExpandedProvider.OpenRouter,
+                ProviderConnectionStateHelper.FromConnected(ShowOpenRouterLimits, HasOpenRouterApiKeySaved));
+        }
 
-        _openRouterHeaderState = ProviderConnectionStateHelper.FromConnected(
-            ShowOpenRouterLimits,
-            HasOpenRouterApiKeySaved);
+        var openCodeConnected = HasOpenCodeApiKeyAuth || HasOpenCodeAutoAuth;
+        SetSectionColor(
+            SettingsExpandedProvider.OpenCode,
+            ProviderConnectionStateHelper.Aggregate(
+                ProviderConnectionStateHelper.FromConnected(ShowOpenCodeZen, openCodeConnected),
+                ProviderConnectionStateHelper.FromConnected(ShowOpenCodeGo, openCodeConnected)));
 
-        _openCodeHeaderState = ProviderConnectionStateHelper.Aggregate(
-            ProviderConnectionStateHelper.FromConnected(ShowOpenCodeZen, HasOpenCodeSessionSaved && !string.IsNullOrWhiteSpace(OpenCodeWorkspaceId)),
-            ProviderConnectionStateHelper.FromConnected(ShowOpenCodeGo, HasOpenCodeSessionSaved && !string.IsNullOrWhiteSpace(OpenCodeWorkspaceId)));
-
-        OnPropertyChanged(nameof(CursorHeaderColor));
-        OnPropertyChanged(nameof(OpenAiHeaderColor));
-        OnPropertyChanged(nameof(ClaudeHeaderColor));
-        OnPropertyChanged(nameof(GeminiHeaderColor));
-        OnPropertyChanged(nameof(OpenRouterHeaderColor));
-        OnPropertyChanged(nameof(OpenCodeHeaderColor));
-        OnPropertyChanged(nameof(DiskHeaderColor));
+        SetSectionColor(
+            SettingsExpandedProvider.Disk,
+            ShowDiskDrives ? ProviderConnectionState.Connected : ProviderConnectionState.Off);
     }
 
-    public void UpdateStatusFromSettings(WidgetSettings settings)
+    public async Task ConnectAsync(ProviderSourceKind kind, WidgetSettings settings)
     {
-        OpenAiStatus = settings.OpenAi.LastConnectionStatus ?? OpenAiStatus;
-        CodexStatus = settings.OpenAi.ProLastConnectionStatus ?? CodexStatus;
-        ClaudeProStatus = settings.Claude.ProLastConnectionStatus ?? ClaudeProStatus;
-        ClaudeApiConsoleStatus = settings.Claude.LastConnectionStatus ?? ClaudeApiConsoleStatus;
-        AntigravityStatus = settings.Gemini.ProLastConnectionStatus ?? AntigravityStatus;
-        OpenRouterStatus = settings.OpenRouter.LastConnectionStatus ?? OpenRouterStatus;
-        OpenCodeStatus = settings.OpenCode.ProLastConnectionStatus ?? OpenCodeStatus;
+        switch (kind)
+        {
+            case ProviderSourceKind.CursorWidget:
+                await RunEasySetupCursorAsync(settings);
+                break;
+            case ProviderSourceKind.OpenAiViaCursor:
+                await RunEasySetupOpenAiViaCursorAsync(settings);
+                break;
+            case ProviderSourceKind.OpenAiCodex:
+                await RunEasySetupCodexAsync(settings);
+                break;
+            case ProviderSourceKind.GeminiViaCursor:
+                await RunEasySetupGeminiViaCursorAsync(settings);
+                break;
+            case ProviderSourceKind.AntigravityLimits:
+                await RunEasySetupGeminiAsync(settings);
+                break;
+            case ProviderSourceKind.OpenRouterCredits:
+                await RunEasySetupOpenRouterAsync(settings);
+                break;
+            case ProviderSourceKind.OpenCodeZen:
+            case ProviderSourceKind.OpenCodeGo:
+                await RunEasySetupOpenCodeAsync(settings);
+                break;
+        }
     }
 
-    public void SaveOpenAiApiKey(string? text)
+    public async Task TestAsync(ProviderSourceKind kind, WidgetSettings settings)
     {
-        SaveCredential("openai", ref _openAiCredentialId, text);
-        UpdateCredentialWatermarks();
-        NotifyFieldChanged();
+        Commit(settings);
+        switch (kind)
+        {
+            case ProviderSourceKind.CursorWidget:
+            case ProviderSourceKind.OpenAiViaCursor:
+            case ProviderSourceKind.GeminiViaCursor:
+                await TestCursorAsync(settings);
+                break;
+            case ProviderSourceKind.OpenAiDirect:
+                await TestOpenAiAsync(settings);
+                break;
+            case ProviderSourceKind.OpenAiCodex:
+                await TestCodexAsync(settings);
+                break;
+            case ProviderSourceKind.AntigravityLimits:
+                await TestAntigravityAsync(settings);
+                break;
+            case ProviderSourceKind.OpenRouterCredits:
+                await TestOpenRouterAsync(settings);
+                break;
+            case ProviderSourceKind.OpenCodeZen:
+            case ProviderSourceKind.OpenCodeGo:
+                await TestOpenCodeAsync(settings);
+                break;
+        }
     }
 
-    public void SaveOpenAiSessionCookie(string? text)
+    public void SaveApiKey(ProviderSourceKind kind, string? text)
     {
-        SaveProSessionCredential("openai-codex", ref _openAiProSessionCredentialId, text);
-        UpdateCredentialWatermarks();
-        NotifyFieldChanged();
+        switch (kind)
+        {
+            case ProviderSourceKind.OpenAiDirect:
+                SaveCredential("openai", ref _openAiCredentialId, text);
+                break;
+            case ProviderSourceKind.OpenRouterCredits:
+                SaveCredential("openrouter", ref _openRouterCredentialId, text);
+                break;
+        }
+
+        UpdateCredentialDerivedState();
+        NotifyChanged();
     }
 
-    public void SaveClaudeApiKey(string? text)
+    public void SaveManagementApiKey(ProviderSourceKind kind, string? text)
     {
-        SaveCredential("claude", ref _claudeCredentialId, text);
-        UpdateCredentialWatermarks();
-        NotifyFieldChanged();
+        if (kind != ProviderSourceKind.OpenRouterCredits)
+            return;
+
+        SaveCredential("openrouter-mgmt", ref _openRouterManagementCredentialId, text);
+        UpdateCredentialDerivedState();
+        NotifyChanged();
     }
 
-    public void ClearOpenAiApiKey()
+    public void SaveSession(ProviderSourceKind kind, string? text)
     {
-        CredentialStore.Delete(_openAiCredentialId);
-        _openAiCredentialId = null;
-        UpdateCredentialWatermarks();
-        NotifyFieldChanged();
+        switch (kind)
+        {
+            case ProviderSourceKind.OpenAiCodex:
+                SaveCredential("openai-codex", ref _openAiProSessionCredentialId, text);
+                break;
+            case ProviderSourceKind.OpenCodeGo:
+                SaveCredential("opencode", ref _openCodeProSessionCredentialId, text);
+                break;
+        }
+
+        UpdateCredentialDerivedState();
+        NotifyChanged();
     }
 
-    public void ClearOpenAiSessionCookie()
+    public void ClearApiKey(ProviderSourceKind kind)
     {
-        CredentialStore.Delete(_openAiProSessionCredentialId);
-        _openAiProSessionCredentialId = null;
-        UpdateCredentialWatermarks();
-        NotifyFieldChanged();
+        switch (kind)
+        {
+            case ProviderSourceKind.OpenAiDirect:
+                CredentialStore.Delete(_openAiCredentialId);
+                _openAiCredentialId = null;
+                break;
+            case ProviderSourceKind.OpenRouterCredits:
+                CredentialStore.Delete(_openRouterCredentialId);
+                _openRouterCredentialId = null;
+                break;
+        }
+
+        UpdateCredentialDerivedState();
+        NotifyChanged();
     }
 
-    public void ClearClaudeApiKey()
+    public void ClearManagementApiKey(ProviderSourceKind kind)
     {
-        CredentialStore.Delete(_claudeCredentialId);
-        _claudeCredentialId = null;
-        UpdateCredentialWatermarks();
-        NotifyFieldChanged();
+        if (kind != ProviderSourceKind.OpenRouterCredits)
+            return;
+
+        CredentialStore.Delete(_openRouterManagementCredentialId);
+        _openRouterManagementCredentialId = null;
+        UpdateCredentialDerivedState();
+        NotifyChanged();
     }
 
-    public void SaveOpenRouterApiKey(string? text)
+    public void ClearSession(ProviderSourceKind kind)
     {
-        SaveCredential("openrouter", ref _openRouterCredentialId, text);
-        UpdateCredentialWatermarks();
-        NotifyFieldChanged();
+        switch (kind)
+        {
+            case ProviderSourceKind.OpenAiCodex:
+                CredentialStore.Delete(_openAiProSessionCredentialId);
+                _openAiProSessionCredentialId = null;
+                break;
+            case ProviderSourceKind.OpenCodeGo:
+                CredentialStore.Delete(_openCodeProSessionCredentialId);
+                _openCodeProSessionCredentialId = null;
+                break;
+        }
+
+        UpdateCredentialDerivedState();
+        NotifyChanged();
     }
 
-    public void ClearOpenRouterApiKey()
+    public void OnMasterEnableChanged(ProviderSettingsSectionViewModel section, bool enabled)
     {
-        CredentialStore.Delete(_openRouterCredentialId);
-        _openRouterCredentialId = null;
-        UpdateCredentialWatermarks();
-        NotifyFieldChanged();
-    }
+        section.MasterEnable = enabled;
+        foreach (var source in section.Sources.Where(s => s.HasEnableToggle))
+            source.IsEnabled = enabled;
 
-    public void SaveOpenCodeSessionCookie(string? text)
-    {
-        SaveProSessionCredential("opencode", ref _openCodeProSessionCredentialId, text);
-        UpdateCredentialWatermarks();
-        NotifyFieldChanged();
-    }
+        if (section.ProviderId == SettingsExpandedProvider.Disk)
+            section.SummaryStatus = enabled ? "Enabled" : "Off";
 
-    public void ClearOpenCodeSessionCookie()
-    {
-        CredentialStore.Delete(_openCodeProSessionCredentialId);
-        _openCodeProSessionCredentialId = null;
-        UpdateCredentialWatermarks();
-        NotifyFieldChanged();
+        NotifyChanged();
     }
 
     public async Task RunEasySetupCursorAsync(WidgetSettings settings)
     {
         var result = _easySetup.SetupCursor(settings);
-        CursorStatus = result.StatusMessage ?? "";
-        await CompleteEasySetupAsync(settings);
+        CursorStatus = settings.Cursor.LastConnectionStatus ?? result.StatusMessage ?? "";
+        await CompleteEasySetupAsync(settings, preserveCursorStatus: true);
     }
 
-    public async Task RunEasySetupOpenAiAsync(WidgetSettings settings)
+    public async Task RunEasySetupOpenAiViaCursorAsync(WidgetSettings settings)
     {
         var result = await _easySetup.SetupOpenAiAsync(settings);
-        UpdateStatusFromSettings(settings);
-        OpenAiStatus = settings.OpenAi.LastConnectionStatus ?? OpenAiStatus;
-        CodexStatus = settings.OpenAi.ProLastConnectionStatus ?? CodexStatus;
+        OpenAiStatus = settings.OpenAi.LastConnectionStatus ?? result.StatusMessage ?? "";
         await CompleteEasySetupAsync(settings);
     }
 
-    public async Task RefreshClaudeProAsync(WidgetSettings settings)
+    public async Task RunEasySetupCodexAsync(WidgetSettings settings)
     {
-        settings.Claude.ShowProLimits = true;
-        Commit(settings);
-        ClaudeProStatus = await _claudeProBilling.RefreshAndConnectAsync(settings.Claude);
-        _claudeProSessionCredentialId = settings.Claude.ProSessionCredentialId;
-        UpdateCredentialWatermarks();
+        var result = await _easySetup.SetupCodexAsync(settings);
+        CodexStatus = settings.OpenAi.ProLastConnectionStatus ?? result.StatusMessage ?? "";
+        await CompleteEasySetupAsync(settings);
+    }
+
+    public async Task RunEasySetupGeminiViaCursorAsync(WidgetSettings settings)
+    {
+        ShowGemini = true;
+        ShowGeminiDetails = true;
+        await _easySetup.SetupGeminiViaCursorAsync(settings);
         await CompleteEasySetupAsync(settings);
     }
 
     public async Task RunEasySetupGeminiAsync(WidgetSettings settings)
     {
         var result = await _easySetup.SetupGeminiAsync(settings);
-        AntigravityStatus = result.StatusMessage ?? "";
+        AntigravityStatus = settings.Gemini.ProLastConnectionStatus ?? result.StatusMessage ?? "";
         await CompleteEasySetupAsync(settings);
     }
 
-    public void RunEasySetupDisk(WidgetSettings settings)
+    public async Task RunEasySetupOpenRouterAsync(WidgetSettings settings)
     {
-        _easySetup.SetupDisk(settings);
-        ShowDiskDrives = true;
-        ShowDiskDetails = true;
+        var result = await _easySetup.SetupOpenRouterAsync(settings);
+        OpenRouterStatus = settings.OpenRouter.LastConnectionStatus ?? result.StatusMessage ?? "";
+        await CompleteEasySetupAsync(settings);
+    }
+
+    public async Task RunEasySetupOpenCodeAsync(WidgetSettings settings)
+    {
+        var result = await _easySetup.SetupOpenCodeAsync(settings);
+        OpenCodeStatus = settings.OpenCode.ProLastConnectionStatus ?? result.StatusMessage ?? "";
+        await CompleteEasySetupAsync(settings);
+    }
+
+    public async Task TestCursorAsync(WidgetSettings settings)
+    {
         Commit(settings);
+        var status = ResolveCursorStatus();
+        CursorStatus = status;
+        settings.Cursor.LastConnectionStatus = status;
+        UpdateConnectionStates();
         _host?.OnSettingsChanged();
+        await Task.CompletedTask;
     }
 
     public async Task TestOpenAiAsync(WidgetSettings settings)
@@ -858,18 +758,10 @@ public sealed class SettingsPanelViewModel : ViewModelBase
     public async Task TestCodexAsync(WidgetSettings settings)
     {
         Commit(settings);
-        var session = CredentialStore.Retrieve(_openAiProSessionCredentialId);
-        CodexStatus = await _codexBilling.TestConnectionAsync(session);
-        settings.OpenAi.ProLastConnectionStatus = CodexStatus;
-        _host?.OnSettingsChanged();
-    }
-
-    public async Task TestClaudeApiConsoleAsync(WidgetSettings settings)
-    {
-        Commit(settings);
-        var key = CredentialStore.Retrieve(_claudeCredentialId);
-        ClaudeApiConsoleStatus = await _anthropicBilling.TestConnectionAsync(key ?? "");
-        settings.Claude.LastConnectionStatus = ClaudeApiConsoleStatus;
+        settings.OpenAi.ShowProLimits = true;
+        CodexStatus = await _codexBilling.RefreshAndConnectAsync(settings.OpenAi);
+        _openAiProSessionCredentialId = settings.OpenAi.ProSessionCredentialId;
+        UpdateCredentialDerivedState();
         _host?.OnSettingsChanged();
     }
 
@@ -885,7 +777,8 @@ public sealed class SettingsPanelViewModel : ViewModelBase
     {
         Commit(settings);
         var key = CredentialStore.Retrieve(_openRouterCredentialId);
-        OpenRouterStatus = await _openRouterBilling.TestConnectionAsync(key ?? "");
+        var managementKey = CredentialStore.Retrieve(_openRouterManagementCredentialId);
+        OpenRouterStatus = await _openRouterBilling.TestConnectionAsync(key ?? "", managementKey);
         settings.OpenRouter.LastConnectionStatus = OpenRouterStatus;
         _host?.OnSettingsChanged();
     }
@@ -893,92 +786,219 @@ public sealed class SettingsPanelViewModel : ViewModelBase
     public async Task TestOpenCodeAsync(WidgetSettings settings)
     {
         Commit(settings);
-        var session = CredentialStore.Retrieve(_openCodeProSessionCredentialId);
-        OpenCodeStatus = await _openCodeBilling.TestConnectionAsync(session ?? "", OpenCodeWorkspaceId);
+        OpenCodeStatus = await _openCodeBilling.TestConnectionAsync(settings.OpenCode);
         settings.OpenCode.ProLastConnectionStatus = OpenCodeStatus;
         _host?.OnSettingsChanged();
     }
 
-    public async Task RunEasySetupOpenRouterAsync(WidgetSettings settings)
+    private async Task CompleteEasySetupAsync(WidgetSettings settings, bool preserveCursorStatus = false)
     {
-        var result = await _easySetup.SetupOpenRouterAsync(settings);
-        OpenRouterStatus = result.StatusMessage ?? "";
-        await CompleteEasySetupAsync(settings);
-    }
-
-    public async Task RunEasySetupOpenCodeAsync(WidgetSettings settings)
-    {
-        var result = await _easySetup.SetupOpenCodeAsync(settings);
-        OpenCodeStatus = result.StatusMessage ?? "";
-        await CompleteEasySetupAsync(settings);
-    }
-
-    public void OpenClaudeAi() => new ExternalSetupLauncher().OpenClaudeAi();
-
-    public void OpenOpenCode() => new ExternalSetupLauncher().OpenOpenCode();
-
-    private async Task CompleteEasySetupAsync(WidgetSettings settings)
-    {
-        Load(settings);
+        var savedCursorStatus = preserveCursorStatus ? CursorStatus : null;
         Commit(settings);
+        Load(settings);
+        if (preserveCursorStatus && savedCursorStatus is not null)
+        {
+            CursorStatus = savedCursorStatus;
+            settings.Cursor.LastConnectionStatus = savedCursorStatus;
+            Commit(settings);
+        }
+
         if (_host is not null)
             await _host.OnEasySetupCompletedAsync();
     }
 
-    private bool SetToggle(ref bool field, bool value)
-    {
-        if (!SetProperty(ref field, value) || _suppressChangeNotifications)
-            return field == value;
+    private ProviderSourceViewModel GetCursorMain() =>
+        GetSection(SettingsExpandedProvider.Cursor).Sources.First(s => s.HasEnableToggle);
 
-        _host?.OnSettingsChanged();
+    private ProviderSourceViewModel GetCursorBreakdown() =>
+        GetSection(SettingsExpandedProvider.Cursor).Sources.First(s => s.HasBreakdownToggle);
+
+    private ProviderSourceViewModel GetSource(ProviderSourceKind kind) =>
+        Sections.SelectMany(s => s.Sources).First(s => s.Kind == kind);
+
+    private ProviderSettingsSectionViewModel GetSection(SettingsExpandedProvider provider) =>
+        Sections.First(s => s.ProviderId == provider);
+
+    private void SetSectionColor(SettingsExpandedProvider provider, ProviderConnectionState state)
+    {
+        var section = GetSection(provider);
+        section.HeaderColor = ProviderConnectionStateHelper.ToColor(state);
+    }
+
+    private void SetSourceEnabled(ProviderSourceViewModel source, bool value)
+    {
+        if (SetPropertyOnSource(source, source.IsEnabled, value, nameof(ProviderSourceViewModel.IsEnabled)))
+            NotifyChanged();
+    }
+
+    private void SetSourceDetail(ProviderSourceViewModel source, bool value)
+    {
+        if (SetPropertyOnSource(source, source.ShowDetails, value, nameof(ProviderSourceViewModel.ShowDetails)))
+            NotifyChanged();
+    }
+
+    private void SetSourceStatus(ProviderSourceViewModel source, string value, bool notify = true)
+    {
+        if (source.Status == value)
+            return;
+
+        source.Status = value;
+        if (notify)
+            NotifyChanged();
+    }
+
+    private static bool SetPropertyOnSource<T>(
+        ProviderSourceViewModel source,
+        T current,
+        T value,
+        string propertyName)
+    {
+        if (EqualityComparer<T>.Default.Equals(current, value))
+            return false;
+
+        switch (propertyName)
+        {
+            case nameof(ProviderSourceViewModel.IsEnabled):
+                source.IsEnabled = (bool)(object)value!;
+                break;
+            case nameof(ProviderSourceViewModel.ShowDetails):
+                source.ShowDetails = (bool)(object)value!;
+                break;
+            case nameof(ProviderSourceViewModel.ShowLimits):
+                source.ShowLimits = (bool)(object)value!;
+                break;
+            case nameof(ProviderSourceViewModel.ShowBreakdown):
+                source.ShowBreakdown = (bool)(object)value!;
+                break;
+        }
+
         return true;
     }
 
-    private void NotifyFieldChanged()
+    private void NotifyChanged()
     {
-        if (_suppressChangeNotifications)
+        UpdateCredentialDerivedState();
+        UpdateConnectionStates();
+        if (!_suppressChangeNotifications)
+            _host?.OnSettingsChanged();
+    }
+
+    private void UpdateCredentialDerivedState()
+    {
+        if (_updatingDerivedState || Sections.Count == 0)
             return;
 
-        _host?.OnSettingsChanged();
+        _updatingDerivedState = true;
+        try
+        {
+            var codex = GetSource(ProviderSourceKind.OpenAiCodex);
+            codex.HasAutoAuth = HasCodexAutoAuth;
+            codex.AutoAuthSummary = CodexAutoAuthSummary;
+            codex.ShowAdvancedSection = ShowCodexLimits && !HasCodexAutoAuth;
+            codex.ShowSessionField = !HasCodexAutoAuth;
+            codex.HasSessionSaved = HasOpenAiSessionCookieSaved;
+            codex.SessionWatermark = OpenAiSessionCookieWatermark;
+            codex.NotifyAdvancedVisibility();
+
+            var direct = GetSource(ProviderSourceKind.OpenAiDirect);
+            direct.ShowAdvancedSection = ShowOpenAiDirect;
+            direct.ShowApiKeyField = !HasOpenAiApiKeySaved;
+            direct.ShowOrgIdField = ShowOpenAiDirect;
+            direct.ShowBudgetField = ShowOpenAiDirect;
+            direct.HasApiKeySaved = HasOpenAiApiKeySaved;
+            direct.ApiKeyWatermark = OpenAiApiKeyWatermark;
+            direct.NotifyAdvancedVisibility();
+
+            var geminiLimits = GetSource(ProviderSourceKind.AntigravityLimits);
+            geminiLimits.HasAutoAuth = HasGeminiAutoAuth;
+            geminiLimits.AutoAuthSummary = GeminiAutoAuthSummary;
+            geminiLimits.ShowAdvancedSection = ShowAntigravityLimits && !HasGeminiAutoAuth;
+            geminiLimits.NotifyAdvancedVisibility();
+
+            if (ProviderFeatureFlags.OpenRouterEnabled)
+            {
+                var openRouter = GetSource(ProviderSourceKind.OpenRouterCredits);
+                openRouter.ShowAdvancedSection = ShowOpenRouterLimits;
+                openRouter.ShowApiKeyField = !HasOpenRouterApiKeySaved;
+                openRouter.ShowManagementApiKeyField = ShowOpenRouterLimits && !HasOpenRouterManagementApiKeySaved;
+                openRouter.HasApiKeySaved = HasOpenRouterApiKeySaved;
+                openRouter.HasManagementApiKeySaved = HasOpenRouterManagementApiKeySaved;
+                openRouter.ApiKeyWatermark = OpenRouterApiKeyWatermark;
+                openRouter.ManagementApiKeyWatermark = OpenRouterManagementApiKeyWatermark;
+                openRouter.NotifyAdvancedVisibility();
+            }
+
+            var openCodeZen = GetSource(ProviderSourceKind.OpenCodeZen);
+            openCodeZen.HasAutoAuth = HasOpenCodeAutoAuth;
+            openCodeZen.AutoAuthSummary = OpenCodeAutoAuthSummary;
+            openCodeZen.NotifyAdvancedVisibility();
+
+            var openCodeGo = GetSource(ProviderSourceKind.OpenCodeGo);
+            openCodeGo.HasAutoAuth = HasOpenCodeAutoAuth;
+            openCodeGo.AutoAuthSummary = OpenCodeAutoAuthSummary;
+            openCodeGo.ShowAdvancedSection = (ShowOpenCodeZen || ShowOpenCodeGo) && !HasOpenCodeApiKeyAuth;
+            openCodeGo.ShowSessionField = ShowOpenCodeCredentials;
+            openCodeGo.ShowWorkspaceField = !HasOpenCodeApiKeyAuth;
+            openCodeGo.HasSessionSaved = HasOpenCodeSessionSaved;
+            openCodeGo.SessionWatermark = OpenCodeSessionWatermark;
+            openCodeGo.NotifyAdvancedVisibility();
+
+            OnPropertyChanged(nameof(ShowOpenCodeCredentials));
+            OnPropertyChanged(nameof(HasOpenCodeAutoAuth));
+            OnPropertyChanged(nameof(HasOpenCodeApiKeyAuth));
+
+            OnPropertyChanged(nameof(ShowCodexCredentials));
+            OnPropertyChanged(nameof(ShowOpenAiDirectCredentials));
+            OnPropertyChanged(nameof(HasCodexAutoAuth));
+            OnPropertyChanged(nameof(HasGeminiAutoAuth));
+        }
+        finally
+        {
+            _updatingDerivedState = false;
+        }
     }
 
-    private void UpdateCredentialWatermarks()
+    private void WireSectionNotifications()
     {
-        OpenAiApiKeyWatermark = BuildWatermark("Admin API key", _openAiCredentialId);
-        OpenAiSessionCookieWatermark = BuildWatermark("ChatGPT session cookie (optional fallback)", _openAiProSessionCredentialId);
-        ClaudeApiKeyWatermark = BuildWatermark("Admin API key (sk-ant-admin...)", _claudeCredentialId);
-        OpenRouterApiKeyWatermark = BuildWatermark("API key (sk-or-...)", _openRouterCredentialId);
-        OpenCodeSessionWatermark = BuildWatermark("opencode.ai auth cookie", _openCodeProSessionCredentialId);
-        OnPropertyChanged(nameof(HasOpenAiApiKeySaved));
-        OnPropertyChanged(nameof(HasOpenAiSessionCookieSaved));
-        OnPropertyChanged(nameof(HasClaudeSessionCookieSaved));
-        OnPropertyChanged(nameof(HasClaudeProAuth));
-        OnPropertyChanged(nameof(HasClaudeApiKeySaved));
-        OnPropertyChanged(nameof(HasOpenRouterApiKeySaved));
-        OnPropertyChanged(nameof(HasOpenCodeSessionSaved));
-        OnPropertyChanged(nameof(ShowOpenAiDirectCredentials));
-        OnPropertyChanged(nameof(ShowCodexCredentials));
-        OnPropertyChanged(nameof(ShowClaudeApiConsoleCredentials));
-        OnPropertyChanged(nameof(HasCodexAutoAuth));
-        UpdateConnectionStates();
+        foreach (var section in Sections)
+        {
+            section.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName is nameof(ProviderSettingsSectionViewModel.MasterEnable))
+                    return;
+                NotifyChanged();
+            };
+
+            foreach (var source in section.Sources)
+            {
+                source.PropertyChanged += (_, _) =>
+                {
+                    if (!_suppressChangeNotifications && !_updatingDerivedState)
+                        NotifyChanged();
+                };
+            }
+        }
     }
+
+    private ProviderBillingSettings CreateOpenAiBillingSettings() => new()
+    {
+        ProSessionCredentialId = _openAiProSessionCredentialId
+    };
+
+    private ProviderBillingSettings CreateOpenCodeBillingSettings() => new()
+    {
+        ProSessionCredentialId = _openCodeProSessionCredentialId,
+        WorkspaceId = _openCodeWorkspaceId
+    };
 
     private void NotifyAccordionPropertiesChanged()
     {
         OnPropertyChanged(nameof(IsCursorExpanded));
         OnPropertyChanged(nameof(IsOpenAiExpanded));
-        OnPropertyChanged(nameof(IsClaudeExpanded));
         OnPropertyChanged(nameof(IsGeminiExpanded));
         OnPropertyChanged(nameof(IsOpenRouterExpanded));
         OnPropertyChanged(nameof(IsOpenCodeExpanded));
         OnPropertyChanged(nameof(IsDiskExpanded));
-        OnPropertyChanged(nameof(CursorChevron));
-        OnPropertyChanged(nameof(OpenAiChevron));
-        OnPropertyChanged(nameof(ClaudeChevron));
-        OnPropertyChanged(nameof(GeminiChevron));
-        OnPropertyChanged(nameof(OpenRouterChevron));
-        OnPropertyChanged(nameof(OpenCodeChevron));
-        OnPropertyChanged(nameof(DiskChevron));
     }
 
     private static string BuildWatermark(string label, string? credentialId) =>
@@ -990,20 +1010,4 @@ public sealed class SettingsPanelViewModel : ViewModelBase
         CredentialStore.Replace(provider, credentialId, text?.Trim() ?? "", newId => id = newId);
         credentialId = id;
     }
-
-    private static void SaveProSessionCredential(string provider, ref string? credentialId, string? text)
-    {
-        SaveCredential(provider, ref credentialId, text);
-    }
-
-    private static string? NullIfEmpty(string? value) =>
-        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-
-    private static decimal? ParseBudget(string? text) =>
-        decimal.TryParse(text?.Trim(), NumberStyles.Number, CultureInfo.InvariantCulture, out var value) && value > 0
-            ? value
-            : null;
-
-    private static string FormatBudget(decimal? value) =>
-        value is > 0 ? value.Value.ToString(CultureInfo.InvariantCulture) : "";
 }

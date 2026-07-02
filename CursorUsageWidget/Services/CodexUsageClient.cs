@@ -12,12 +12,18 @@ public sealed class CodexUsageClient : IDisposable
     private readonly HttpClient _http;
     private readonly bool _ownsHttp;
     private readonly Func<string?> _authFilePathResolver;
+    private readonly CodexAuthResolver _authResolver;
 
-    public CodexUsageClient(HttpClient? http = null, Func<string?>? authFilePathResolver = null)
+    public CodexUsageClient(
+        HttpClient? http = null,
+        Func<string?>? authFilePathResolver = null,
+        CodexAuthResolver? authResolver = null)
     {
         _ownsHttp = http is null;
         _http = http ?? new HttpClient();
         _authFilePathResolver = authFilePathResolver ?? ResolveDefaultAuthFilePath;
+        _authResolver = authResolver ?? new CodexAuthResolver(
+            authFileReader: () => TryReadAuthFromPath(_authFilePathResolver()));
     }
 
     public async Task<CodexSnapshot> FetchAsync(
@@ -29,8 +35,11 @@ public sealed class CodexUsageClient : IDisposable
             var auth = await ResolveAuthAsync(settings, cancellationToken);
             if (auth is null)
             {
-                settings.ProLastConnectionStatus = "Codex auth not found — run codex login or paste session cookie";
-                return CodexSnapshot.Unavailable(settings.ProLastConnectionStatus);
+                var resolved = _authResolver.Resolve(settings, tryBrowserCookies: true);
+                var message = resolved.FailureMessage
+                                ?? "Codex auth not found — run codex login or paste session cookie";
+                settings.ProLastConnectionStatus = message;
+                return CodexSnapshot.Unavailable(message);
             }
 
             var usage = await FetchUsageAsync(auth.Value.AccessToken, auth.Value.AccountId, cancellationToken);
@@ -52,26 +61,53 @@ public sealed class CodexUsageClient : IDisposable
     }
 
     public async Task<string> TestConnectionAsync(
-        string? sessionValue = null,
+        ProviderBillingSettings settings,
+        CancellationToken cancellationToken = default) =>
+        await RefreshAndConnectAsync(settings, cancellationToken);
+
+    public async Task<string> RefreshAndConnectAsync(
+        ProviderBillingSettings settings,
         CancellationToken cancellationToken = default)
     {
         try
         {
-            var auth = await ResolveAuthForTestAsync(sessionValue, cancellationToken);
-            if (auth is null)
-                return "Codex auth not found — run codex login or paste session cookie";
+            var resolved = _authResolver.Resolve(settings, tryBrowserCookies: true);
+            if (resolved.Auth is not null)
+            {
+                var usage = await FetchUsageAsync(
+                    resolved.Auth.Value.AccessToken,
+                    resolved.Auth.Value.AccountId,
+                    cancellationToken);
+                settings.ProLastConnectionStatus = usage.IsAvailable
+                    ? $"Connected ({usage.PlanLabel ?? "Codex"})"
+                    : (usage.StatusMessage ?? "No Codex quota");
+                return settings.ProLastConnectionStatus;
+            }
 
-            var usage = await FetchUsageAsync(auth.Value.AccessToken, auth.Value.AccountId, cancellationToken);
-            return usage.IsAvailable
-                ? $"Connected ({usage.PlanLabel ?? "Codex"})"
-                : (usage.StatusMessage ?? "No Codex quota");
+            if (!resolved.HasSessionCookie)
+                return resolved.FailureMessage ?? "Codex auth not found — run codex login or paste session cookie";
+
+            if (resolved.Source == CodexAuthSource.BrowserCookie)
+                CodexAuthResolver.PersistBrowserSession(settings, resolved.SessionCookie!);
+
+            var auth = await ExchangeSessionAsync(resolved.SessionCookie!, cancellationToken);
+            if (auth is null)
+                return "Session expired — run codex login or paste a new ChatGPT session cookie";
+
+            var sessionUsage = await FetchUsageAsync(auth.Value.AccessToken, auth.Value.AccountId, cancellationToken);
+            settings.ProLastConnectionStatus = sessionUsage.IsAvailable
+                ? $"Connected ({sessionUsage.PlanLabel ?? "Codex"})"
+                : (sessionUsage.StatusMessage ?? "No Codex quota");
+            return settings.ProLastConnectionStatus;
         }
         catch (CodexUsageException ex)
         {
+            settings.ProLastConnectionStatus = ex.Message;
             return ex.Message;
         }
         catch (Exception)
         {
+            settings.ProLastConnectionStatus = "Request failed";
             return "Request failed";
         }
     }
@@ -115,29 +151,7 @@ public sealed class CodexUsageClient : IDisposable
             ? planTypeEl.GetString()
             : null;
 
-        if (!root.TryGetProperty("rate_limit", out var rateLimit) || rateLimit.ValueKind != JsonValueKind.Object)
-            return CodexSnapshot.Unavailable("No Codex quota");
-
-        var limitReached = rateLimit.TryGetProperty("limit_reached", out var limitReachedEl)
-                           && limitReachedEl.ValueKind == JsonValueKind.True;
-
-        double? sessionUsed = null;
-        double? weeklyUsed = null;
-        DateTimeOffset? sessionResetsAt = null;
-        DateTimeOffset? weeklyResetsAt = null;
-
-        if (rateLimit.TryGetProperty("primary_window", out var primary) && primary.ValueKind == JsonValueKind.Object)
-        {
-            sessionUsed = ParseUsedPercent(primary);
-            sessionResetsAt = ParseWindowReset(primary, observedAt);
-        }
-
-        if (rateLimit.TryGetProperty("secondary_window", out var secondary) && secondary.ValueKind == JsonValueKind.Object)
-        {
-            weeklyUsed = ParseUsedPercent(secondary);
-            weeklyResetsAt = ParseWindowReset(secondary, observedAt);
-        }
-
+        var (sessionUsed, weeklyUsed, sessionResetsAt, weeklyResetsAt, limitReached) = ParseRateLimitWindows(root, observedAt);
         if (sessionUsed is null && weeklyUsed is null)
             return CodexSnapshot.Unavailable("No Codex quota");
 
@@ -145,12 +159,167 @@ public sealed class CodexUsageClient : IDisposable
 
         return CodexSnapshot.FromUsage(
             planType,
-            sessionUsed ?? 0,
-            weeklyUsed ?? 0,
+            sessionUsed,
+            weeklyUsed,
             sessionResetsAt,
             weeklyResetsAt,
             creditsBalance,
             limitReached);
+    }
+
+    internal static (double? SessionUsed, double? WeeklyUsed, DateTimeOffset? SessionResetsAt, DateTimeOffset? WeeklyResetsAt, bool LimitReached)
+        ParseRateLimitWindows(JsonElement root, DateTimeOffset observedAt)
+    {
+        var limitReached = false;
+        JsonElement? rateLimitContainer = null;
+
+        if (root.TryGetProperty("rate_limit", out var rateLimit) && rateLimit.ValueKind == JsonValueKind.Object)
+        {
+            rateLimitContainer = rateLimit;
+            limitReached = rateLimit.TryGetProperty("limit_reached", out var limitReachedEl)
+                           && limitReachedEl.ValueKind == JsonValueKind.True;
+        }
+
+        var sessionCandidate = FindWindow(
+            root,
+            rateLimitContainer,
+            "five_hour",
+            "five_hour_limit",
+            "five_hour_rate_limit");
+        var weeklyCandidate = FindWindow(
+            root,
+            rateLimitContainer,
+            "weekly",
+            "weekly_limit",
+            "weekly_rate_limit");
+        var primaryCandidate = FindWindow(root, rateLimitContainer, "primary", "primary_window");
+        var secondaryCandidate = FindWindow(root, rateLimitContainer, "secondary", "secondary_window");
+
+        sessionCandidate ??= primaryCandidate;
+        weeklyCandidate ??= secondaryCandidate;
+
+        var (sessionWindow, weeklyWindow) = ClassifyRateLimitWindows(
+            sessionCandidate,
+            weeklyCandidate,
+            primaryCandidate,
+            secondaryCandidate);
+
+        double? sessionUsed = null;
+        double? weeklyUsed = null;
+        DateTimeOffset? sessionResetsAt = null;
+        DateTimeOffset? weeklyResetsAt = null;
+
+        if (sessionWindow is { } session)
+        {
+            sessionUsed = ParseUsedPercent(session);
+            sessionResetsAt = ParseWindowReset(session, observedAt);
+        }
+
+        if (weeklyWindow is { } weekly)
+        {
+            weeklyUsed = ParseUsedPercent(weekly);
+            weeklyResetsAt = ParseWindowReset(weekly, observedAt);
+        }
+
+        return (sessionUsed, weeklyUsed, sessionResetsAt, weeklyResetsAt, limitReached);
+    }
+
+    internal static (JsonElement? Session, JsonElement? Weekly) ClassifyRateLimitWindows(
+        JsonElement? sessionCandidate,
+        JsonElement? weeklyCandidate,
+        JsonElement? primaryCandidate,
+        JsonElement? secondaryCandidate)
+    {
+        var primaryRole = InferWindowRole(primaryCandidate, defaultRole: "session");
+        var secondaryRole = InferWindowRole(secondaryCandidate, defaultRole: "weekly");
+        var sessionRole = InferWindowRole(sessionCandidate, defaultRole: "session");
+        var weeklyRole = InferWindowRole(weeklyCandidate, defaultRole: "weekly");
+
+        JsonElement? sessionWindow = null;
+        JsonElement? weeklyWindow = null;
+
+        if (sessionCandidate is { } explicitSession && sessionRole == "session")
+            sessionWindow = UnwrapRateLimitWindow(explicitSession);
+        if (weeklyCandidate is { } explicitWeekly && weeklyRole == "weekly")
+            weeklyWindow = UnwrapRateLimitWindow(explicitWeekly);
+
+        if (sessionWindow is null && primaryCandidate is { } primary)
+        {
+            if (primaryRole == "session")
+                sessionWindow = UnwrapRateLimitWindow(primary);
+            else if (primaryRole == "weekly")
+                weeklyWindow = UnwrapRateLimitWindow(primary);
+        }
+
+        if (weeklyWindow is null && secondaryCandidate is { } secondary)
+        {
+            if (secondaryRole == "weekly")
+                weeklyWindow = UnwrapRateLimitWindow(secondary);
+            else if (secondaryRole == "session")
+                sessionWindow ??= UnwrapRateLimitWindow(secondary);
+        }
+
+        if (sessionWindow is not null && weeklyWindow is not null)
+            return (sessionWindow, weeklyWindow);
+
+        if (sessionWindow is null && weeklyWindow is null && primaryCandidate is { } onlyPrimary)
+        {
+            if (primaryRole == "weekly")
+                return (null, UnwrapRateLimitWindow(onlyPrimary));
+
+            return (UnwrapRateLimitWindow(onlyPrimary), null);
+        }
+
+        return (sessionWindow, weeklyWindow);
+    }
+
+    internal static string InferWindowRole(JsonElement? window, string defaultRole)
+    {
+        if (window is not { } element)
+            return defaultRole;
+
+        var unwrapped = UnwrapRateLimitWindow(element);
+        if (!unwrapped.TryGetProperty("limit_window_seconds", out var secondsEl)
+            || secondsEl.ValueKind != JsonValueKind.Number)
+            return defaultRole;
+
+        var seconds = secondsEl.GetDouble();
+        if (seconds <= 6 * 3600)
+            return "session";
+        if (seconds >= 6 * 24 * 3600)
+            return "weekly";
+
+        return defaultRole;
+    }
+
+    internal static JsonElement UnwrapRateLimitWindow(JsonElement window)
+    {
+        if (!window.TryGetProperty("reset_at", out _)
+            && !window.TryGetProperty("reset_after_seconds", out _)
+            && window.TryGetProperty("primary_window", out var nested)
+            && nested.ValueKind == JsonValueKind.Object)
+            return nested;
+
+        return window;
+    }
+
+    internal static JsonElement? FindWindow(
+        JsonElement root,
+        JsonElement? rateLimitContainer,
+        params string[] propertyNames)
+    {
+        foreach (var name in propertyNames)
+        {
+            if (rateLimitContainer is { } container
+                && container.TryGetProperty(name, out var fromRateLimit)
+                && fromRateLimit.ValueKind == JsonValueKind.Object)
+                return fromRateLimit;
+
+            if (root.TryGetProperty(name, out var fromRoot) && fromRoot.ValueKind == JsonValueKind.Object)
+                return fromRoot;
+        }
+
+        return null;
     }
 
     internal static string BuildCookieHeader(string sessionValue)
@@ -192,32 +361,24 @@ public sealed class CodexUsageClient : IDisposable
         ProviderBillingSettings settings,
         CancellationToken cancellationToken)
     {
-        var fromFile = TryReadAuthFromFile();
-        if (fromFile is not null)
-            return fromFile;
+        var resolved = _authResolver.Resolve(settings, tryBrowserCookies: true);
+        if (resolved.Auth is not null)
+            return resolved.Auth;
 
-        var session = CredentialStore.Retrieve(settings.ProSessionCredentialId);
-        if (string.IsNullOrWhiteSpace(session))
+        if (!resolved.HasSessionCookie)
             return null;
 
-        return await ExchangeSessionAsync(session, cancellationToken);
-    }
+        var auth = await ExchangeSessionAsync(resolved.SessionCookie!, cancellationToken);
+        if (auth is not null && resolved.Source == CodexAuthSource.BrowserCookie)
+            CodexAuthResolver.PersistBrowserSession(settings, resolved.SessionCookie!);
 
-    private async Task<CodexAuth?> ResolveAuthForTestAsync(
-        string? sessionValue,
-        CancellationToken cancellationToken)
-    {
-        if (!string.IsNullOrWhiteSpace(sessionValue))
-            return await ExchangeSessionAsync(sessionValue, cancellationToken);
-
-        var fromFile = TryReadAuthFromFile();
-        if (fromFile is not null)
-            return fromFile;
-
-        return null;
+        return auth;
     }
 
     public bool HasLocalAuthFile() => TryReadAuthFromFile() is not null;
+
+    public bool HasDetectableAuth(ProviderBillingSettings settings) =>
+        _authResolver.HasDetectableAuth(settings);
 
     internal static bool TryReadLocalAuthFile(out CodexAuth? auth, Func<string?>? authFilePathResolver = null)
     {
@@ -277,9 +438,10 @@ public sealed class CodexUsageClient : IDisposable
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, $"{BaseUrl}/backend-api/wham/usage");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-        request.Headers.TryAddWithoutValidation("chatgpt-account-id", accountId);
+        request.Headers.TryAddWithoutValidation("ChatGPT-Account-Id", accountId);
         request.Headers.TryAddWithoutValidation("OpenAI-Account-Id", accountId);
         request.Headers.TryAddWithoutValidation("Origin", BaseUrl);
+        request.Headers.TryAddWithoutValidation("Referer", $"{BaseUrl}/");
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
         using var response = await _http.SendAsync(request, cancellationToken);
@@ -381,8 +543,6 @@ public sealed class CodexUsageClient : IDisposable
         if (_ownsHttp)
             _http.Dispose();
     }
-
-    internal readonly record struct CodexAuth(string AccessToken, string AccountId);
 }
 
 internal sealed class CodexUsageException : Exception

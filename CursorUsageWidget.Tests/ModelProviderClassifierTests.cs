@@ -8,7 +8,7 @@ public sealed class ModelProviderClassifierTests
     [Theory]
     [InlineData("gpt-4.1", ModelProvider.OpenAi)]
     [InlineData("o3-mini", ModelProvider.OpenAi)]
-    [InlineData("claude-4.6-opus-high-thinking", ModelProvider.Claude)]
+    [InlineData("claude-4.6-opus-high-thinking", ModelProvider.Unknown)]
     [InlineData("gemini-2.5-pro", ModelProvider.Gemini)]
     [InlineData("composer-2", ModelProvider.Unknown)]
     [InlineData("default", ModelProvider.Unknown)]

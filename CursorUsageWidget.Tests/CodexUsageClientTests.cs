@@ -81,6 +81,27 @@ public sealed class CodexUsageClientTests
     }
 
     [Fact]
+    public void ParseUsageResponse_supports_alternate_rate_limit_field_names()
+    {
+        const string json = """
+            {
+              "plan_type": "prolite",
+              "five_hour": { "used_percent": 12.0, "reset_after_seconds": 3600 },
+              "weekly": { "used_percent": 8.0, "reset_after_seconds": 86400 }
+            }
+            """;
+
+        var observedAt = new DateTimeOffset(2026, 6, 24, 12, 0, 0, TimeSpan.Zero);
+        using var document = JsonDocument.Parse(json);
+        var snapshot = CodexUsageClient.ParseUsageResponse(document.RootElement, observedAt);
+
+        Assert.True(snapshot.IsAvailable);
+        Assert.Equal("Prolite", snapshot.PlanLabel);
+        Assert.Equal(12, snapshot.SessionPercentUsed, 1);
+        Assert.Equal(8, snapshot.WeeklyPercentUsed, 1);
+    }
+
+    [Fact]
     public void ParseUsageResponse_reads_reset_at_epoch()
     {
         const string json = """
@@ -98,6 +119,94 @@ public sealed class CodexUsageClientTests
         Assert.True(snapshot.IsAvailable);
         Assert.Equal(50, snapshot.SessionPercentRemaining, 1);
         Assert.Equal(DateTimeOffset.FromUnixTimeSeconds(1780000000), snapshot.SessionResetsAt);
+    }
+
+    [Fact]
+    public void ParseUsageResponse_maps_weekly_only_free_plan_by_window_seconds()
+    {
+        const string json = """
+            {
+              "plan_type": "free",
+              "rate_limit": {
+                "allowed": true,
+                "limit_reached": false,
+                "primary_window": {
+                  "used_percent": 85,
+                  "limit_window_seconds": 604800,
+                  "reset_after_seconds": 301573,
+                  "reset_at": 1773507681
+                },
+                "secondary_window": null
+              }
+            }
+            """;
+
+        using var document = JsonDocument.Parse(json);
+        var snapshot = CodexUsageClient.ParseUsageResponse(document.RootElement);
+
+        Assert.True(snapshot.IsAvailable);
+        Assert.Equal("Free", snapshot.PlanLabel);
+        Assert.Equal(100, snapshot.SessionPercentRemaining, 1);
+        Assert.Equal(15, snapshot.WeeklyPercentRemaining, 1);
+        Assert.Equal(85, snapshot.WeeklyPercentUsed, 1);
+        Assert.Equal(0, snapshot.SessionPercentUsed, 1);
+        Assert.Contains("wk 85%", snapshot.DetailLabel);
+        Assert.DoesNotContain("5h", snapshot.DetailLabel);
+        Assert.Equal(DateTimeOffset.FromUnixTimeSeconds(1773507681), snapshot.WeeklyResetsAt);
+    }
+
+    [Fact]
+    public void ClassifyRateLimitWindows_prefers_explicit_five_hour_and_weekly_keys()
+    {
+        const string json = """
+            {
+              "five_hour": { "used_percent": 10, "limit_window_seconds": 18000 },
+              "weekly": { "used_percent": 20, "limit_window_seconds": 604800 }
+            }
+            """;
+
+        using var document = JsonDocument.Parse(json);
+        var (sessionUsed, weeklyUsed, _, _, _) =
+            CodexUsageClient.ParseRateLimitWindows(document.RootElement, DateTimeOffset.UtcNow);
+
+        Assert.Equal(10, sessionUsed);
+        Assert.Equal(20, weeklyUsed);
+    }
+
+    [Fact]
+    public async Task TestConnectionAsync_uses_browser_cookie_when_no_auth_file()
+    {
+        var handler = new StubHttpHandler(request =>
+        {
+            if (request.RequestUri!.AbsolutePath == "/api/auth/session")
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("""
+                        {
+                          "accessToken": "eyJhbGciOiJub25lIn0.eyJjaGF0Z3B0X2FjY291bnRfaWQiOiJicm93c2VyLWFjYyJ9.",
+                          "account": { "id": "browser-acc" }
+                        }
+                        """, Encoding.UTF8, "application/json")
+                };
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(SampleUsageJson, Encoding.UTF8, "application/json")
+            };
+        });
+
+        var resolver = new CodexAuthResolver(
+            authFileReader: () => null,
+            browserCookieReader: () => "browser-cookie",
+            savedSessionReader: _ => null);
+        var client = new CodexUsageClient(new HttpClient(handler), () => null, resolver);
+        var settings = new CursorUsageWidget.Models.ProviderBillingSettings();
+
+        var status = await client.TestConnectionAsync(settings);
+
+        Assert.Equal("Connected (Plus)", status);
     }
 
     [Fact]
@@ -135,7 +244,7 @@ public sealed class CodexUsageClientTests
             var handler = new StubHttpHandler(request =>
             {
                 Assert.Equal("/backend-api/wham/usage", request.RequestUri!.AbsolutePath);
-                Assert.Equal("acc-from-file", request.Headers.GetValues("chatgpt-account-id").Single());
+                Assert.Equal("acc-from-file", request.Headers.GetValues("ChatGPT-Account-Id").Single());
 
                 return new HttpResponseMessage(HttpStatusCode.OK)
                 {
@@ -143,7 +252,11 @@ public sealed class CodexUsageClientTests
                 };
             });
 
-            var client = new CodexUsageClient(new HttpClient(handler), () => authPath);
+            var resolver = new CodexAuthResolver(
+                authFileReader: () => CodexUsageClient.TryReadAuthFromPath(authPath),
+                browserCookieReader: () => null,
+                savedSessionReader: _ => null);
+            var client = new CodexUsageClient(new HttpClient(handler), () => authPath, resolver);
             var settings = new CursorUsageWidget.Models.ProviderBillingSettings();
 
             var snapshot = await client.FetchAsync(settings);
@@ -177,14 +290,18 @@ public sealed class CodexUsageClientTests
                 };
             }
 
-            Assert.Equal("sess-acc", request.Headers.GetValues("chatgpt-account-id").Single());
+            Assert.Equal("sess-acc", request.Headers.GetValues("ChatGPT-Account-Id").Single());
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent(SampleUsageJson, Encoding.UTF8, "application/json")
             };
         });
 
-        var client = new CodexUsageClient(new HttpClient(handler), () => null);
+        var resolver = new CodexAuthResolver(
+            authFileReader: () => null,
+            browserCookieReader: () => null,
+            savedSessionReader: id => CredentialStore.Retrieve(id));
+        var client = new CodexUsageClient(new HttpClient(handler), () => null, resolver);
         var settings = new CursorUsageWidget.Models.ProviderBillingSettings
         {
             ProSessionCredentialId = CredentialStore.Store("openai-codex-test", "session-token")

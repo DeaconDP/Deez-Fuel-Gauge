@@ -84,27 +84,6 @@ public sealed class ProviderLimitsPresenterTests
     }
 
     [Fact]
-    public void FormatClaudeProFooter_includes_reset_times()
-    {
-        var sessionReset = new DateTimeOffset(2026, 6, 24, 14, 30, 0, TimeSpan.Zero);
-        var weeklyReset = new DateTimeOffset(2026, 6, 26, 0, 0, 0, TimeSpan.Zero);
-        var snapshot = ClaudeProSnapshot.FromUsage(12, 34, sessionReset, weeklyReset);
-
-        var footer = ProviderLimitsPresenter.FormatClaudeProFooter(snapshot);
-
-        Assert.Contains("5h resets", footer);
-        Assert.Contains("weekly resets", footer);
-    }
-
-    [Fact]
-    public void FormatClaudeProFooter_empty_when_unavailable()
-    {
-        var snapshot = ClaudeProSnapshot.Unavailable("Session cookie not set");
-
-        Assert.Equal("", ProviderLimitsPresenter.FormatClaudeProFooter(snapshot));
-    }
-
-    [Fact]
     public void FormatResetTimes_omits_missing_windows()
     {
         var sessionReset = new DateTimeOffset(2026, 6, 24, 14, 30, 0, TimeSpan.Zero);

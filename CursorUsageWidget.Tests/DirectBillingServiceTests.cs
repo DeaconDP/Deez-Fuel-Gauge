@@ -12,7 +12,6 @@ public sealed class DirectBillingServiceTests
         var settings = new WidgetSettings
         {
             OpenAi = new ProviderBillingSettings { ShowProLimits = false },
-            Claude = new ProviderBillingSettings { ShowProLimits = false },
             Gemini = new ProviderBillingSettings { ShowProLimits = false },
             OpenRouter = new ProviderBillingSettings { ShowProLimits = false },
             OpenCode = new ProviderBillingSettings { ShowProLimits = false, ShowDirectSource = false }
@@ -23,7 +22,6 @@ public sealed class DirectBillingServiceTests
         var enriched = await service.EnrichAsync(source, settings);
 
         Assert.False(enriched.Codex.IsAvailable);
-        Assert.False(enriched.ClaudePro.IsAvailable);
         Assert.False(enriched.Antigravity.IsAvailable);
         Assert.False(enriched.OpenRouter.IsAvailable);
         Assert.False(enriched.OpenCode.IsAvailable);

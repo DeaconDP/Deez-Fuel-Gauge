@@ -12,13 +12,13 @@ public sealed class AntigravityUsageClient : IDisposable
 
     private readonly HttpClient _http;
     private readonly bool _ownsHttp;
-    private readonly Func<AntigravityOAuthTokens> _tokenReader;
+    private readonly GeminiAuthResolver _authResolver;
 
-    public AntigravityUsageClient(HttpClient? http = null, Func<AntigravityOAuthTokens>? tokenReader = null)
+    public AntigravityUsageClient(HttpClient? http = null, GeminiAuthResolver? authResolver = null)
     {
         _ownsHttp = http is null;
         _http = http ?? new HttpClient();
-        _tokenReader = tokenReader ?? AntigravityTokenReader.Read;
+        _authResolver = authResolver ?? new GeminiAuthResolver();
     }
 
     public async Task<AntigravitySnapshot> FetchAsync(
@@ -27,19 +27,26 @@ public sealed class AntigravityUsageClient : IDisposable
     {
         try
         {
-            var accessToken = await ResolveAccessTokenAsync(cancellationToken);
-            if (string.IsNullOrWhiteSpace(accessToken))
+            var auth = _authResolver.Resolve();
+            if (!auth.HasAuth)
             {
-                settings.ProLastConnectionStatus = "Sign in to Antigravity on this machine";
+                settings.ProLastConnectionStatus = auth.FailureMessage
+                    ?? "Sign in to Antigravity IDE or Gemini CLI on this machine";
                 return AntigravitySnapshot.Unavailable(settings.ProLastConnectionStatus);
             }
 
-            var (projectId, planLabel) = await LoadProjectInfoAsync(accessToken, cancellationToken);
-            var summary = await FetchQuotaSummaryAsync(accessToken, projectId, cancellationToken);
-            var snapshot = ParseQuotaSummary(summary, planLabel);
+            var accessToken = await ResolveAccessTokenAsync(auth, cancellationToken);
+            if (string.IsNullOrWhiteSpace(accessToken))
+            {
+                settings.ProLastConnectionStatus = "Gemini session expired — sign in again";
+                return AntigravitySnapshot.Unavailable(settings.ProLastConnectionStatus);
+            }
+
+            var (projectId, planLabel) = await LoadProjectInfoAsync(accessToken, auth.Source, cancellationToken);
+            var snapshot = await FetchQuotaAsync(accessToken, projectId, planLabel, cancellationToken);
             settings.ProLastConnectionStatus = snapshot.IsAvailable
-                ? $"Connected ({snapshot.PlanLabel ?? "Antigravity"})"
-                : (snapshot.StatusMessage ?? "No Antigravity quota");
+                ? $"Connected ({snapshot.PlanLabel ?? "Gemini"})"
+                : (snapshot.StatusMessage ?? "No Gemini quota");
             return snapshot;
         }
         catch (AntigravityUsageException ex)
@@ -58,16 +65,19 @@ public sealed class AntigravityUsageClient : IDisposable
     {
         try
         {
-            var accessToken = await ResolveAccessTokenAsync(cancellationToken);
-            if (string.IsNullOrWhiteSpace(accessToken))
-                return "Sign in to Antigravity on this machine";
+            var auth = _authResolver.Resolve();
+            if (!auth.HasAuth)
+                return auth.FailureMessage ?? "Sign in to Antigravity IDE or Gemini CLI on this machine";
 
-            var (projectId, planLabel) = await LoadProjectInfoAsync(accessToken, cancellationToken);
-            var summary = await FetchQuotaSummaryAsync(accessToken, projectId, cancellationToken);
-            var snapshot = ParseQuotaSummary(summary, planLabel);
+            var accessToken = await ResolveAccessTokenAsync(auth, cancellationToken);
+            if (string.IsNullOrWhiteSpace(accessToken))
+                return "Gemini session expired — sign in again";
+
+            var (projectId, planLabel) = await LoadProjectInfoAsync(accessToken, auth.Source, cancellationToken);
+            var snapshot = await FetchQuotaAsync(accessToken, projectId, planLabel, cancellationToken);
             return snapshot.IsAvailable
-                ? $"Connected ({snapshot.PlanLabel ?? "Antigravity"})"
-                : (snapshot.StatusMessage ?? "No Antigravity quota");
+                ? $"Connected ({snapshot.PlanLabel ?? "Gemini"})"
+                : (snapshot.StatusMessage ?? "No Gemini quota");
         }
         catch (AntigravityUsageException ex)
         {
@@ -79,10 +89,28 @@ public sealed class AntigravityUsageClient : IDisposable
         }
     }
 
+    private async Task<AntigravitySnapshot> FetchQuotaAsync(
+        string accessToken,
+        string? projectId,
+        string? planLabel,
+        CancellationToken cancellationToken)
+    {
+        var summary = await FetchQuotaSummaryAsync(accessToken, projectId, cancellationToken);
+        var snapshot = ParseQuotaSummary(summary, planLabel);
+        if (snapshot.IsAvailable)
+            return snapshot;
+
+        var userQuota = await TryFetchUserQuotaAsync(accessToken, projectId, cancellationToken);
+        if (userQuota is null)
+            return snapshot;
+
+        return ParseUserQuota(userQuota.Value, planLabel);
+    }
+
     internal static AntigravitySnapshot ParseQuotaSummary(JsonElement root, string? planLabel = null)
     {
         if (!root.TryGetProperty("quota_groups", out var groups) || groups.ValueKind != JsonValueKind.Array)
-            return AntigravitySnapshot.Unavailable("No Antigravity quota");
+            return AntigravitySnapshot.Unavailable("No Gemini quota");
 
         AntigravityGroupSnapshot? gemini = null;
         AntigravityGroupSnapshot? thirdParty = null;
@@ -97,11 +125,75 @@ public sealed class AntigravityUsageClient : IDisposable
                 thirdParty = parsed;
         }
 
+        if (gemini is null && thirdParty is null)
+            return AntigravitySnapshot.Unavailable("No Gemini quota");
+
         return AntigravitySnapshot.FromGroups(
             planLabel,
             gemini ?? AntigravityGroupSnapshot.Unavailable(),
             thirdParty ?? AntigravityGroupSnapshot.Unavailable());
     }
+
+    internal static AntigravitySnapshot ParseUserQuota(JsonElement root, string? planLabel = null)
+    {
+        if (!root.TryGetProperty("buckets", out var buckets) || buckets.ValueKind != JsonValueKind.Array)
+            return AntigravitySnapshot.Unavailable("No Gemini quota");
+
+        var geminiGroup = ParsePerModelBuckets(buckets);
+        if (!geminiGroup.IsAvailable)
+            return AntigravitySnapshot.Unavailable("No Gemini quota");
+
+        return AntigravitySnapshot.FromGroups(
+            planLabel,
+            geminiGroup,
+            AntigravityGroupSnapshot.Unavailable());
+    }
+
+    internal static AntigravityGroupSnapshot ParsePerModelBuckets(JsonElement buckets)
+    {
+        double? sessionRemaining = null;
+        double? weeklyRemaining = null;
+        DateTimeOffset? sessionResetsAt = null;
+        DateTimeOffset? weeklyResetsAt = null;
+        var now = DateTimeOffset.UtcNow;
+
+        foreach (var bucket in buckets.EnumerateArray())
+        {
+            var modelId = ReadStringProperty(bucket, "model_id", "modelId") ?? "";
+            if (!IsGeminiModelId(modelId))
+                continue;
+
+            var remaining = ParseRemainingFraction(bucket);
+            var resetAt = ParseResetTime(bucket);
+            var isWeekly = resetAt is null || resetAt.Value - now > TimeSpan.FromHours(24);
+
+            if (isWeekly)
+            {
+                if (weeklyRemaining is null || remaining < weeklyRemaining)
+                {
+                    weeklyRemaining = remaining;
+                    weeklyResetsAt = resetAt;
+                }
+            }
+            else if (sessionRemaining is null || remaining < sessionRemaining)
+            {
+                sessionRemaining = remaining;
+                sessionResetsAt = resetAt;
+            }
+        }
+
+        if (sessionRemaining is null && weeklyRemaining is null)
+            return AntigravityGroupSnapshot.Unavailable("No Gemini quota");
+
+        return AntigravityGroupSnapshot.FromUsage(
+            sessionRemaining ?? weeklyRemaining ?? 0,
+            weeklyRemaining ?? sessionRemaining ?? 0,
+            sessionResetsAt,
+            weeklyResetsAt);
+    }
+
+    internal static bool IsGeminiModelId(string modelId) =>
+        modelId.Contains("gemini", StringComparison.OrdinalIgnoreCase);
 
     internal static AntigravityGroupSnapshot ParseQuotaGroup(JsonElement group)
     {
@@ -132,7 +224,7 @@ public sealed class AntigravityUsageClient : IDisposable
         }
 
         if (sessionRemaining is null && weeklyRemaining is null)
-            return AntigravityGroupSnapshot.Unavailable("No Antigravity quota");
+            return AntigravityGroupSnapshot.Unavailable("No Gemini quota");
 
         return AntigravityGroupSnapshot.FromUsage(
             sessionRemaining ?? weeklyRemaining ?? 0,
@@ -159,25 +251,36 @@ public sealed class AntigravityUsageClient : IDisposable
         displayName.Contains("claude", StringComparison.OrdinalIgnoreCase)
         || displayName.Contains("gpt", StringComparison.OrdinalIgnoreCase);
 
-    private async Task<string?> ResolveAccessTokenAsync(CancellationToken cancellationToken)
+    private async Task<string?> ResolveAccessTokenAsync(GeminiAuthResult auth, CancellationToken cancellationToken)
     {
-        var tokens = _tokenReader();
+        var tokens = auth.Tokens;
         if (tokens.IsAccessTokenValid())
             return tokens.AccessToken;
 
         if (string.IsNullOrWhiteSpace(tokens.RefreshToken))
             return null;
 
-        return await RefreshAccessTokenAsync(tokens.RefreshToken, cancellationToken);
+        if (string.IsNullOrWhiteSpace(auth.OAuthClientId) || string.IsNullOrWhiteSpace(auth.OAuthClientSecret))
+            return null;
+
+        return await RefreshAccessTokenAsync(
+            tokens.RefreshToken,
+            auth.OAuthClientId,
+            auth.OAuthClientSecret,
+            cancellationToken);
     }
 
-    private async Task<string?> RefreshAccessTokenAsync(string refreshToken, CancellationToken cancellationToken)
+    private async Task<string?> RefreshAccessTokenAsync(
+        string refreshToken,
+        string clientId,
+        string clientSecret,
+        CancellationToken cancellationToken)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, "https://oauth2.googleapis.com/token");
         request.Content = new FormUrlEncodedContent(new Dictionary<string, string>
         {
-            ["client_id"] = AntigravityOAuthAppCredentials.ClientId,
-            ["client_secret"] = AntigravityOAuthAppCredentials.ClientSecret,
+            ["client_id"] = clientId,
+            ["client_secret"] = clientSecret,
             ["refresh_token"] = refreshToken,
             ["grant_type"] = "refresh_token"
         });
@@ -196,12 +299,19 @@ public sealed class AntigravityUsageClient : IDisposable
 
     private async Task<(string? ProjectId, string? PlanLabel)> LoadProjectInfoAsync(
         string accessToken,
+        GeminiAuthSource authSource,
         CancellationToken cancellationToken)
     {
+        var payload = authSource == GeminiAuthSource.GeminiCli
+            ? """{"metadata":{"ideType":"GEMINI_CLI","pluginType":"GEMINI"}}"""
+            : """{"metadata":{"ideType":"ANTIGRAVITY"}}""";
+
+        var userAgent = authSource == GeminiAuthSource.GeminiCli ? "GeminiCLI/1.0" : "Antigravity/1.0";
         using var request = CreateApiRequest(
             $"{CloudCodeBaseUrl}/v1internal:loadCodeAssist",
             accessToken,
-            """{"metadata":{"ideType":"ANTIGRAVITY"}}""");
+            payload,
+            userAgent);
 
         using var response = await _http.SendAsync(request, cancellationToken);
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -249,11 +359,45 @@ public sealed class AntigravityUsageClient : IDisposable
         return document.RootElement.Clone();
     }
 
-    private static HttpRequestMessage CreateApiRequest(string url, string accessToken, string jsonBody)
+    private async Task<JsonElement?> TryFetchUserQuotaAsync(
+        string accessToken,
+        string? projectId,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var payload = string.IsNullOrWhiteSpace(projectId)
+                ? "{}"
+                : JsonSerializer.Serialize(new { project = projectId });
+
+            using var request = CreateApiRequest(
+                $"{CloudCodeBaseUrl}/v1internal:retrieveUserQuota",
+                accessToken,
+                payload);
+
+            using var response = await _http.SendAsync(request, cancellationToken);
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            if (!response.IsSuccessStatusCode)
+                return null;
+
+            using var document = JsonDocument.Parse(body);
+            return document.RootElement.Clone();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static HttpRequestMessage CreateApiRequest(
+        string url,
+        string accessToken,
+        string jsonBody,
+        string userAgent = "Antigravity/1.0")
     {
         var request = new HttpRequestMessage(HttpMethod.Post, url);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-        request.Headers.TryAddWithoutValidation("User-Agent", "Antigravity/1.0");
+        request.Headers.TryAddWithoutValidation("User-Agent", userAgent);
         request.Content = new StringContent(jsonBody, Encoding.UTF8, "application/json");
         return request;
     }
@@ -323,7 +467,7 @@ internal sealed class AntigravityUsageException : Exception
     public static AntigravityUsageException FromResponse(System.Net.HttpStatusCode status, string body)
     {
         if (status is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden)
-            return new AntigravityUsageException("Antigravity session expired — sign in again in Antigravity");
+            return new AntigravityUsageException("Gemini session expired — sign in again");
 
         try
         {

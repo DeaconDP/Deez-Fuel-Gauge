@@ -10,34 +10,54 @@ public sealed class OpenCodeUsageClient : IDisposable
 {
     private const string BaseUrl = "https://opencode.ai";
 
+    private static readonly Regex WorkspaceIdPattern = new(
+        @"/workspace/(wrk_[A-Za-z0-9]+)",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     private readonly HttpClient _http;
     private readonly bool _ownsHttp;
+    private readonly OpenCodeAuthResolver _authResolver;
 
-    public OpenCodeUsageClient(HttpClient? http = null)
+    public OpenCodeUsageClient(HttpClient? http = null, OpenCodeAuthResolver? authResolver = null)
     {
         _ownsHttp = http is null;
         _http = http ?? new HttpClient();
+        _authResolver = authResolver ?? new OpenCodeAuthResolver();
     }
 
     public async Task<OpenCodeSnapshot> FetchAsync(
         ProviderBillingSettings settings,
         CancellationToken cancellationToken = default)
     {
-        var session = CredentialStore.Retrieve(settings.ProSessionCredentialId);
-        if (string.IsNullOrWhiteSpace(session))
-            return OpenCodeSnapshot.Unavailable("Session cookie not set");
-
-        var workspaceId = settings.WorkspaceId?.Trim();
-        if (string.IsNullOrWhiteSpace(workspaceId))
-            return OpenCodeSnapshot.Unavailable("Workspace ID not set");
-
         try
         {
-            var official = await TryOfficialApiAsync(session, workspaceId, cancellationToken);
-            if (official is not null)
+            var auth = _authResolver.Resolve(settings);
+            if (auth.Source == OpenCodeAuthSource.None)
             {
-                settings.ProLastConnectionStatus = "Connected";
-                return official;
+                settings.ProLastConnectionStatus = auth.FailureMessage;
+                return OpenCodeSnapshot.Unavailable(auth.FailureMessage);
+            }
+
+            if (!string.IsNullOrWhiteSpace(auth.ApiKey))
+            {
+                var official = await TryOfficialApiAsync(auth.ApiKey, settings, cancellationToken);
+                if (official is not null)
+                    return official;
+            }
+
+            var session = auth.SessionCookie;
+            if (string.IsNullOrWhiteSpace(session))
+            {
+                settings.ProLastConnectionStatus =
+                    "Usage API unavailable — sign in at opencode.ai and set workspace ID";
+                return OpenCodeSnapshot.Unavailable(settings.ProLastConnectionStatus);
+            }
+
+            var workspaceId = await ResolveWorkspaceIdAsync(settings, session, cancellationToken);
+            if (string.IsNullOrWhiteSpace(workspaceId))
+            {
+                settings.ProLastConnectionStatus = "Workspace ID not set";
+                return OpenCodeSnapshot.Unavailable(settings.ProLastConnectionStatus);
             }
 
             var zenHtml = settings.ShowDirectSource
@@ -82,19 +102,33 @@ public sealed class OpenCodeUsageClient : IDisposable
     }
 
     public async Task<string> TestConnectionAsync(
-        string sessionValue,
-        string? workspaceId,
+        ProviderBillingSettings settings,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(sessionValue))
+        var auth = _authResolver.Resolve(settings);
+        if (auth.Source == OpenCodeAuthSource.None)
+            return auth.FailureMessage ?? "OpenCode auth not found";
+
+        if (!string.IsNullOrWhiteSpace(auth.ApiKey))
+        {
+            var official = await TryOfficialApiAsync(auth.ApiKey, settings, cancellationToken);
+            if (official is not null)
+                return "Connected";
+
+            return "API key found but usage endpoints unavailable — add workspace ID for dashboard fallback";
+        }
+
+        var session = auth.SessionCookie;
+        if (string.IsNullOrWhiteSpace(session))
             return "Session cookie required";
 
+        var workspaceId = await ResolveWorkspaceIdAsync(settings, session, cancellationToken);
         if (string.IsNullOrWhiteSpace(workspaceId))
             return "Workspace ID required";
 
         try
         {
-            var html = await FetchPageAsync($"{BaseUrl}/workspace/{workspaceId.Trim()}", sessionValue, cancellationToken);
+            var html = await FetchPageAsync($"{BaseUrl}/workspace/{workspaceId}", session, cancellationToken);
             if (html.Contains("sign in", StringComparison.OrdinalIgnoreCase) &&
                 html.Contains("login", StringComparison.OrdinalIgnoreCase))
                 return "Session expired — re-copy auth cookie from DevTools";
@@ -201,15 +235,67 @@ public sealed class OpenCodeUsageClient : IDisposable
             DateTimeOffset.UtcNow.AddSeconds(resetSec));
     }
 
+    internal static string? TryReadLocalApiKey()
+    {
+        foreach (var path in ResolveAuthFilePaths())
+        {
+            if (!File.Exists(path))
+                continue;
+
+            try
+            {
+                var json = File.ReadAllText(path);
+                var key = OpenCodeAuthResolver.TryReadApiKeyFromJson(json);
+                if (!string.IsNullOrWhiteSpace(key))
+                    return key;
+            }
+            catch
+            {
+            }
+        }
+
+        return null;
+    }
+
+    internal static IReadOnlyList<string> ResolveAuthFilePaths()
+    {
+        var paths = new List<string>();
+        var overridePath = Environment.GetEnvironmentVariable("OPENCODE_AUTH_PATH");
+        if (!string.IsNullOrWhiteSpace(overridePath))
+        {
+            paths.Add(Path.IsPathRooted(overridePath)
+                ? overridePath
+                : Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "opencode",
+                    overridePath));
+        }
+
+        paths.Add(Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            ".local",
+            "share",
+            "opencode",
+            "auth.json"));
+
+        paths.Add(Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "opencode",
+            "auth.json"));
+
+        return paths;
+    }
+
+    internal static string? TryExtractWorkspaceId(string htmlOrUrl) =>
+        WorkspaceIdPattern.Match(htmlOrUrl) is { Success: true } match
+            ? match.Groups[1].Value
+            : null;
+
     private async Task<OpenCodeSnapshot?> TryOfficialApiAsync(
-        string session,
-        string workspaceId,
+        string apiKey,
+        ProviderBillingSettings settings,
         CancellationToken cancellationToken)
     {
-        var apiKey = await TryReadLocalApiKeyAsync();
-        if (string.IsNullOrWhiteSpace(apiKey))
-            return null;
-
         using var zenRequest = new HttpRequestMessage(HttpMethod.Get, $"{BaseUrl}/zen/v1/balance");
         zenRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
 
@@ -246,6 +332,7 @@ public sealed class OpenCodeUsageClient : IDisposable
         if (balance is null && !hasGo)
             return null;
 
+        settings.ProLastConnectionStatus = "Connected";
         return OpenCodeSnapshot.FromData(balance, null, null, rolling, weekly, monthly, hasGo);
     }
 
@@ -277,52 +364,37 @@ public sealed class OpenCodeUsageClient : IDisposable
         return null;
     }
 
-    private static async Task<string?> TryReadLocalApiKeyAsync()
+    private async Task<string?> ResolveWorkspaceIdAsync(
+        ProviderBillingSettings settings,
+        string session,
+        CancellationToken cancellationToken)
     {
-        var path = ResolveAuthFilePath();
-        if (path is null || !File.Exists(path))
-            return null;
+        var configured = settings.WorkspaceId?.Trim();
+        if (!string.IsNullOrWhiteSpace(configured))
+            return configured;
 
         try
         {
-            await using var stream = File.OpenRead(path);
-            using var doc = await JsonDocument.ParseAsync(stream);
-            if (doc.RootElement.TryGetProperty("opencode", out var opencode) &&
-                opencode.TryGetProperty("apiKey", out var apiKey) &&
-                apiKey.ValueKind == JsonValueKind.String)
-                return apiKey.GetString();
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"{BaseUrl}/");
+            request.Headers.TryAddWithoutValidation("Cookie", BuildAuthCookieHeader(session));
+            request.Headers.TryAddWithoutValidation("User-Agent", "CursorUsageWidget/1.0");
+            request.Headers.TryAddWithoutValidation("Accept", "text/html");
 
-            foreach (var property in doc.RootElement.EnumerateObject())
+            using var response = await _http.SendAsync(request, cancellationToken);
+            if (response.RequestMessage?.RequestUri is { } finalUri)
             {
-                if (property.Value.ValueKind != JsonValueKind.Object)
-                    continue;
-
-                if (property.Value.TryGetProperty("apiKey", out var key) && key.ValueKind == JsonValueKind.String)
-                    return key.GetString();
+                var fromUri = TryExtractWorkspaceId(finalUri.ToString());
+                if (!string.IsNullOrWhiteSpace(fromUri))
+                    return fromUri;
             }
+
+            var html = await response.Content.ReadAsStringAsync(cancellationToken);
+            return TryExtractWorkspaceId(html);
         }
         catch
         {
             return null;
         }
-
-        return null;
-    }
-
-    internal static string? ResolveAuthFilePath()
-    {
-        var overridePath = Environment.GetEnvironmentVariable("OPENCODE_AUTH_PATH");
-        if (!string.IsNullOrWhiteSpace(overridePath))
-        {
-            return Path.IsPathRooted(overridePath)
-                ? overridePath
-                : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "opencode", overridePath);
-        }
-
-        return Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "opencode",
-            "auth.json");
     }
 
     private async Task<string> FetchPageAsync(string url, string session, CancellationToken cancellationToken)

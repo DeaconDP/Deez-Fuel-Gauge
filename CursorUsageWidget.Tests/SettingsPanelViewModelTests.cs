@@ -1,5 +1,3 @@
-using System.Net;
-using System.Text;
 using CursorUsageWidget.Models;
 using CursorUsageWidget.Services;
 using CursorUsageWidget.Settings;
@@ -24,12 +22,6 @@ public sealed class SettingsPanelViewModelTests
                 OrganizationId = "org-1",
                 MonthlyBudgetUsd = 100
             },
-            Claude = new ProviderBillingSettings
-            {
-                ShowProLimits = true,
-                ShowProDetails = false,
-                ShowApiConsoleBilling = true
-            },
             Gemini = new ProviderBillingSettings
             {
                 ShowProLimits = false,
@@ -47,7 +39,6 @@ public sealed class SettingsPanelViewModelTests
         Assert.False(viewModel.ShowCodexLimits);
         Assert.Equal("org-1", viewModel.OpenAiOrgId);
         Assert.Equal("100", viewModel.OpenAiBudget);
-        Assert.False(viewModel.ShowClaudeProDetails);
         Assert.False(viewModel.ShowAntigravityLimits);
 
         viewModel.ShowCursor = true;
@@ -63,27 +54,64 @@ public sealed class SettingsPanelViewModelTests
         Assert.True(committed.Gemini.ShowProLimits);
         Assert.Equal("org-2", committed.OpenAi.OrganizationId);
         Assert.Equal(100, committed.OpenAi.MonthlyBudgetUsd);
-        Assert.False(committed.Claude.EffectiveShowProDetails);
     }
 
     [Fact]
-    public void Commit_persists_disabled_claude_pro_and_antigravity_limits()
+    public void Commit_persists_disabled_antigravity_limits()
     {
         var viewModel = CreateViewModel();
         viewModel.Load(new WidgetSettings
         {
-            Claude = new ProviderBillingSettings { ShowProLimits = true },
             Gemini = new ProviderBillingSettings { ShowProLimits = true }
         });
 
-        viewModel.ShowClaudePro = false;
         viewModel.ShowAntigravityLimits = false;
 
         var committed = new WidgetSettings();
         viewModel.Commit(committed);
 
-        Assert.False(committed.Claude.ShowProLimits);
         Assert.False(committed.Gemini.ShowProLimits);
+    }
+
+    [Fact]
+    public void HasGeminiAutoAuth_true_when_cli_credentials_present()
+    {
+        var oauthPath = Path.Combine(Path.GetTempPath(), $".gemini-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(oauthPath);
+        var credsPath = Path.Combine(oauthPath, "oauth_creds.json");
+        File.WriteAllText(credsPath, """{"access_token":"cli-token","refresh_token":"refresh"}""");
+
+        try
+        {
+            var viewModel = new SettingsPanelViewModel(
+                new ProviderEasySetupService(),
+                new OpenAiBillingClient(),
+                new CodexUsageClient(),
+                new AntigravityUsageClient(),
+                new OpenRouterUsageClient(),
+                new OpenCodeUsageClient(),
+                () => new CursorTokens(),
+                geminiAuthResolver: new GeminiAuthResolver(
+                    antigravityReader: () => new AntigravityOAuthTokens(),
+                    geminiCliReader: () => GeminiCliTokenReader.Read(credsPath)));
+
+            viewModel.Load(new WidgetSettings { Gemini = new ProviderBillingSettings { ShowProLimits = true } });
+
+            Assert.True(viewModel.HasGeminiAutoAuth);
+            Assert.Equal("Signed in via Gemini CLI", viewModel.GeminiAutoAuthSummary);
+
+            var geminiLimits = viewModel.Sections
+                .Single(s => s.Title == "Gemini")
+                .Sources
+                .Single(s => s.Kind == ProviderSourceKind.AntigravityLimits);
+            Assert.True(geminiLimits.HasAutoAuth);
+            Assert.False(geminiLimits.ShowAdvancedSection);
+        }
+        finally
+        {
+            File.Delete(credsPath);
+            Directory.Delete(oauthPath);
+        }
     }
 
     [Fact]
@@ -119,8 +147,6 @@ public sealed class SettingsPanelViewModelTests
                 new ProviderEasySetupService(),
                 new OpenAiBillingClient(),
                 new CodexUsageClient(authFilePathResolver: () => authPath),
-                new AnthropicBillingClient(),
-                new ClaudeProUsageClient(),
                 new AntigravityUsageClient(),
                 new OpenRouterUsageClient(),
                 new OpenCodeUsageClient(),
@@ -138,74 +164,73 @@ public sealed class SettingsPanelViewModelTests
     }
 
     [Fact]
-    public void Commit_persists_expanded_provider()
+    public void Load_builds_all_provider_sections()
     {
         var viewModel = CreateViewModel();
         viewModel.Load(new WidgetSettings());
-        viewModel.ToggleExpandedProvider(SettingsExpandedProvider.Claude);
+
+        Assert.Equal(5, viewModel.Sections.Count);
+        Assert.Contains(viewModel.Sections, s => s.Title == "OpenAI" && s.Sources.Count == 2);
+        var cursorSection = viewModel.Sections.First(s => s.Title == "Cursor");
+        Assert.Equal(4, cursorSection.Sources.Count);
+        Assert.Contains(cursorSection.Sources, s => s.Kind == ProviderSourceKind.OpenAiViaCursor);
+        Assert.Contains(cursorSection.Sources, s => s.Kind == ProviderSourceKind.GeminiViaCursor);
+    }
+
+    [Fact]
+    public void Commit_persists_cursor_last_connection_status()
+    {
+        var viewModel = CreateViewModel();
+        viewModel.Load(new WidgetSettings());
+        viewModel.CursorStatus = "Sign in to Cursor IDE, then click Test";
 
         var committed = new WidgetSettings();
         viewModel.Commit(committed);
 
-        Assert.Equal(SettingsExpandedProvider.Claude, committed.SettingsExpandedProvider);
+        Assert.Equal("Sign in to Cursor IDE, then click Test", committed.Cursor.LastConnectionStatus);
     }
 
     [Fact]
-    public async Task RefreshClaudeProAsync_updates_status_and_persists_session()
+    public void Commit_persists_expanded_provider()
     {
-        var handler = new StubHttpHandler(request =>
-        {
-            if (request.RequestUri!.AbsolutePath == "/api/account")
-            {
-                return new HttpResponseMessage(HttpStatusCode.OK)
-                {
-                    Content = new StringContent(
-                        """{"memberships":[{"organization":{"uuid":"org-1"}}]}""",
-                        System.Text.Encoding.UTF8,
-                        "application/json")
-                };
-            }
+        var viewModel = CreateViewModel();
+        viewModel.Load(new WidgetSettings());
+        viewModel.ToggleExpandedProvider(SettingsExpandedProvider.Gemini);
 
-            return new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new StringContent(
-                    """{"five_hour":{"utilization":0.2},"seven_day":{"utilization":0.3}}""",
-                    System.Text.Encoding.UTF8,
-                    "application/json")
-            };
-        });
+        var committed = new WidgetSettings();
+        viewModel.Commit(committed);
 
-        var claudePro = new ClaudeProUsageClient(
-            new HttpClient(handler),
-            new ClaudeProAuthResolver(
-                claudeCodeReader: () => null,
-                browserCookieReader: () => "browser-session",
-                savedSessionReader: _ => null));
+        Assert.Equal(SettingsExpandedProvider.Gemini, committed.SettingsExpandedProvider);
+    }
 
-        var viewModel = new SettingsPanelViewModel(
-            new ProviderEasySetupService(),
-            new OpenAiBillingClient(),
-            new CodexUsageClient(),
-            new AnthropicBillingClient(),
-            claudePro,
-            new AntigravityUsageClient(),
-            new OpenRouterUsageClient(),
-            new OpenCodeUsageClient(),
-            () => new CursorTokens());
-
-        var settings = new WidgetSettings();
-
+    [Fact(Skip = "OpenRouter is currently hidden.")]
+    public void OpenRouter_api_key_field_hidden_when_saved()
+    {
+        var apiKeyId = CredentialStore.Store("openrouter-ui-test", "sk-or-test");
         try
         {
-            await viewModel.RefreshClaudeProAsync(settings);
+            var viewModel = CreateViewModel();
+            viewModel.Load(new WidgetSettings
+            {
+                OpenRouter = new ProviderBillingSettings
+                {
+                    ShowProLimits = true,
+                    CredentialId = apiKeyId
+                }
+            });
 
-            Assert.Equal("Connected", viewModel.ClaudeProStatus);
-            Assert.True(viewModel.HasClaudeSessionCookieSaved);
-            Assert.Equal("browser-session", CredentialStore.Retrieve(settings.Claude.ProSessionCredentialId));
+            var openRouter = viewModel.Sections
+                .Single(s => s.Title == "OpenRouter")
+                .Sources
+                .Single(s => s.Kind == ProviderSourceKind.OpenRouterCredits);
+
+            Assert.False(openRouter.ShowApiKeyField);
+            Assert.True(openRouter.HasApiKeySaved);
+            Assert.True(openRouter.ShowManagementApiKeyField);
         }
         finally
         {
-            CredentialStore.Delete(settings.Claude.ProSessionCredentialId);
+            CredentialStore.Delete(apiKeyId);
         }
     }
 
@@ -214,22 +239,8 @@ public sealed class SettingsPanelViewModelTests
             new ProviderEasySetupService(),
             new OpenAiBillingClient(),
             new CodexUsageClient(),
-            new AnthropicBillingClient(),
-            new ClaudeProUsageClient(),
             new AntigravityUsageClient(),
             new OpenRouterUsageClient(),
             new OpenCodeUsageClient(),
             () => new CursorTokens());
-
-    private sealed class StubHttpHandler : HttpMessageHandler
-    {
-        private readonly Func<HttpRequestMessage, HttpResponseMessage> _handler;
-
-        public StubHttpHandler(Func<HttpRequestMessage, HttpResponseMessage> handler) => _handler = handler;
-
-        protected override Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request,
-            CancellationToken cancellationToken) =>
-            Task.FromResult(_handler(request));
-    }
 }

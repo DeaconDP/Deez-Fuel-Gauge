@@ -7,9 +7,14 @@ namespace CursorUsageWidget.Tests;
 public sealed class ProviderDashboardPresenterTests
 {
     [Fact]
-    public void IsOpenAiDashboardVisible_true_when_any_source_enabled()
+    public void IsOpenAiDashboardVisible_true_when_direct_or_codex_enabled()
     {
-        Assert.True(ProviderDashboardPresenter.IsOpenAiDashboardVisible(new ProviderBillingSettings { ShowCursorSource = true }));
+        Assert.False(ProviderDashboardPresenter.IsOpenAiDashboardVisible(new ProviderBillingSettings
+        {
+            ShowCursorSource = true,
+            ShowDirectSource = false,
+            ShowProLimits = false
+        }));
         Assert.True(ProviderDashboardPresenter.IsOpenAiDashboardVisible(new ProviderBillingSettings { ShowDirectSource = true }));
         Assert.True(ProviderDashboardPresenter.IsOpenAiDashboardVisible(new ProviderBillingSettings { ShowProLimits = true }));
     }
@@ -28,19 +33,6 @@ public sealed class ProviderDashboardPresenterTests
     }
 
     [Fact]
-    public void IsClaudeDashboardVisible_false_when_all_sources_disabled()
-    {
-        var settings = new ProviderBillingSettings
-        {
-            ShowCursorSource = false,
-            ShowProLimits = false,
-            ShowApiConsoleBilling = false
-        };
-
-        Assert.False(ProviderDashboardPresenter.IsClaudeDashboardVisible(settings));
-    }
-
-    [Fact]
     public void IsGeminiDashboardVisible_false_when_both_sources_disabled()
     {
         var settings = new ProviderBillingSettings
@@ -50,6 +42,21 @@ public sealed class ProviderDashboardPresenterTests
         };
 
         Assert.False(ProviderDashboardPresenter.IsGeminiDashboardVisible(settings));
+    }
+
+    [Fact]
+    public void IsCursorDashboardVisible_true_when_any_cursor_source_enabled()
+    {
+        Assert.False(ProviderDashboardPresenter.IsCursorDashboardVisible(new WidgetSettings
+        {
+            Cursor = new ProviderBillingSettings { ShowCursorSource = false },
+            OpenAi = new ProviderBillingSettings { ShowCursorSource = false },
+            Gemini = new ProviderBillingSettings { ShowCursorSource = false }
+        }));
+        Assert.True(ProviderDashboardPresenter.IsCursorDashboardVisible(new WidgetSettings
+        {
+            OpenAi = new ProviderBillingSettings { ShowCursorSource = true }
+        }));
     }
 
     [Fact]
@@ -78,6 +85,23 @@ public sealed class ProviderDashboardPresenterTests
         var settings = new WidgetSettings { ShowBreakdown = false };
 
         Assert.Equal(40, ProviderDashboardPresenter.ComputeCursorHeadline(snapshot, settings));
+    }
+
+    [Fact]
+    public void ComputeCursorHeadline_includes_via_cursor_provider_usage()
+    {
+        var snapshot = new UsageSnapshot
+        {
+            PercentUsed = 10,
+            OpenAi = new ProviderUsageSnapshot { IsAvailable = true, PercentUsed = 55 }
+        };
+        var settings = new WidgetSettings
+        {
+            Cursor = new ProviderBillingSettings { ShowCursorSource = false },
+            OpenAi = new ProviderBillingSettings { ShowCursorSource = true }
+        };
+
+        Assert.Equal(55, ProviderDashboardPresenter.ComputeCursorHeadline(snapshot, settings));
     }
 
     [Fact]
@@ -115,26 +139,7 @@ public sealed class ProviderDashboardPresenterTests
             ShowProLimits = false
         };
 
-        Assert.Equal(30, ProviderDashboardPresenter.ComputeOpenAiHeadline(snapshot, settings));
-    }
-
-    [Fact]
-    public void ComputeClaudeHeadline_uses_max_across_enabled_sources()
-    {
-        var snapshot = new UsageSnapshot
-        {
-            Claude = new ProviderUsageSnapshot { IsAvailable = true, PercentUsed = 20 },
-            ClaudePro = ClaudeProSnapshot.FromUsage(12, 88, null, null),
-            ClaudeDirect = new DirectProviderSnapshot { IsAvailable = true, PercentUsed = 50 }
-        };
-        var settings = new ProviderBillingSettings
-        {
-            ShowCursorSource = true,
-            ShowProLimits = true,
-            ShowApiConsoleBilling = true
-        };
-
-        Assert.Equal(88, ProviderDashboardPresenter.ComputeClaudeHeadline(snapshot, settings));
+        Assert.Equal(0, ProviderDashboardPresenter.ComputeOpenAiHeadline(snapshot, settings));
     }
 
     [Fact]
@@ -154,5 +159,72 @@ public sealed class ProviderDashboardPresenterTests
         };
 
         Assert.Equal(60, ProviderDashboardPresenter.ComputeGeminiHeadline(snapshot, settings));
+    }
+
+    [Fact]
+    public void IsOpenAiHeadlineConnected_true_when_direct_or_codex_available()
+    {
+        var snapshot = new UsageSnapshot
+        {
+            OpenAi = new ProviderUsageSnapshot { IsAvailable = true, PercentUsed = 0 },
+            OpenAiDirect = new DirectProviderSnapshot { IsAvailable = true, PercentUsed = 0 },
+            Codex = CodexSnapshot.Unavailable("No Codex")
+        };
+        var settings = new ProviderBillingSettings
+        {
+            ShowCursorSource = true,
+            ShowDirectSource = true,
+            ShowProLimits = true
+        };
+
+        Assert.True(ProviderDashboardPresenter.IsOpenAiHeadlineConnected(snapshot, settings));
+    }
+
+    [Fact]
+    public void IsOpenAiHeadlineConnected_false_when_no_enabled_source_is_available()
+    {
+        var snapshot = new UsageSnapshot
+        {
+            OpenAi = new ProviderUsageSnapshot { IsAvailable = false, PercentUsed = 0 },
+            OpenAiDirect = new DirectProviderSnapshot { IsAvailable = false, PercentUsed = 0 },
+            Codex = CodexSnapshot.Unavailable("No Codex")
+        };
+        var settings = new ProviderBillingSettings
+        {
+            ShowCursorSource = true,
+            ShowDirectSource = true,
+            ShowProLimits = true
+        };
+
+        Assert.False(ProviderDashboardPresenter.IsOpenAiHeadlineConnected(snapshot, settings));
+    }
+
+    [Fact]
+    public void IsOpenRouterHeadlineConnected_false_when_unavailable_even_with_pro_limits_enabled()
+    {
+        var snapshot = new UsageSnapshot
+        {
+            OpenRouter = OpenRouterSnapshot.Unavailable("Not connected")
+        };
+        var settings = new ProviderBillingSettings { ShowProLimits = true };
+
+        Assert.False(ProviderDashboardPresenter.IsOpenRouterHeadlineConnected(snapshot, settings));
+    }
+
+    [Fact]
+    public void IsOpenRouterHeadlineConnected_false_when_openrouter_hidden()
+    {
+        var snapshot = new UsageSnapshot
+        {
+            OpenRouter = new OpenRouterSnapshot
+            {
+                IsAvailable = true,
+                HeadlinePercentUsed = 0,
+                DetailLabel = "Connected"
+            }
+        };
+        var settings = new ProviderBillingSettings { ShowProLimits = true };
+
+        Assert.False(ProviderDashboardPresenter.IsOpenRouterHeadlineConnected(snapshot, settings));
     }
 }

@@ -62,4 +62,36 @@ public sealed class OpenCodeUsageClientTests
         Assert.Equal("auth=abc123", OpenCodeUsageClient.BuildAuthCookieHeader("abc123"));
         Assert.Equal("auth=abc123", OpenCodeUsageClient.BuildAuthCookieHeader("auth=abc123"));
     }
+
+    [Fact]
+    public void TryReadApiKeyFromJson_reads_opencode_key_field()
+    {
+        const string json = """
+            {
+              "opencode": {
+                "type": "api",
+                "key": "sk-test-key"
+              }
+            }
+            """;
+
+        Assert.Equal("sk-test-key", OpenCodeAuthResolver.TryReadApiKeyFromJson(json));
+    }
+
+    [Fact]
+    public void TryExtractWorkspaceId_reads_workspace_from_url()
+    {
+        Assert.Equal(
+            "wrk_01ABCDEF",
+            OpenCodeUsageClient.TryExtractWorkspaceId("https://opencode.ai/workspace/wrk_01ABCDEF/go"));
+    }
+
+    [Fact]
+    public void ResolveAuthFilePaths_includes_xdg_and_localappdata_on_windows()
+    {
+        var paths = OpenCodeUsageClient.ResolveAuthFilePaths();
+
+        Assert.Contains(paths, p => p.EndsWith(Path.Combine(".local", "share", "opencode", "auth.json")));
+        Assert.Contains(paths, p => p.EndsWith(Path.Combine("opencode", "auth.json")));
+    }
 }

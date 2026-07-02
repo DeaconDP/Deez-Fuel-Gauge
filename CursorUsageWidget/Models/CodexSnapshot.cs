@@ -26,15 +26,19 @@ public sealed class CodexSnapshot
 
     public static CodexSnapshot FromUsage(
         string? planType,
-        double sessionUsedPercent,
-        double weeklyUsedPercent,
+        double? sessionUsedPercent,
+        double? weeklyUsedPercent,
         DateTimeOffset? sessionResetsAt,
         DateTimeOffset? weeklyResetsAt,
         decimal? creditsBalanceUsd,
         bool limitReached)
     {
-        var sessionRemaining = Math.Clamp(100 - sessionUsedPercent, 0, 100);
-        var weeklyRemaining = Math.Clamp(100 - weeklyUsedPercent, 0, 100);
+        var sessionRemaining = sessionUsedPercent is { } sessionUsed
+            ? Math.Clamp(100 - sessionUsed, 0, 100)
+            : 100;
+        var weeklyRemaining = weeklyUsedPercent is { } weeklyUsed
+            ? Math.Clamp(100 - weeklyUsed, 0, 100)
+            : 100;
         var planLabel = FormatPlanLabel(planType);
         var creditsText = creditsBalanceUsd is { } balance
             ? $"${balance.ToString("F0", CultureInfo.InvariantCulture)} credits"
@@ -45,10 +49,10 @@ public sealed class CodexSnapshot
             parts.Add(planLabel);
         if (creditsText is not null)
             parts.Add(creditsText);
-        var sessionUsed = Math.Clamp(sessionUsedPercent, 0, 100);
-        var weeklyUsed = Math.Clamp(weeklyUsedPercent, 0, 100);
-        parts.Add($"5h {sessionUsed.ToString("F0", CultureInfo.InvariantCulture)}%");
-        parts.Add($"wk {weeklyUsed.ToString("F0", CultureInfo.InvariantCulture)}%");
+        if (sessionUsedPercent is { } sessionPct)
+            parts.Add($"5h {Math.Clamp(sessionPct, 0, 100).ToString("F0", CultureInfo.InvariantCulture)}%");
+        if (weeklyUsedPercent is { } weeklyPct)
+            parts.Add($"wk {Math.Clamp(weeklyPct, 0, 100).ToString("F0", CultureInfo.InvariantCulture)}%");
 
         return new CodexSnapshot
         {
@@ -60,7 +64,7 @@ public sealed class CodexSnapshot
             WeeklyResetsAt = weeklyResetsAt,
             CreditsBalanceUsd = creditsBalanceUsd,
             LimitReached = limitReached,
-            DetailLabel = string.Join(" · ", parts)
+            DetailLabel = parts.Count > 0 ? string.Join(" · ", parts) : "—"
         };
     }
 
@@ -68,6 +72,14 @@ public sealed class CodexSnapshot
     {
         if (string.IsNullOrWhiteSpace(planType))
             return null;
+
+        if (planType.Contains('_', StringComparison.Ordinal))
+        {
+            return string.Join(' ', planType.Split('_', StringSplitOptions.RemoveEmptyEntries)
+                .Select(static part => part.Length == 0
+                    ? part
+                    : char.ToUpperInvariant(part[0]) + part[1..].ToLowerInvariant()));
+        }
 
         return planType.Length == 1
             ? planType.ToUpperInvariant()

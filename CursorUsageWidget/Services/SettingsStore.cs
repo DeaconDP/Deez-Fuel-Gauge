@@ -19,7 +19,6 @@ public static class SettingsStore
 
             var json = File.ReadAllText(SettingsPath);
             var settings = JsonSerializer.Deserialize<WidgetSettings>(json) ?? new WidgetSettings();
-            MigrateClaudeSettings(settings);
             MigrateGeminiSettings(settings);
             return settings;
         }
@@ -27,15 +26,6 @@ public static class SettingsStore
         {
             return new WidgetSettings();
         }
-    }
-
-    internal static void MigrateClaudeSettings(WidgetSettings settings)
-    {
-        if (!settings.Claude.ShowDirectSource)
-            return;
-
-        settings.Claude.ShowApiConsoleBilling = true;
-        settings.Claude.ShowDirectSource = false;
     }
 
     internal static void MigrateGeminiSettings(WidgetSettings settings)
