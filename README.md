@@ -21,14 +21,14 @@ Double-click the launcher for your platform:
 
 On first run it builds the widget and launches it. Later runs rebuild and start the widget.
 
-After the first successful setup, you can open **`CursorUsageWidget.app`** directly.
+After the first successful setup, you can open **`DeezFuelGauge.app`** directly.
 
 - **Windows:** if .NET 8 is missing, the launcher can install it via winget.
 - **macOS:** if .NET 8 is missing, the launcher opens the official download page in your browser.
 - **macOS:** if macOS blocks the launcher the first time, right-click **`setup-and-run.app`** and choose **Open**.
-- **macOS:** if **`CursorUsageWidget.app`** is blocked after setup, right-click it and choose **Open** as well.
+- **macOS:** if **`DeezFuelGauge.app`** is blocked after setup, right-click it and choose **Open** as well.
 
-If setup fails on macOS, details are saved to `~/Library/Logs/CursorUsageWidget/setup.log`.
+If setup fails on macOS, details are saved to `~/Library/Logs/DeezFuelGauge/setup.log`.
 
 ## Usage
 
@@ -63,8 +63,8 @@ Click the **gear** in the widget header to configure what is shown:
 
 | Platform | Path |
 |----------|------|
-| Windows | `%LOCALAPPDATA%\cursor-usage-widget\settings.json` |
-| macOS | `~/Library/Application Support/cursor-usage-widget/settings.json` |
+| Windows | `%LOCALAPPDATA%\deez-fuel-gauge\settings.json` |
+| macOS | `~/Library/Application Support/deez-fuel-gauge/settings.json` |
 
 Encrypted API keys: `credentials/` in the same folder.
 
@@ -74,13 +74,13 @@ Encrypted API keys: `credentials/` in the same folder.
 
 1. Build the widget once using **`setup-and-run.bat`**.
 2. Press `Win+R`, type `shell:startup`, press Enter.
-3. Create a shortcut to `CursorUsageWidget\bin\Release\net8.0\CursorUsageWidget.exe` in that folder.
+3. Create a shortcut to `DeezFuelGauge\bin\Release\net8.0\DeezFuelGauge.exe` in that folder.
 
 **macOS**
 
 1. Build the widget once using **`setup-and-run.app`**.
 2. Open **System Settings → General → Login Items**.
-3. Add **`CursorUsageWidget.app`** from this folder.
+3. Add **`DeezFuelGauge.app`** from this folder.
 
 ## How it works
 

@@ -1,0 +1,71 @@
+using System.Runtime.InteropServices;
+
+namespace DeezFuelGauge.Services;
+
+public static class PlatformPaths
+{
+    public static IReadOnlyList<string> CursorExecutablePaths
+    {
+        get
+        {
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            {
+                return ["/Applications/Cursor.app"];
+            }
+
+            var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            return
+            [
+                Path.Combine(localAppData, "Programs", "cursor", "Cursor.exe"),
+                Path.Combine(localAppData, "cursor", "Cursor.exe")
+            ];
+        }
+    }
+
+    public static IReadOnlyList<string> AntigravityIdeExecutablePaths
+    {
+        get
+        {
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            {
+                return ["/Applications/Antigravity IDE.app"];
+            }
+
+            var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            return
+            [
+                Path.Combine(localAppData, "Programs", "Antigravity IDE", "Antigravity IDE.exe"),
+                Path.Combine(localAppData, "Antigravity IDE", "Antigravity IDE.exe")
+            ];
+        }
+    }
+
+    public static string CursorStateDatabasePath =>
+        Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "Cursor", "User", "globalStorage", "state.vscdb");
+
+    public static IReadOnlyList<string> AntigravityStateDatabasePaths
+    {
+        get
+        {
+            var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            return
+            [
+                Path.Combine(appData, "Antigravity IDE", "User", "globalStorage", "state.vscdb"),
+                Path.Combine(appData, "Antigravity", "User", "globalStorage", "state.vscdb")
+            ];
+        }
+    }
+
+    public static string SettingsDirectory =>
+        Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "deez-fuel-gauge");
+
+    public static string GeminiConfigDirectory =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".gemini");
+
+    public static string GeminiOAuthCredentialsPath =>
+        Path.Combine(GeminiConfigDirectory, "oauth_creds.json");
+}

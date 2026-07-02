@@ -56,11 +56,11 @@ https://dotnet.microsoft.com/download/dotnet/8.0
 }
 
 function Get-BuiltExePath {
-    Join-Path $PSScriptRoot 'CursorUsageWidget\bin\Release\net8.0\CursorUsageWidget.exe'
+    Join-Path $PSScriptRoot 'DeezFuelGauge\bin\Release\net8.0\DeezFuelGauge.exe'
 }
 
 function Stop-RunningWidget {
-    $processes = @(Get-Process -Name 'CursorUsageWidget' -ErrorAction SilentlyContinue)
+    $processes = @(Get-Process -Name 'DeezFuelGauge' -ErrorAction SilentlyContinue)
     if ($processes.Count -eq 0) {
         return
     }
@@ -72,14 +72,14 @@ function Stop-RunningWidget {
 
     $deadline = [DateTime]::UtcNow.AddSeconds(5)
     while ([DateTime]::UtcNow -lt $deadline) {
-        $remaining = @(Get-Process -Name 'CursorUsageWidget' -ErrorAction SilentlyContinue)
+        $remaining = @(Get-Process -Name 'DeezFuelGauge' -ErrorAction SilentlyContinue)
         if ($remaining.Count -eq 0) {
             return
         }
         Start-Sleep -Milliseconds 100
     }
 
-    throw 'CursorUsageWidget is still running and is locking the executable. Close it manually, then run setup-and-run again.'
+    throw 'DeezFuelGauge is still running and is locking the executable. Close it manually, then run setup-and-run again.'
 }
 
 if (-not (Test-DotNetSdk)) {
@@ -91,15 +91,15 @@ $exePath = Get-BuiltExePath
 Stop-RunningWidget
 
 if (-not (Test-Path $exePath)) {
-    Write-Step 'First run: building Cursor Usage Widget...'
-    dotnet build CursorUsageWidget.sln -c Release --nologo -v q
+    Write-Step 'First run: building Deez Fuel Gauge...'
+    dotnet build DeezFuelGauge.sln -c Release --nologo -v q
     if ($LASTEXITCODE -ne 0) {
         throw "Build failed (exit code $LASTEXITCODE)."
     }
 }
 else {
     Write-Step 'Rebuilding to pick up any changes...'
-    dotnet build CursorUsageWidget.sln -c Release --nologo -v q
+    dotnet build DeezFuelGauge.sln -c Release --nologo -v q
     if ($LASTEXITCODE -ne 0) {
         throw "Build failed (exit code $LASTEXITCODE)."
     }
