@@ -40,7 +40,7 @@ public static class QuotaAlertEvaluator
             evaluatedAt,
             alerts,
             "openai-cursor",
-            "openai",
+            "cursor",
             "OpenAI (Cursor plan)");
 
         TryAdd(
@@ -66,7 +66,7 @@ public static class QuotaAlertEvaluator
             evaluatedAt,
             alerts,
             "claude-cursor",
-            "claude",
+            "cursor",
             "Claude (Cursor plan)");
 
         TryAdd(
@@ -92,7 +92,7 @@ public static class QuotaAlertEvaluator
             evaluatedAt,
             alerts,
             "gemini-cursor",
-            "gemini",
+            "cursor",
             "Gemini (Cursor plan)");
 
         if (alerts.OpenRouterKeyLimit

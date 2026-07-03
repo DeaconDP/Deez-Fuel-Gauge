@@ -31,9 +31,9 @@ Double-click the launcher for your platform:
 | Platform | File |
 |----------|------|
 | Windows | **`setup-and-run.bat`** |
-| macOS | **`setup-and-run.app`** |
+| macOS | **`setup-and-run.app`** or **`setup-and-run.command`** |
 
-On first run it builds the widget and launches it. Later runs rebuild and start the widget.
+On first run it builds the widget and launches it. Later runs of **`setup-and-run.bat`** (Windows) and **`setup-and-run.command`** (macOS) always bring you to the latest version first: they fetch from GitHub, fast-forward the current branch, and — if the branch was merged and deleted on GitHub — switch back to `main` automatically. Local edits and unmerged work are never overwritten; the launcher says exactly which branch and commit it is starting. If an update arrives, the launcher restarts itself so the newest setup scripts are the ones that run.
 
 After the first successful setup, you can open **`Deez Fuel Gauge.app`** directly.
 

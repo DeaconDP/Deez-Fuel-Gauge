@@ -371,7 +371,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
 
     private void ApplyProviderVisibility()
     {
-        CursorProviderSection.IsVisible = ProviderDashboardPresenter.IsCursorDashboardVisible(_settings.Cursor);
+        CursorProviderSection.IsVisible = ProviderDashboardPresenter.IsCursorDashboardVisible(_settings);
         OpenAiProviderSection.IsVisible = ProviderDashboardPresenter.IsOpenAiDashboardVisible(_settings.OpenAi);
         ClaudeProviderSection.IsVisible = ProviderDashboardPresenter.IsClaudeDashboardVisible(_settings.Claude);
         GeminiProviderSection.IsVisible = ProviderDashboardPresenter.IsGeminiDashboardVisible(_settings.Gemini);
@@ -407,8 +407,10 @@ public partial class MainWindow : Window, ISettingsPanelHost
         RemainingText.IsVisible = cursorExpanded && !string.IsNullOrEmpty(RemainingText.Text);
         if (!cursorExpanded)
             BreakdownPanel.IsVisible = false;
+        OpenAiDetailText.IsVisible = cursorExpanded && _settings.OpenAi.ShowCursorSource && _settings.OpenAi.ShowDetails;
+        ClaudeDetailText.IsVisible = cursorExpanded && _settings.Claude.ShowCursorSource && _settings.Claude.ShowDetails;
+        GeminiDetailText.IsVisible = cursorExpanded && _settings.Gemini.ShowCursorSource && _settings.Gemini.ShowDetails;
 
-        OpenAiDetailText.IsVisible = openAiExpanded && _settings.OpenAi.ShowCursorSource && _settings.OpenAi.ShowDetails;
         OpenAiDirectDetailText.IsVisible = openAiExpanded && _settings.OpenAi.ShowDirectSource && _settings.OpenAi.EffectiveShowDirectDetails;
         CodexRemainingText.IsVisible = openAiExpanded && _settings.OpenAi.ShowProLimits && _settings.OpenAi.EffectiveShowProDetails;
         if (!openAiExpanded)
@@ -421,7 +423,6 @@ public partial class MainWindow : Window, ISettingsPanelHost
             CodexPercentText.IsVisible = _settings.OpenAi.ShowProLimits;
         }
 
-        ClaudeDetailText.IsVisible = claudeExpanded && _settings.Claude.ShowCursorSource && _settings.Claude.ShowDetails;
         ClaudeDirectDetailText.IsVisible = claudeExpanded && _settings.Claude.ShowApiConsoleBilling && _settings.Claude.EffectiveShowDirectDetails;
         ClaudeProRemainingText.IsVisible = claudeExpanded && _settings.Claude.ShowProLimits && _settings.Claude.EffectiveShowProDetails;
         if (!claudeExpanded)
@@ -434,7 +435,6 @@ public partial class MainWindow : Window, ISettingsPanelHost
             ClaudeProPercentText.IsVisible = _settings.Claude.ShowProLimits;
         }
 
-        GeminiDetailText.IsVisible = geminiExpanded && _settings.Gemini.ShowCursorSource && _settings.Gemini.ShowDetails;
         AntigravityRemainingText.IsVisible = geminiExpanded && _settings.Gemini.ShowProLimits && _settings.Gemini.EffectiveShowProDetails;
         if (!geminiExpanded)
         {
@@ -885,7 +885,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
             ApplyHeadlineBar(CursorHeadlineTrack, CursorHeadlineFill, ref _lastCursorHeadlinePercent, 0);
             CursorHeadlineFill.Background = new SolidColorBrush(Color.FromRgb(0xFF, 0x98, 0x00));
             CursorHeadlineTrack.Opacity = 0.45;
-            if (ProviderDashboardPresenter.IsCursorDashboardVisible(_settings.Cursor))
+            if (ProviderDashboardPresenter.IsCursorDashboardVisible(_settings))
             {
                 WriteProviderExpandState(ProviderExpandState.ExpandOnly(ProviderSection.Cursor));
                 UpdateAllProviderExpandedState();

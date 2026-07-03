@@ -42,19 +42,10 @@
                                 </WrapPanel>
                             </controls:SettingsSubsection.Body>
                         </controls:SettingsSubsection>
-                    </StackPanel>
-                </controls:SettingsProviderCard.Body>
-            </controls:SettingsProviderCard>
 
-            <!-- OpenAI -->
-            <controls:SettingsProviderCard Title="OpenAI"
-                                           HeaderColor="{Binding OpenAiHeaderColor}"
-                                           Chevron="{Binding OpenAiChevron}"
-                                           IsExpanded="{Binding IsOpenAiExpanded}"
-                                           HeaderPressed="OpenAiHeader_PointerPressed">
-                <controls:SettingsProviderCard.Body>
-                    <StackPanel Spacing="2">
-                        <controls:SettingsSubsection Title="Cursor plan spend"
+                        <Border Classes="subsection-divider" />
+
+                        <controls:SettingsSubsection Title="OpenAI plan spend"
                                                      Status="{Binding OpenAiCursorPlanStatus}">
                             <controls:SettingsSubsection.Body>
                                 <WrapPanel Orientation="Horizontal">
@@ -70,6 +61,47 @@
 
                         <Border Classes="subsection-divider" />
 
+                        <controls:SettingsSubsection Title="Claude plan spend"
+                                                     Status="{Binding ClaudeCursorPlanStatus}">
+                            <controls:SettingsSubsection.Body>
+                                <WrapPanel Orientation="Horizontal">
+                                    <CheckBox Content="Widget"
+                                              Classes="toggle-checkbox"
+                                              IsChecked="{Binding ShowClaude}" />
+                                    <CheckBox Content="Details"
+                                              Classes="toggle-checkbox"
+                                              IsChecked="{Binding ShowClaudeDetails}" />
+                                </WrapPanel>
+                            </controls:SettingsSubsection.Body>
+                        </controls:SettingsSubsection>
+
+                        <Border Classes="subsection-divider" />
+
+                        <controls:SettingsSubsection Title="Gemini plan spend"
+                                                     Status="{Binding GeminiCursorPlanStatus}">
+                            <controls:SettingsSubsection.Body>
+                                <WrapPanel Orientation="Horizontal">
+                                    <CheckBox Content="Widget"
+                                              Classes="toggle-checkbox"
+                                              IsChecked="{Binding ShowGemini}" />
+                                    <CheckBox Content="Details"
+                                              Classes="toggle-checkbox"
+                                              IsChecked="{Binding ShowGeminiDetails}" />
+                                </WrapPanel>
+                            </controls:SettingsSubsection.Body>
+                        </controls:SettingsSubsection>
+                    </StackPanel>
+                </controls:SettingsProviderCard.Body>
+            </controls:SettingsProviderCard>
+
+            <!-- OpenAI -->
+            <controls:SettingsProviderCard Title="OpenAI"
+                                           HeaderColor="{Binding OpenAiHeaderColor}"
+                                           Chevron="{Binding OpenAiChevron}"
+                                           IsExpanded="{Binding IsOpenAiExpanded}"
+                                           HeaderPressed="OpenAiHeader_PointerPressed">
+                <controls:SettingsProviderCard.Body>
+                    <StackPanel Spacing="2">
                         <controls:SettingsSubsection Title="Codex limits"
                                                      Status="{Binding CodexStatus}">
                             <controls:SettingsSubsection.Actions>
@@ -181,22 +213,6 @@
                                            HeaderPressed="ClaudeHeader_PointerPressed">
                 <controls:SettingsProviderCard.Body>
                     <StackPanel Spacing="2">
-                        <controls:SettingsSubsection Title="Cursor plan spend"
-                                                     Status="{Binding ClaudeCursorPlanStatus}">
-                            <controls:SettingsSubsection.Body>
-                                <WrapPanel Orientation="Horizontal">
-                                    <CheckBox Content="Widget"
-                                              Classes="toggle-checkbox"
-                                              IsChecked="{Binding ShowClaude}" />
-                                    <CheckBox Content="Details"
-                                              Classes="toggle-checkbox"
-                                              IsChecked="{Binding ShowClaudeDetails}" />
-                                </WrapPanel>
-                            </controls:SettingsSubsection.Body>
-                        </controls:SettingsSubsection>
-
-                        <Border Classes="subsection-divider" />
-
                         <controls:SettingsSubsection Title="Plan usage"
                                                      Status="{Binding ClaudeProStatus}"
                                                      HelpText="Signs in automatically when Claude Code (~/.claude) is present. Otherwise click Sign in with Claude.">
@@ -375,22 +391,6 @@
                                            HeaderPressed="GeminiHeader_PointerPressed">
                 <controls:SettingsProviderCard.Body>
                     <StackPanel Spacing="2">
-                        <controls:SettingsSubsection Title="Cursor plan spend"
-                                                     Status="{Binding GeminiCursorPlanStatus}">
-                            <controls:SettingsSubsection.Body>
-                                <WrapPanel Orientation="Horizontal">
-                                    <CheckBox Content="Widget"
-                                              Classes="toggle-checkbox"
-                                              IsChecked="{Binding ShowGemini}" />
-                                    <CheckBox Content="Details"
-                                              Classes="toggle-checkbox"
-                                              IsChecked="{Binding ShowGeminiDetails}" />
-                                </WrapPanel>
-                            </controls:SettingsSubsection.Body>
-                        </controls:SettingsSubsection>
-
-                        <Border Classes="subsection-divider" />
-
                         <controls:SettingsSubsection Title="Antigravity"
                                                      Status="{Binding AntigravityStatus}">
                             <controls:SettingsSubsection.Actions>
@@ -602,7 +602,7 @@
                                     <TextBox Text="{Binding QuotaAlertMaxPercentUsedText}"
                                              Watermark="75"
                                              FontSize="9" />
-                                    <TextBlock Text="Sources"
+                                    <TextBlock Text="Cursor"
                                                FontSize="9"
                                                FontWeight="SemiBold"
                                                Foreground="#FFAAAAAA"
@@ -613,18 +613,23 @@
                                     <CheckBox Content="OpenAI (Cursor plan)"
                                               Classes="toggle-checkbox"
                                               IsChecked="{Binding QuotaAlertOpenAiCursor}" />
-                                    <CheckBox Content="OpenAI Platform budget"
-                                              Classes="toggle-checkbox"
-                                              IsChecked="{Binding QuotaAlertOpenAiPlatform}" />
                                     <CheckBox Content="Claude (Cursor plan)"
                                               Classes="toggle-checkbox"
                                               IsChecked="{Binding QuotaAlertClaudeCursor}" />
-                                    <CheckBox Content="Claude API Console budget"
-                                              Classes="toggle-checkbox"
-                                              IsChecked="{Binding QuotaAlertClaudeApi}" />
                                     <CheckBox Content="Gemini (Cursor plan)"
                                               Classes="toggle-checkbox"
                                               IsChecked="{Binding QuotaAlertGeminiCursor}" />
+                                    <TextBlock Text="Direct &amp; API"
+                                               FontSize="9"
+                                               FontWeight="SemiBold"
+                                               Foreground="#FFAAAAAA"
+                                               Margin="0,4,0,0" />
+                                    <CheckBox Content="OpenAI Platform budget"
+                                              Classes="toggle-checkbox"
+                                              IsChecked="{Binding QuotaAlertOpenAiPlatform}" />
+                                    <CheckBox Content="Claude API Console budget"
+                                              Classes="toggle-checkbox"
+                                              IsChecked="{Binding QuotaAlertClaudeApi}" />
                                     <CheckBox Content="OpenRouter key limit"
                                               Classes="toggle-checkbox"
                                               IsChecked="{Binding QuotaAlertOpenRouterKeyLimit}" />

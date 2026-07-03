@@ -275,6 +275,99 @@
                         </Border>
                     </StackPanel>
                 </Border>
+                <Grid x:Name="OpenAiSection" Margin="0,2,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="OpenAI"
+                               Grid.Column="0"
+                               VerticalAlignment="Center"
+                               Margin="0,0,8,0"
+                               FontFamily="Segoe UI Semibold, Segoe UI, sans-serif"
+                               FontSize="11"
+                               FontWeight="SemiBold"
+                               Foreground="#FFB0B0B0" />
+                    <Grid x:Name="OpenAiProgressTrack"
+                          Grid.Column="1"
+                          Height="6"
+                          VerticalAlignment="Center">
+                        <Border CornerRadius="3" Background="#33FFFFFF" />
+                        <Border x:Name="OpenAiProgressFill"
+                                CornerRadius="3"
+                                HorizontalAlignment="Left"
+                                Width="0"
+                                Background="#FF4CAF50" />
+                    </Grid>
+                </Grid>
+                <TextBlock x:Name="OpenAiDetailText"
+                           Margin="0,2,0,4"
+                           FontSize="9"
+                           LineHeight="12"
+                           Foreground="#FF777777"
+                           IsVisible="False" />
+                <Grid x:Name="ClaudeSection" Margin="0,0,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Claude"
+                               Grid.Column="0"
+                               VerticalAlignment="Center"
+                               Margin="0,0,8,0"
+                               FontFamily="Segoe UI Semibold, Segoe UI, sans-serif"
+                               FontSize="11"
+                               FontWeight="SemiBold"
+                               Foreground="#FFB0B0B0" />
+                    <Grid x:Name="ClaudeProgressTrack"
+                          Grid.Column="1"
+                          Height="6"
+                          VerticalAlignment="Center">
+                        <Border CornerRadius="3" Background="#33FFFFFF" />
+                        <Border x:Name="ClaudeProgressFill"
+                                CornerRadius="3"
+                                HorizontalAlignment="Left"
+                                Width="0"
+                                Background="#FF4CAF50" />
+                    </Grid>
+                </Grid>
+                <TextBlock x:Name="ClaudeDetailText"
+                           Margin="0,2,0,4"
+                           FontSize="9"
+                           LineHeight="12"
+                           Foreground="#FF777777"
+                           IsVisible="False" />
+                <Grid x:Name="GeminiSection" Margin="0,0,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Gemini"
+                               Grid.Column="0"
+                               VerticalAlignment="Center"
+                               Margin="0,0,8,0"
+                               FontFamily="Segoe UI Semibold, Segoe UI, sans-serif"
+                               FontSize="11"
+                               FontWeight="SemiBold"
+                               Foreground="#FFB0B0B0" />
+                    <Grid x:Name="GeminiProgressTrack"
+                          Grid.Column="1"
+                          Height="6"
+                          VerticalAlignment="Center">
+                        <Border CornerRadius="3" Background="#33FFFFFF" />
+                        <Border x:Name="GeminiProgressFill"
+                                CornerRadius="3"
+                                HorizontalAlignment="Left"
+                                Width="0"
+                                Background="#FF4CAF50" />
+                    </Grid>
+                </Grid>
+                <TextBlock x:Name="GeminiDetailText"
+                           Margin="0,2,0,4"
+                           FontSize="9"
+                           LineHeight="12"
+                           Foreground="#FF777777"
+                           IsVisible="False" />
                 <TextBlock x:Name="RemainingText"
                            Text=""
                            FontSize="10"
@@ -318,37 +411,6 @@
                     </Grid>
                 </Border>
                 <StackPanel x:Name="OpenAiDetailsPanel" IsVisible="False">
-            <Grid x:Name="OpenAiSection" Margin="0,0,0,4">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <TextBlock Text="OpenAI (Cursor)"
-                           Grid.Column="0"
-                           VerticalAlignment="Center"
-                           Margin="0,0,8,0"
-                           FontFamily="Segoe UI Semibold, Segoe UI, sans-serif"
-                           FontSize="11"
-                           FontWeight="SemiBold"
-                           Foreground="#FFB0B0B0" />
-                <Grid x:Name="OpenAiProgressTrack"
-                      Grid.Column="1"
-                      Height="6"
-                      VerticalAlignment="Center">
-                    <Border CornerRadius="3" Background="#33FFFFFF" />
-                    <Border x:Name="OpenAiProgressFill"
-                            CornerRadius="3"
-                            HorizontalAlignment="Left"
-                            Width="0"
-                            Background="#FF4CAF50" />
-                </Grid>
-            </Grid>
-            <TextBlock x:Name="OpenAiDetailText"
-                       Margin="0,2,0,4"
-                       FontSize="9"
-                       LineHeight="12"
-                       Foreground="#FF777777"
-                       IsVisible="False" />
             <Grid x:Name="OpenAiDirectSection" Margin="0,0,0,4">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
@@ -545,37 +607,6 @@
                     </Grid>
                 </Border>
                 <StackPanel x:Name="ClaudeDetailsPanel" IsVisible="False">
-            <Grid x:Name="ClaudeSection" Margin="0,0,0,4">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <TextBlock Text="Claude (Cursor)"
-                           Grid.Column="0"
-                           VerticalAlignment="Center"
-                           Margin="0,0,8,0"
-                           FontFamily="Segoe UI Semibold, Segoe UI, sans-serif"
-                           FontSize="11"
-                           FontWeight="SemiBold"
-                           Foreground="#FFB0B0B0" />
-                <Grid x:Name="ClaudeProgressTrack"
-                      Grid.Column="1"
-                      Height="6"
-                      VerticalAlignment="Center">
-                    <Border CornerRadius="3" Background="#33FFFFFF" />
-                    <Border x:Name="ClaudeProgressFill"
-                            CornerRadius="3"
-                            HorizontalAlignment="Left"
-                            Width="0"
-                            Background="#FF4CAF50" />
-                </Grid>
-            </Grid>
-            <TextBlock x:Name="ClaudeDetailText"
-                       Margin="0,2,0,4"
-                       FontSize="9"
-                       LineHeight="12"
-                       Foreground="#FF777777"
-                       IsVisible="False" />
             <StackPanel x:Name="ClaudeProLimitsSection" IsVisible="False">
                 <TextBlock x:Name="ClaudeProPercentText"
                            Text="..."
@@ -772,37 +803,6 @@
                     </Grid>
                 </Border>
                 <StackPanel x:Name="GeminiDetailsPanel" IsVisible="False">
-            <Grid x:Name="GeminiSection" Margin="0,0,0,4">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <TextBlock Text="Gemini (Cursor)"
-                           Grid.Column="0"
-                           VerticalAlignment="Center"
-                           Margin="0,0,8,0"
-                           FontFamily="Segoe UI Semibold, Segoe UI, sans-serif"
-                           FontSize="11"
-                           FontWeight="SemiBold"
-                           Foreground="#FFB0B0B0" />
-                <Grid x:Name="GeminiProgressTrack"
-                      Grid.Column="1"
-                      Height="6"
-                      VerticalAlignment="Center">
-                    <Border CornerRadius="3" Background="#33FFFFFF" />
-                    <Border x:Name="GeminiProgressFill"
-                            CornerRadius="3"
-                            HorizontalAlignment="Left"
-                            Width="0"
-                            Background="#FF4CAF50" />
-                </Grid>
-            </Grid>
-            <TextBlock x:Name="GeminiDetailText"
-                       Margin="0,2,0,0"
-                       FontSize="9"
-                       LineHeight="12"
-                       Foreground="#FF777777"
-                       IsVisible="False" />
             <StackPanel x:Name="AntigravityLimitsSection" IsVisible="False">
                 <TextBlock x:Name="AntigravityPercentText"
                            Text="..."
