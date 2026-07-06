@@ -169,7 +169,7 @@ public sealed class SettingsPanelViewModelTests
         var viewModel = CreateViewModel();
         viewModel.Load(new WidgetSettings());
 
-        Assert.Equal(5, viewModel.Sections.Count);
+        Assert.Equal(6, viewModel.Sections.Count);
         Assert.Contains(viewModel.Sections, s => s.Title == "OpenAI" && s.Sources.Count == 2);
         var cursorSection = viewModel.Sections.First(s => s.Title == "Cursor");
         Assert.Equal(4, cursorSection.Sources.Count);

@@ -1,5 +1,6 @@
 using DeezFuelGauge.Models;
 using DeezFuelGauge.Services;
+using DeezFuelGauge.Settings;
 using Xunit;
 
 namespace DeezFuelGauge.Tests;
@@ -72,7 +73,7 @@ public sealed class DiskSpaceProviderTests
     [Fact]
     public void GetVolumes_returns_only_ready_drives_with_positive_size()
     {
-        var volumes = DiskSpaceProvider.GetVolumes();
+        var volumes = DiskSpaceProvider.GetVolumes(new WidgetSettings());
 
         Assert.NotEmpty(volumes);
         Assert.All(volumes, v =>
@@ -81,6 +82,87 @@ public sealed class DiskSpaceProviderTests
             Assert.False(string.IsNullOrWhiteSpace(v.DisplayLabel));
             Assert.InRange(v.PercentUsed, 0, 100);
             Assert.False(string.IsNullOrWhiteSpace(v.DetailLabel));
+        });
+    }
+
+    [Fact]
+    public void CreateAggregatedSnapshot_sums_bytes_and_percent()
+    {
+        var drives = DiskSpaceProvider.GetReadyDrives().Take(2).ToList();
+        if (drives.Count < 2)
+            return;
+
+        var snapshot = DiskSpaceProvider.CreateAggregatedSnapshot(drives);
+        var totalBytes = drives.Sum(d => d.TotalSize);
+        var freeBytes = drives.Sum(d => d.AvailableFreeSpace);
+
+        Assert.Equal(DiskSpaceProvider.AggregatedVolumeName, snapshot.Name);
+        Assert.Equal("All drives", snapshot.DisplayLabel);
+        Assert.Equal(DiskVolumeSnapshot.CalculatePercentUsed(totalBytes, freeBytes), snapshot.PercentUsed, precision: 3);
+        Assert.Equal(DiskVolumeSnapshot.FormatDetailLabel(totalBytes, freeBytes), snapshot.DetailLabel);
+    }
+
+    [Fact]
+    public void GetVolumes_filters_disabled_drives()
+    {
+        var drives = DiskSpaceProvider.GetReadyDrives();
+        if (drives.Count < 2)
+            return;
+
+        var disabledDrive = drives[1].Name;
+        var settings = new WidgetSettings
+        {
+            DiskAggregateVolumes = false,
+            DisabledDiskDrives = [disabledDrive]
+        };
+
+        var volumes = DiskSpaceProvider.GetVolumes(settings);
+
+        Assert.DoesNotContain(volumes, v => string.Equals(v.Name, disabledDrive, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void GetVolumes_aggregate_returns_single_snapshot()
+    {
+        var settings = new WidgetSettings
+        {
+            DiskAggregateVolumes = true,
+            DisabledDiskDrives = []
+        };
+
+        var volumes = DiskSpaceProvider.GetVolumes(settings);
+
+        Assert.Single(volumes);
+        Assert.Equal(DiskSpaceProvider.AggregatedVolumeName, volumes[0].Name);
+    }
+
+    [Fact]
+    public void GetVolumes_non_aggregate_returns_individual_snapshots()
+    {
+        var settings = new WidgetSettings
+        {
+            DiskAggregateVolumes = false,
+            DisabledDiskDrives = []
+        };
+
+        var volumes = DiskSpaceProvider.GetVolumes(settings);
+        var drives = DiskSpaceProvider.GetReadyDrives();
+
+        Assert.Equal(drives.Count, volumes.Count);
+        Assert.All(volumes, v => Assert.NotEqual(DiskSpaceProvider.AggregatedVolumeName, v.Name));
+    }
+
+    [Fact]
+    public void GetDriveDescriptors_lists_all_ready_drives()
+    {
+        var descriptors = DiskSpaceProvider.GetDriveDescriptors();
+        var drives = DiskSpaceProvider.GetReadyDrives();
+
+        Assert.Equal(drives.Count, descriptors.Count);
+        Assert.All(descriptors, d =>
+        {
+            Assert.False(string.IsNullOrWhiteSpace(d.Name));
+            Assert.False(string.IsNullOrWhiteSpace(d.DisplayLabel));
         });
     }
 
@@ -130,20 +212,29 @@ public sealed class DiskSpaceProviderTests
     }
 
     [Fact]
-    public void GetMacOsAggregatedVolumes_returns_empty_when_no_primary_volume()
+    public void MigrateDiskSettings_on_macOS_disables_non_primary_drives_when_upgrading()
     {
         if (!OperatingSystem.IsMacOS())
             return;
 
-        var drives = new[]
-        {
-            new DriveInfo("/System/Volumes/VM"),
-            new DriveInfo("/Volumes/External")
-        };
+        var settings = new WidgetSettings();
+        var json = """{"ShowDiskDrives":true}""";
 
-        var volumes = DiskSpaceProvider.GetMacOsAggregatedVolumes(
-            drives.Where(d => d.IsReady && d.TotalSize > 0));
+        SettingsStore.MigrateDiskSettings(settings, json);
 
-        Assert.Empty(volumes);
+        Assert.True(settings.DiskAggregateVolumes);
+        Assert.NotEmpty(settings.DisabledDiskDrives);
+    }
+
+    [Fact]
+    public void MigrateDiskSettings_skips_when_disk_aggregate_already_present()
+    {
+        var settings = new WidgetSettings { DiskAggregateVolumes = false };
+        var json = """{"DiskAggregateVolumes":false}""";
+
+        SettingsStore.MigrateDiskSettings(settings, json);
+
+        Assert.False(settings.DiskAggregateVolumes);
+        Assert.Empty(settings.DisabledDiskDrives);
     }
 }

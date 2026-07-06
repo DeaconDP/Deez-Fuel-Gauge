@@ -971,6 +971,10 @@
                         Margin="0,6,0,0"
                         Spacing="4"
                         IsVisible="False" />
+            <StackPanel x:Name="SystemSection"
+                        Margin="0,6,0,0"
+                        Spacing="4"
+                        IsVisible="False" />
             <StackPanel Orientation="Horizontal"
                         Margin="0,9,0,0"
                         HorizontalAlignment="Center"

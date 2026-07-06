@@ -5,23 +5,52 @@ namespace DeezFuelGauge.Services;
 
 public static class DiskSpaceProvider
 {
+    internal const string AggregatedVolumeName = "__aggregate__";
+
     private const string MacOsDataVolumePath = "/System/Volumes/Data";
     private const string MacOsRootVolumePath = "/";
+    private const string AggregatedDisplayLabel = "All drives";
 
-    public static IReadOnlyList<DiskVolumeSnapshot> GetVolumes()
+    public static IReadOnlyList<DiskVolumeSnapshot> GetVolumes(WidgetSettings settings)
     {
-        var drives = DriveInfo.GetDrives()
-            .Where(d => d.IsReady && d.TotalSize > 0)
-            .ToList();
+        var enabledDrives = GetEnabledDrives(settings);
 
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-            return GetMacOsAggregatedVolumes(drives);
+        if (settings.DiskAggregateVolumes && enabledDrives.Count > 0)
+            return [CreateAggregatedSnapshot(enabledDrives)];
 
-        return drives
-            .Select(d => ToSnapshot(d, isWindows: true))
+        var isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+        return enabledDrives
+            .Select(d => ToSnapshot(d, isWindows))
             .OrderBy(d => d.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
+
+    public static IReadOnlyList<DriveInfo> GetReadyDrives() =>
+        DriveInfo.GetDrives()
+            .Where(d => d.IsReady && d.TotalSize > 0)
+            .ToList();
+
+    public static IReadOnlyList<DiskDriveDescriptor> GetDriveDescriptors()
+    {
+        var isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+        return GetReadyDrives()
+            .Select(d => new DiskDriveDescriptor(
+                d.Name,
+                DiskVolumeSnapshot.BuildDisplayLabel(d.Name, d.VolumeLabel, isWindows)))
+            .OrderBy(d => d.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    internal static IReadOnlyList<DriveInfo> GetEnabledDrives(WidgetSettings settings)
+    {
+        var disabled = settings.DisabledDiskDrives ?? [];
+        return GetReadyDrives()
+            .Where(d => !IsDriveDisabled(disabled, d.Name))
+            .ToList();
+    }
+
+    internal static bool IsDriveDisabled(IEnumerable<string> disabledDrives, string driveName) =>
+        disabledDrives.Any(d => string.Equals(d, driveName, StringComparison.Ordinal));
 
     internal static string? SelectMacOsPrimaryDriveName(IEnumerable<string> driveNames)
     {
@@ -36,19 +65,18 @@ public static class DiskSpaceProvider
         return null;
     }
 
-    internal static IReadOnlyList<DiskVolumeSnapshot> GetMacOsAggregatedVolumes(IEnumerable<DriveInfo> drives)
+    internal static DiskVolumeSnapshot CreateAggregatedSnapshot(IReadOnlyList<DriveInfo> drives)
     {
-        var driveList = drives.ToList();
-        var primaryName = SelectMacOsPrimaryDriveName(driveList.Select(d => d.Name));
-        if (primaryName is null)
-            return [];
+        var totalBytes = drives.Sum(d => d.TotalSize);
+        var freeBytes = drives.Sum(d => d.AvailableFreeSpace);
 
-        var primaryDrive = driveList.FirstOrDefault(d =>
-            string.Equals(d.Name, primaryName, StringComparison.Ordinal));
-        if (primaryDrive is null)
-            return [];
-
-        return [ToSnapshot(primaryDrive, isWindows: false)];
+        return new DiskVolumeSnapshot
+        {
+            Name = AggregatedVolumeName,
+            DisplayLabel = AggregatedDisplayLabel,
+            PercentUsed = DiskVolumeSnapshot.CalculatePercentUsed(totalBytes, freeBytes),
+            DetailLabel = DiskVolumeSnapshot.FormatDetailLabel(totalBytes, freeBytes)
+        };
     }
 
     internal static DiskVolumeSnapshot ToSnapshot(DriveInfo drive, bool isWindows)
@@ -64,4 +92,7 @@ public static class DiskSpaceProvider
             DetailLabel = DiskVolumeSnapshot.FormatDetailLabel(totalBytes, freeBytes)
         };
     }
+
+    internal static bool DefaultDiskAggregateVolumes() =>
+        RuntimeInformation.IsOSPlatform(OSPlatform.OSX);
 }

@@ -77,6 +77,7 @@ public sealed class SettingsPanelViewModel : ViewModelBase
     public bool IsOpenRouterExpanded => ExpandedProvider == SettingsExpandedProvider.OpenRouter;
     public bool IsOpenCodeExpanded => ExpandedProvider == SettingsExpandedProvider.OpenCode;
     public bool IsDiskExpanded => ExpandedProvider == SettingsExpandedProvider.Disk;
+    public bool IsSystemExpanded => ExpandedProvider == SettingsExpandedProvider.System;
 
     public bool ShowCursor
     {
@@ -332,14 +333,53 @@ public sealed class SettingsPanelViewModel : ViewModelBase
 
     public bool ShowDiskDrives
     {
-        get => GetSource(ProviderSourceKind.DiskDrives).IsEnabled;
-        set => SetSourceEnabled(GetSource(ProviderSourceKind.DiskDrives), value);
+        get => GetSection(SettingsExpandedProvider.Disk).MasterEnable;
+        set
+        {
+            var section = GetSection(SettingsExpandedProvider.Disk);
+            if (section.MasterEnable == value)
+                return;
+
+            section.MasterEnable = value;
+            UpdateDiskSummaryStatus(section);
+            NotifyChanged();
+        }
     }
 
     public bool ShowDiskDetails
     {
-        get => GetSource(ProviderSourceKind.DiskDrives).ShowDetails;
-        set => SetSourceDetail(GetSource(ProviderSourceKind.DiskDrives), value);
+        get => GetSource(ProviderSourceKind.DiskDetails).ShowDetails;
+        set => SetSourceDetail(GetSource(ProviderSourceKind.DiskDetails), value);
+    }
+
+    public bool ShowSystemResources
+    {
+        get => GetSection(SettingsExpandedProvider.System).MasterEnable;
+        set
+        {
+            var section = GetSection(SettingsExpandedProvider.System);
+            if (section.MasterEnable == value)
+                return;
+
+            section.MasterEnable = value;
+            UpdateSystemSummaryStatus(section);
+            NotifyChanged();
+        }
+    }
+
+    public bool ShowSystemDetails
+    {
+        get => GetSource(ProviderSourceKind.SystemDetails).ShowDetails;
+        set => SetSourceDetail(GetSource(ProviderSourceKind.SystemDetails), value);
+    }
+
+    public void RefreshDiskDriveSources(WidgetSettings settings)
+    {
+        var section = GetSection(SettingsExpandedProvider.Disk);
+        SettingsSectionMapper.RefreshDiskDriveSources(section, settings);
+
+        foreach (var source in section.Sources.Where(s => s.Kind == ProviderSourceKind.DiskDrive))
+            WireSourceNotifications(source);
     }
 
     public string OpenAiApiKeyWatermark => BuildWatermark("Admin API key", _openAiCredentialId);
@@ -524,6 +564,10 @@ public sealed class SettingsPanelViewModel : ViewModelBase
         SetSectionColor(
             SettingsExpandedProvider.Disk,
             ShowDiskDrives ? ProviderConnectionState.Connected : ProviderConnectionState.Off);
+
+        SetSectionColor(
+            SettingsExpandedProvider.System,
+            ShowSystemResources ? ProviderConnectionState.Connected : ProviderConnectionState.Off);
     }
 
     public async Task ConnectAsync(ProviderSourceKind kind, WidgetSettings settings)
@@ -675,12 +719,25 @@ public sealed class SettingsPanelViewModel : ViewModelBase
 
     public void OnMasterEnableChanged(ProviderSettingsSectionViewModel section, bool enabled)
     {
+        if (section.ProviderId == SettingsExpandedProvider.Disk)
+        {
+            section.MasterEnable = enabled;
+            UpdateDiskSummaryStatus(section);
+            NotifyChanged();
+            return;
+        }
+
+        if (section.ProviderId == SettingsExpandedProvider.System)
+        {
+            section.MasterEnable = enabled;
+            UpdateSystemSummaryStatus(section);
+            NotifyChanged();
+            return;
+        }
+
         section.MasterEnable = enabled;
         foreach (var source in section.Sources.Where(s => s.HasEnableToggle))
             source.IsEnabled = enabled;
-
-        if (section.ProviderId == SettingsExpandedProvider.Disk)
-            section.SummaryStatus = enabled ? "Enabled" : "Off";
 
         NotifyChanged();
     }
@@ -879,8 +936,58 @@ public sealed class SettingsPanelViewModel : ViewModelBase
     {
         UpdateCredentialDerivedState();
         UpdateConnectionStates();
+        UpdateDiskSummaryStatuses();
+        UpdateSystemSummaryStatuses();
         if (!_suppressChangeNotifications)
             _host?.OnSettingsChanged();
+    }
+
+    private void UpdateDiskSummaryStatuses()
+    {
+        if (Sections.Count == 0)
+            return;
+
+        var diskSection = Sections.FirstOrDefault(s => s.ProviderId == SettingsExpandedProvider.Disk);
+        if (diskSection is not null)
+            UpdateDiskSummaryStatus(diskSection);
+    }
+
+    private void UpdateSystemSummaryStatuses()
+    {
+        if (Sections.Count == 0)
+            return;
+
+        var systemSection = Sections.FirstOrDefault(s => s.ProviderId == SettingsExpandedProvider.System);
+        if (systemSection is not null)
+            UpdateSystemSummaryStatus(systemSection);
+    }
+
+    private static void UpdateSystemSummaryStatus(ProviderSettingsSectionViewModel section)
+    {
+        var settings = new WidgetSettings
+        {
+            ShowSystemResources = section.MasterEnable,
+            ShowRam = section.Sources.FirstOrDefault(s => s.Kind == ProviderSourceKind.SystemRam)?.IsEnabled ?? false,
+            ShowCpu = section.Sources.FirstOrDefault(s => s.Kind == ProviderSourceKind.SystemCpu)?.IsEnabled ?? false,
+            ShowGpu = section.Sources.FirstOrDefault(s => s.Kind == ProviderSourceKind.SystemGpu)?.IsEnabled ?? false
+        };
+
+        section.SummaryStatus = SettingsSectionMapper.BuildSystemSummaryStatus(settings);
+    }
+
+    private static void UpdateDiskSummaryStatus(ProviderSettingsSectionViewModel section)
+    {
+        var settings = new WidgetSettings
+        {
+            ShowDiskDrives = section.MasterEnable,
+            DiskAggregateVolumes = section.Sources.FirstOrDefault(s => s.Kind == ProviderSourceKind.DiskAggregate)?.IsEnabled ?? false,
+            DisabledDiskDrives = section.Sources
+                .Where(s => s.Kind == ProviderSourceKind.DiskDrive && !string.IsNullOrWhiteSpace(s.DrivePath) && !s.IsEnabled)
+                .Select(s => s.DrivePath!)
+                .ToList()
+        };
+
+        section.SummaryStatus = SettingsSectionMapper.BuildDiskSummaryStatus(settings, section);
     }
 
     private void UpdateCredentialDerivedState()
@@ -970,14 +1077,17 @@ public sealed class SettingsPanelViewModel : ViewModelBase
             };
 
             foreach (var source in section.Sources)
-            {
-                source.PropertyChanged += (_, _) =>
-                {
-                    if (!_suppressChangeNotifications && !_updatingDerivedState)
-                        NotifyChanged();
-                };
-            }
+                WireSourceNotifications(source);
         }
+    }
+
+    private void WireSourceNotifications(ProviderSourceViewModel source)
+    {
+        source.PropertyChanged += (_, _) =>
+        {
+            if (!_suppressChangeNotifications && !_updatingDerivedState)
+                NotifyChanged();
+        };
     }
 
     private ProviderBillingSettings CreateOpenAiBillingSettings() => new()
@@ -999,6 +1109,7 @@ public sealed class SettingsPanelViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsOpenRouterExpanded));
         OnPropertyChanged(nameof(IsOpenCodeExpanded));
         OnPropertyChanged(nameof(IsDiskExpanded));
+        OnPropertyChanged(nameof(IsSystemExpanded));
     }
 
     private static string BuildWatermark(string label, string? credentialId) =>

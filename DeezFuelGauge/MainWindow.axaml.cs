@@ -24,6 +24,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
     private readonly ProviderEasySetupService _easySetup;
     private readonly SettingsPanelViewModel _settingsViewModel;
     private readonly DispatcherTimer _pollTimer;
+    private readonly DispatcherTimer _systemPollTimer;
     private readonly WidgetSettings _settings;
     private bool _isRefreshing;
     private bool _isBreakdownExpanded;
@@ -62,11 +63,12 @@ public partial class MainWindow : Window, ISettingsPanelHost
     private double _lastOpenCodeGoMonthlyPercent;
     private double _lastOpenCodeHeadlinePercent;
     private UsageSnapshot? _lastSnapshot;
-    private readonly List<DiskBarRow> _diskBarRows = [];
+    private readonly List<ResourceBarRow> _diskBarRows = [];
+    private readonly List<ResourceBarRow> _systemBarRows = [];
     private double _settingsAnchorHeight;
     private bool _compensateSettingsAnchor;
 
-    private sealed class DiskBarRow
+    private sealed class ResourceBarRow
     {
         public required string Name { get; init; }
         public required StackPanel Container { get; init; }
@@ -130,7 +132,18 @@ public partial class MainWindow : Window, ISettingsPanelHost
         _pollTimer.Tick += async (_, _) => await RefreshAsync();
         _pollTimer.Start();
 
-        Opened += async (_, _) => await RefreshAsync();
+        _systemPollTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromSeconds(10)
+        };
+        _systemPollTimer.Tick += (_, _) => RefreshSystemResources();
+        _systemPollTimer.Start();
+
+        Opened += async (_, _) =>
+        {
+            await RefreshAsync();
+            RefreshSystemResources();
+        };
         SizeChanged += (_, _) => UpdateAllProgressWidths();
         PositionChanged += (_, _) => SaveSettings();
         Closing += (_, _) => SaveSettings();
@@ -198,6 +211,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
             ApplySnapshot(_lastSnapshot);
 
         RefreshDiskVolumes();
+        RefreshSystemResources();
     }
 
     public async Task OnEasySetupCompletedAsync()
@@ -641,11 +655,23 @@ public partial class MainWindow : Window, ISettingsPanelHost
     {
         try
         {
-            ApplyDiskVolumes(DiskSpaceProvider.GetVolumes());
+            ApplyDiskVolumes(DiskSpaceProvider.GetVolumes(_settings));
         }
         catch
         {
             ApplyDiskVolumes([]);
+        }
+    }
+
+    private void RefreshSystemResources()
+    {
+        try
+        {
+            ApplySystemResources(SystemResourceProvider.GetMetrics(_settings));
+        }
+        catch
+        {
+            ApplySystemResources([]);
         }
     }
 
@@ -1128,6 +1154,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
         ProviderBarPresenter.UpdateProgressWidth(OpenAiDirectProgressTrack, OpenAiDirectProgressFill, _lastOpenAiDirectPercent);
         ProviderBarPresenter.UpdateProgressWidth(OpenCodeZenProgressTrack, OpenCodeZenProgressFill, _lastOpenCodeZenPercent);
         UpdateDiskProgressWidths();
+        UpdateSystemProgressWidths();
     }
 
     private void UpdateLimitsProgressWidths()
@@ -1214,25 +1241,72 @@ public partial class MainWindow : Window, ISettingsPanelHost
             ApplyDiskBarRow(row, volume);
         }
 
-        ReorderDiskBarRows(volumes);
+        ReorderResourceBarRows(DiskSection, _diskBarRows, volumes.Select(v => v.Name));
         UpdateDiskProgressWidths();
         RefreshWindowHeight();
     }
 
-    private void ReorderDiskBarRows(IReadOnlyList<DiskVolumeSnapshot> volumes)
+    private void ApplySystemResources(IReadOnlyList<SystemResourceSnapshot> metrics)
     {
-        foreach (var row in _diskBarRows)
-            DiskSection.Children.Remove(row.Container);
-
-        foreach (var volume in volumes)
+        if (!_settings.ShowSystemResources || metrics.Count == 0)
         {
-            var row = _diskBarRows.First(r =>
-                string.Equals(r.Name, volume.Name, StringComparison.OrdinalIgnoreCase));
-            DiskSection.Children.Add(row.Container);
+            SystemSection.IsVisible = false;
+            ClearResourceBarRows(SystemSection, _systemBarRows);
+            return;
+        }
+
+        SystemSection.IsVisible = true;
+        var metricNames = metrics.Select(m => m.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        for (var i = _systemBarRows.Count - 1; i >= 0; i--)
+        {
+            if (!metricNames.Contains(_systemBarRows[i].Name))
+            {
+                SystemSection.Children.Remove(_systemBarRows[i].Container);
+                _systemBarRows.RemoveAt(i);
+            }
+        }
+
+        foreach (var metric in metrics)
+        {
+            var row = _systemBarRows.FirstOrDefault(r =>
+                string.Equals(r.Name, metric.Name, StringComparison.OrdinalIgnoreCase));
+            if (row is null)
+            {
+                row = CreateResourceBarRow(metric.Name, metric.DisplayLabel, _settings.ShowSystemDetails);
+                _systemBarRows.Add(row);
+                SystemSection.Children.Add(row.Container);
+            }
+
+            ApplySystemBarRow(row, metric);
+        }
+
+        ReorderResourceBarRows(SystemSection, _systemBarRows, metrics.Select(m => m.Name));
+        UpdateSystemProgressWidths();
+        RefreshWindowHeight();
+    }
+
+    private void ReorderResourceBarRows(
+        StackPanel section,
+        List<ResourceBarRow> rows,
+        IEnumerable<string> orderedNames)
+    {
+        foreach (var row in rows)
+            section.Children.Remove(row.Container);
+
+        foreach (var name in orderedNames)
+        {
+            var row = rows.First(r => string.Equals(r.Name, name, StringComparison.OrdinalIgnoreCase));
+            section.Children.Add(row.Container);
         }
     }
 
-    private void ApplyDiskBarRow(DiskBarRow row, DiskVolumeSnapshot volume)
+    private void ReorderDiskBarRows(IReadOnlyList<DiskVolumeSnapshot> volumes)
+    {
+        ReorderResourceBarRows(DiskSection, _diskBarRows, volumes.Select(v => v.Name));
+    }
+
+    private void ApplyDiskBarRow(ResourceBarRow row, DiskVolumeSnapshot volume)
     {
         if (row.Container.Children[0] is Grid barGrid &&
             barGrid.Children[0] is TextBlock label)
@@ -1254,11 +1328,36 @@ public partial class MainWindow : Window, ISettingsPanelHost
         row.LastPercent = lastPercent;
     }
 
-    private DiskBarRow CreateDiskBarRow(DiskVolumeSnapshot volume)
+    private void ApplySystemBarRow(ResourceBarRow row, SystemResourceSnapshot metric)
+    {
+        if (row.Container.Children[0] is Grid barGrid &&
+            barGrid.Children[0] is TextBlock label)
+        {
+            label.Text = metric.DisplayLabel;
+        }
+
+        var lastPercent = metric.PercentUsed;
+        ProviderBarPresenter.ApplyUsageBar(
+            row.Track,
+            row.Fill,
+            ref lastPercent,
+            metric.PercentUsed,
+            metric.IsAvailable,
+            metric.StatusMessage,
+            metric.DetailLabel,
+            _settings.ShowSystemDetails,
+            row.Detail);
+        row.LastPercent = lastPercent;
+    }
+
+    private ResourceBarRow CreateDiskBarRow(DiskVolumeSnapshot volume) =>
+        CreateResourceBarRow(volume.Name, volume.DisplayLabel, _settings.ShowDiskDetails);
+
+    private static ResourceBarRow CreateResourceBarRow(string name, string displayLabel, bool showDetails)
     {
         var label = new TextBlock
         {
-            Text = volume.DisplayLabel,
+            Text = displayLabel,
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
             Margin = new Thickness(0, 0, 8, 0),
             FontFamily = new FontFamily("Segoe UI Semibold, Segoe UI, sans-serif"),
@@ -1306,7 +1405,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
             FontSize = 9,
             LineHeight = 12,
             Foreground = new SolidColorBrush(Color.FromRgb(0x77, 0x77, 0x77)),
-            IsVisible = _settings.ShowDiskDetails
+            IsVisible = showDetails
         };
 
         var container = new StackPanel
@@ -1315,9 +1414,9 @@ public partial class MainWindow : Window, ISettingsPanelHost
             Children = { barGrid, detail }
         };
 
-        return new DiskBarRow
+        return new ResourceBarRow
         {
-            Name = volume.Name,
+            Name = name,
             Container = container,
             Track = track,
             Fill = fill,
@@ -1325,15 +1424,21 @@ public partial class MainWindow : Window, ISettingsPanelHost
         };
     }
 
-    private void ClearDiskBarRows()
+    private void ClearDiskBarRows() => ClearResourceBarRows(DiskSection, _diskBarRows);
+
+    private static void ClearResourceBarRows(StackPanel section, List<ResourceBarRow> rows)
     {
-        DiskSection.Children.Clear();
-        _diskBarRows.Clear();
+        section.Children.Clear();
+        rows.Clear();
     }
 
-    private void UpdateDiskProgressWidths()
+    private void UpdateDiskProgressWidths() => UpdateResourceProgressWidths(_diskBarRows);
+
+    private void UpdateSystemProgressWidths() => UpdateResourceProgressWidths(_systemBarRows);
+
+    private static void UpdateResourceProgressWidths(IEnumerable<ResourceBarRow> rows)
     {
-        foreach (var row in _diskBarRows)
+        foreach (var row in rows)
             ProviderBarPresenter.UpdateProgressWidth(row.Track, row.Fill, row.LastPercent);
     }
 
@@ -1371,6 +1476,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
     protected override void OnClosed(EventArgs e)
     {
         _pollTimer.Stop();
+        _systemPollTimer.Stop();
         _usageClient.Dispose();
         _directBilling.Dispose();
         _openAiBilling.Dispose();

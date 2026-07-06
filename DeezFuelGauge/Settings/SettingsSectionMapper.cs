@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Runtime.InteropServices;
 using DeezFuelGauge.Models;
 using DeezFuelGauge.Services;
 
@@ -20,6 +21,7 @@ internal static class SettingsSectionMapper
             sections.Add(BuildOpenRouterSection(settings, host));
         sections.Add(BuildOpenCodeSection(settings, host));
         sections.Add(BuildDiskSection(settings, host));
+        sections.Add(BuildSystemSection(settings));
 
         foreach (var section in sections)
             section.IsExpanded = settings.SettingsExpandedProvider == section.ProviderId;
@@ -51,6 +53,9 @@ internal static class SettingsSectionMapper
                     break;
                 case SettingsExpandedProvider.Disk:
                     ApplyDisk(section, settings);
+                    break;
+                case SettingsExpandedProvider.System:
+                    ApplySystem(section, settings);
                     break;
             }
         }
@@ -290,26 +295,124 @@ internal static class SettingsSectionMapper
         WidgetSettings settings,
         SettingsPanelViewModel host)
     {
-        var drives = CreateSource(
-            ProviderSourceKind.DiskDrives,
-            "Local drives",
-            settings.ShowDiskDrives,
-            settings.ShowDiskDetails,
-            "",
-            showConnect: false,
-            showTest: false);
-        drives.HasDetailsToggle = true;
-        drives.ShowDetails = settings.ShowDiskDetails;
-
         var section = new ProviderSettingsSectionViewModel
         {
             ProviderId = SettingsExpandedProvider.Disk,
             Title = "Disk",
             MasterEnable = settings.ShowDiskDrives,
-            SummaryStatus = settings.ShowDiskDrives ? "Enabled" : "Off"
+            SummaryStatus = BuildDiskSummaryStatus(settings)
         };
-        section.Sources.Add(drives);
+
+        section.Sources.Add(CreateDiskDetailsSource(settings));
+        section.Sources.Add(CreateDiskAggregateSource(settings));
+        AddDiskDriveSources(section, settings);
         return section;
+    }
+
+    public static void RefreshDiskDriveSources(ProviderSettingsSectionViewModel section, WidgetSettings settings)
+    {
+        var existingStates = section.Sources
+            .Where(s => s.Kind == ProviderSourceKind.DiskDrive && !string.IsNullOrWhiteSpace(s.DrivePath))
+            .ToDictionary(s => s.DrivePath!, s => s.IsEnabled, StringComparer.Ordinal);
+
+        foreach (var source in section.Sources.Where(s => s.Kind == ProviderSourceKind.DiskDrive).ToList())
+            section.Sources.Remove(source);
+
+        var insertIndex = 0;
+        for (var i = 0; i < section.Sources.Count; i++)
+        {
+            if (section.Sources[i].Kind == ProviderSourceKind.DiskAggregate)
+            {
+                insertIndex = i + 1;
+                break;
+            }
+        }
+
+        foreach (var drive in DiskSpaceProvider.GetDriveDescriptors())
+        {
+            var enabled = existingStates.TryGetValue(drive.Name, out var state)
+                ? state
+                : !DiskSpaceProvider.IsDriveDisabled(settings.DisabledDiskDrives, drive.Name);
+
+            var source = CreateDiskDriveSource(drive, enabled);
+            section.Sources.Insert(insertIndex++, source);
+        }
+
+        section.SummaryStatus = BuildDiskSummaryStatus(settings, section);
+    }
+
+    private static ProviderSourceViewModel CreateDiskDetailsSource(WidgetSettings settings) => new()
+    {
+        Kind = ProviderSourceKind.DiskDetails,
+        Name = "Usage details",
+        HasEnableToggle = false,
+        HasDetailsToggle = true,
+        ShowDetails = settings.ShowDiskDetails,
+        ShowConnect = false,
+        ShowTest = false
+    };
+
+    private static ProviderSourceViewModel CreateDiskAggregateSource(WidgetSettings settings)
+    {
+        var aggregate = new ProviderSourceViewModel
+        {
+            Kind = ProviderSourceKind.DiskAggregate,
+            Name = "Aggregate volumes",
+            IsEnabled = settings.DiskAggregateVolumes,
+            HasDetailsToggle = false,
+            ShowConnect = false,
+            ShowTest = false
+        };
+
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            aggregate.Status =
+                "APFS volumes may share the same physical storage; disable duplicate mounts if totals look too high.";
+        }
+
+        return aggregate;
+    }
+
+    private static ProviderSourceViewModel CreateDiskDriveSource(DiskDriveDescriptor drive, bool enabled) => new()
+    {
+        Kind = ProviderSourceKind.DiskDrive,
+        Name = drive.DisplayLabel,
+        DrivePath = drive.Name,
+        IsEnabled = enabled,
+        HasDetailsToggle = false,
+        ShowConnect = false,
+        ShowTest = false
+    };
+
+    private static void AddDiskDriveSources(ProviderSettingsSectionViewModel section, WidgetSettings settings)
+    {
+        foreach (var drive in DiskSpaceProvider.GetDriveDescriptors())
+        {
+            var enabled = !DiskSpaceProvider.IsDriveDisabled(settings.DisabledDiskDrives, drive.Name);
+            section.Sources.Add(CreateDiskDriveSource(drive, enabled));
+        }
+    }
+
+    private static string BuildDiskSummaryStatus(WidgetSettings settings) =>
+        BuildDiskSummaryStatus(settings, null);
+
+    public static string BuildDiskSummaryStatus(WidgetSettings settings, ProviderSettingsSectionViewModel? section)
+    {
+        if (!settings.ShowDiskDrives)
+            return "Off";
+
+        if (settings.DiskAggregateVolumes)
+            return "Aggregated";
+
+        var enabledCount = section?.Sources.Count(s => s.Kind == ProviderSourceKind.DiskDrive && s.IsEnabled)
+            ?? DiskSpaceProvider.GetEnabledDrives(settings).Count;
+
+        return enabledCount switch
+        {
+            0 => "No drives",
+            1 => "1 drive",
+            _ => $"{enabledCount} drives"
+        };
     }
 
     private static ProviderSourceViewModel CreateSource(
@@ -421,11 +524,103 @@ internal static class SettingsSectionMapper
 
     private static void ApplyDisk(ProviderSettingsSectionViewModel section, WidgetSettings settings)
     {
-        var drives = section.Sources.Single();
-        settings.ShowDiskDrives = drives.IsEnabled;
-        settings.ShowDiskDetails = drives.ShowDetails;
-        section.MasterEnable = drives.IsEnabled;
-        section.SummaryStatus = drives.IsEnabled ? "Enabled" : "Off";
+        var details = section.Sources.First(s => s.Kind == ProviderSourceKind.DiskDetails);
+        var aggregate = section.Sources.First(s => s.Kind == ProviderSourceKind.DiskAggregate);
+
+        settings.ShowDiskDrives = section.MasterEnable;
+        settings.ShowDiskDetails = details.ShowDetails;
+        settings.DiskAggregateVolumes = aggregate.IsEnabled;
+        settings.DisabledDiskDrives = section.Sources
+            .Where(s => s.Kind == ProviderSourceKind.DiskDrive && !string.IsNullOrWhiteSpace(s.DrivePath) && !s.IsEnabled)
+            .Select(s => s.DrivePath!)
+            .ToList();
+
+        section.SummaryStatus = BuildDiskSummaryStatus(settings, section);
+    }
+
+    private static ProviderSettingsSectionViewModel BuildSystemSection(WidgetSettings settings)
+    {
+        var section = new ProviderSettingsSectionViewModel
+        {
+            ProviderId = SettingsExpandedProvider.System,
+            Title = "System",
+            MasterEnable = settings.ShowSystemResources,
+            SummaryStatus = BuildSystemSummaryStatus(settings)
+        };
+
+        section.Sources.Add(CreateSystemDetailsSource(settings));
+        section.Sources.Add(CreateSystemMetricSource(ProviderSourceKind.SystemRam, "RAM", settings.ShowRam));
+        section.Sources.Add(CreateSystemMetricSource(ProviderSourceKind.SystemCpu, "CPU", settings.ShowCpu));
+        section.Sources.Add(CreateSystemGpuSource(settings));
+        return section;
+    }
+
+    private static ProviderSourceViewModel CreateSystemDetailsSource(WidgetSettings settings) => new()
+    {
+        Kind = ProviderSourceKind.SystemDetails,
+        Name = "Usage details",
+        HasEnableToggle = false,
+        HasDetailsToggle = true,
+        ShowDetails = settings.ShowSystemDetails,
+        ShowConnect = false,
+        ShowTest = false
+    };
+
+    private static ProviderSourceViewModel CreateSystemMetricSource(
+        ProviderSourceKind kind,
+        string name,
+        bool enabled) => new()
+    {
+        Kind = kind,
+        Name = name,
+        IsEnabled = enabled,
+        HasDetailsToggle = false,
+        ShowConnect = false,
+        ShowTest = false
+    };
+
+    private static ProviderSourceViewModel CreateSystemGpuSource(WidgetSettings settings)
+    {
+        var gpu = CreateSystemMetricSource(ProviderSourceKind.SystemGpu, "GPU", settings.ShowGpu);
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            gpu.Status = "GPU utilization is not available on macOS.";
+
+        return gpu;
+    }
+
+    public static string BuildSystemSummaryStatus(WidgetSettings settings)
+    {
+        if (!settings.ShowSystemResources)
+            return "Off";
+
+        var enabled = new[]
+        {
+            settings.ShowRam,
+            settings.ShowCpu,
+            settings.ShowGpu
+        }.Count(x => x);
+
+        return enabled switch
+        {
+            0 => "No metrics",
+            1 => "1 metric",
+            _ => $"{enabled} metrics"
+        };
+    }
+
+    private static void ApplySystem(ProviderSettingsSectionViewModel section, WidgetSettings settings)
+    {
+        var details = section.Sources.First(s => s.Kind == ProviderSourceKind.SystemDetails);
+        var ram = section.Sources.First(s => s.Kind == ProviderSourceKind.SystemRam);
+        var cpu = section.Sources.First(s => s.Kind == ProviderSourceKind.SystemCpu);
+        var gpu = section.Sources.First(s => s.Kind == ProviderSourceKind.SystemGpu);
+
+        settings.ShowSystemResources = section.MasterEnable;
+        settings.ShowSystemDetails = details.ShowDetails;
+        settings.ShowRam = ram.IsEnabled;
+        settings.ShowCpu = cpu.IsEnabled;
+        settings.ShowGpu = gpu.IsEnabled;
+        section.SummaryStatus = BuildSystemSummaryStatus(settings);
     }
 
     private static string? NullIfEmpty(string? value) =>

@@ -173,7 +173,19 @@ public sealed class ProviderEasySetupService
     {
         settings.ShowDiskDrives = true;
         settings.ShowDiskDetails = true;
+        settings.DiskAggregateVolumes = DiskSpaceProvider.DefaultDiskAggregateVolumes();
+        settings.DisabledDiskDrives = [];
         return new EasySetupResult("Disk drives enabled");
+    }
+
+    public EasySetupResult SetupSystem(WidgetSettings settings)
+    {
+        settings.ShowSystemResources = true;
+        settings.ShowSystemDetails = true;
+        settings.ShowRam = true;
+        settings.ShowCpu = true;
+        settings.ShowGpu = true;
+        return new EasySetupResult("System metrics enabled");
     }
 
     private bool TryLaunchCodexWhenAuthMissing(WidgetSettings settings, out EasySetupResult result)

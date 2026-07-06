@@ -9,5 +9,6 @@ public enum SettingsExpandedProvider
     OpenRouter,
     OpenCode,
     Disk,
+    System,
     Widget
 }

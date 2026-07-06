@@ -24,6 +24,13 @@ public sealed class WidgetSettings
     public bool ShowBreakdown { get; set; } = true;
     public bool ShowDiskDrives { get; set; } = true;
     public bool ShowDiskDetails { get; set; } = true;
+    public bool DiskAggregateVolumes { get; set; }
+    public List<string> DisabledDiskDrives { get; set; } = [];
+    public bool ShowSystemResources { get; set; } = true;
+    public bool ShowSystemDetails { get; set; } = true;
+    public bool ShowRam { get; set; } = true;
+    public bool ShowCpu { get; set; } = true;
+    public bool ShowGpu { get; set; } = true;
     public int RefreshIntervalMinutes { get; set; } = 5;
     public bool LaunchAtLogin { get; set; }
     public bool HasCompletedFirstRun { get; set; }

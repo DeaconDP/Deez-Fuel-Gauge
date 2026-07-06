@@ -79,6 +79,8 @@ public partial class SettingsPanel : UserControl
             return;
 
         ViewModel.ToggleExpandedProvider(provider);
+        if (provider == SettingsExpandedProvider.Disk)
+            ViewModel.RefreshDiskDriveSources(RequireSettings());
         e.Handled = true;
     }
 

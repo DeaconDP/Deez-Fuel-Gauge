@@ -213,6 +213,33 @@ public sealed class WidgetSettingsTests
     }
 
     [Fact]
+    public void MigrateSystemSettings_enables_metrics_when_upgrading_legacy_json()
+    {
+        var settings = JsonSerializer.Deserialize<WidgetSettings>("""{"ShowDiskDrives":true}""")!;
+        var json = """{"ShowDiskDrives":true}""";
+
+        SettingsStore.MigrateSystemSettings(settings, json);
+
+        Assert.True(settings.ShowSystemResources);
+        Assert.True(settings.ShowSystemDetails);
+        Assert.True(settings.ShowRam);
+        Assert.True(settings.ShowCpu);
+        Assert.True(settings.ShowGpu);
+    }
+
+    [Fact]
+    public void MigrateSystemSettings_skips_when_system_settings_already_present()
+    {
+        var settings = new WidgetSettings { ShowSystemResources = false, ShowRam = false };
+        var json = """{"ShowSystemResources":false,"ShowRam":false}""";
+
+        SettingsStore.MigrateSystemSettings(settings, json);
+
+        Assert.False(settings.ShowSystemResources);
+        Assert.False(settings.ShowRam);
+    }
+
+    [Fact]
     public void RoundTrip_preserves_pinned_position()
     {
         var settings = new WidgetSettings

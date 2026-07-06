@@ -203,6 +203,29 @@ public sealed class ProviderEasySetupServiceTests
     }
 
     [Fact]
+    public void SetupSystem_enables_system_metrics()
+    {
+        var settings = new WidgetSettings
+        {
+            ShowSystemResources = false,
+            ShowSystemDetails = false,
+            ShowRam = false,
+            ShowCpu = false,
+            ShowGpu = false
+        };
+        var service = new ProviderEasySetupService();
+
+        var result = service.SetupSystem(settings);
+
+        Assert.True(settings.ShowSystemResources);
+        Assert.True(settings.ShowSystemDetails);
+        Assert.True(settings.ShowRam);
+        Assert.True(settings.ShowCpu);
+        Assert.True(settings.ShowGpu);
+        Assert.Equal("System metrics enabled", result.StatusMessage);
+    }
+
+    [Fact]
     public void TryReadLocalAuthFile_reads_valid_auth_json()
     {
         var authPath = Path.Combine(Path.GetTempPath(), $"codex-probe-{Guid.NewGuid():N}.json");

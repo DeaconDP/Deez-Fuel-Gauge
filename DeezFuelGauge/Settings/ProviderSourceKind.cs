@@ -11,5 +11,11 @@ public enum ProviderSourceKind
     OpenRouterCredits,
     OpenCodeZen,
     OpenCodeGo,
-    DiskDrives
+    DiskDetails,
+    DiskAggregate,
+    DiskDrive,
+    SystemDetails,
+    SystemRam,
+    SystemCpu,
+    SystemGpu
 }
