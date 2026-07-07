@@ -20,6 +20,7 @@ internal static class SettingsSectionMapper
             sections.Add(BuildOpenRouterSection(settings, host));
         sections.Add(BuildOpenCodeSection(settings, host));
         sections.Add(BuildDiskSection(settings, host));
+        sections.Add(BuildHardwareSection(settings, host));
 
         foreach (var section in sections)
             section.IsExpanded = settings.SettingsExpandedProvider == section.ProviderId;
@@ -51,6 +52,9 @@ internal static class SettingsSectionMapper
                     break;
                 case SettingsExpandedProvider.Disk:
                     ApplyDisk(section, settings);
+                    break;
+                case SettingsExpandedProvider.Hardware:
+                    ApplyHardware(section, settings);
                     break;
             }
         }
@@ -426,6 +430,88 @@ internal static class SettingsSectionMapper
         settings.ShowDiskDetails = drives.ShowDetails;
         section.MasterEnable = drives.IsEnabled;
         section.SummaryStatus = drives.IsEnabled ? "Enabled" : "Off";
+    }
+
+    private static ProviderSettingsSectionViewModel BuildHardwareSection(
+        WidgetSettings settings,
+        SettingsPanelViewModel host)
+    {
+        var cpu = CreateSource(
+            ProviderSourceKind.HardwareCpuUsage,
+            "CPU usage",
+            settings.ShowCpuUsage,
+            false,
+            "",
+            showConnect: false,
+            showTest: false);
+        cpu.HasDetailsToggle = false;
+
+        var gpu = CreateSource(
+            ProviderSourceKind.HardwareGpuUsage,
+            "GPU usage",
+            settings.ShowGpuUsage,
+            false,
+            "",
+            showConnect: false,
+            showTest: false);
+        gpu.HasDetailsToggle = false;
+
+        var ram = CreateSource(
+            ProviderSourceKind.HardwareRamUsage,
+            "RAM usage",
+            settings.ShowRamUsage,
+            settings.ShowHardwareDetails,
+            "",
+            showConnect: false,
+            showTest: false);
+
+        var cpuTemp = CreateSource(
+            ProviderSourceKind.HardwareCpuTemp,
+            "CPU temp",
+            settings.ShowCpuTemp,
+            settings.ShowCpuTempDetail,
+            "",
+            showConnect: false,
+            showTest: false);
+
+        var anyEnabled = settings.ShowCpuUsage
+                           || settings.ShowGpuUsage
+                           || settings.ShowRamUsage
+                           || settings.ShowCpuTemp;
+        var section = new ProviderSettingsSectionViewModel
+        {
+            ProviderId = SettingsExpandedProvider.Hardware,
+            Title = "Hardware",
+            MasterEnable = anyEnabled,
+            SummaryStatus = anyEnabled ? "Enabled" : "Off"
+        };
+        section.Sources.Add(cpu);
+        section.Sources.Add(gpu);
+        section.Sources.Add(ram);
+        section.Sources.Add(cpuTemp);
+        return section;
+    }
+
+    private static void ApplyHardware(ProviderSettingsSectionViewModel section, WidgetSettings settings)
+    {
+        var cpu = section.Sources.First(s => s.Kind == ProviderSourceKind.HardwareCpuUsage);
+        var gpu = section.Sources.First(s => s.Kind == ProviderSourceKind.HardwareGpuUsage);
+        var ram = section.Sources.First(s => s.Kind == ProviderSourceKind.HardwareRamUsage);
+        var cpuTemp = section.Sources.First(s => s.Kind == ProviderSourceKind.HardwareCpuTemp);
+
+        settings.ShowCpuUsage = cpu.IsEnabled;
+        settings.ShowGpuUsage = gpu.IsEnabled;
+        settings.ShowRamUsage = ram.IsEnabled;
+        settings.ShowCpuTemp = cpuTemp.IsEnabled;
+        settings.ShowCpuTempDetail = cpuTemp.ShowDetails;
+        settings.ShowHardwareDetails = ram.ShowDetails;
+
+        var anyEnabled = settings.ShowCpuUsage
+                         || settings.ShowGpuUsage
+                         || settings.ShowRamUsage
+                         || settings.ShowCpuTemp;
+        section.MasterEnable = anyEnabled;
+        section.SummaryStatus = anyEnabled ? "Enabled" : "Off";
     }
 
     private static string? NullIfEmpty(string? value) =>

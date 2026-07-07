@@ -169,8 +169,9 @@ public sealed class SettingsPanelViewModelTests
         var viewModel = CreateViewModel();
         viewModel.Load(new WidgetSettings());
 
-        Assert.Equal(5, viewModel.Sections.Count);
+        Assert.Equal(6, viewModel.Sections.Count);
         Assert.Contains(viewModel.Sections, s => s.Title == "OpenAI" && s.Sources.Count == 2);
+        Assert.Contains(viewModel.Sections, s => s.Title == "Hardware" && s.Sources.Count == 4);
         var cursorSection = viewModel.Sections.First(s => s.Title == "Cursor");
         Assert.Equal(4, cursorSection.Sources.Count);
         Assert.Contains(cursorSection.Sources, s => s.Kind == ProviderSourceKind.OpenAiViaCursor);
@@ -232,6 +233,44 @@ public sealed class SettingsPanelViewModelTests
         {
             CredentialStore.Delete(apiKeyId);
         }
+    }
+
+    [Fact]
+    public void Load_and_Commit_round_trip_preserves_hardware_toggles()
+    {
+        var settings = new WidgetSettings
+        {
+            ShowCpuUsage = true,
+            ShowGpuUsage = false,
+            ShowRamUsage = true,
+            ShowCpuTemp = true,
+            ShowCpuTempDetail = false,
+            ShowHardwareDetails = false
+        };
+
+        var viewModel = CreateViewModel();
+        viewModel.Load(settings);
+
+        Assert.True(viewModel.ShowCpuUsage);
+        Assert.False(viewModel.ShowGpuUsage);
+        Assert.True(viewModel.ShowRamUsage);
+        Assert.True(viewModel.ShowCpuTemp);
+        Assert.False(viewModel.ShowCpuTempDetail);
+        Assert.False(viewModel.ShowHardwareDetails);
+
+        viewModel.ShowGpuUsage = true;
+        viewModel.ShowHardwareDetails = true;
+        viewModel.ShowCpuTempDetail = true;
+
+        var committed = new WidgetSettings();
+        viewModel.Commit(committed);
+
+        Assert.True(committed.ShowCpuUsage);
+        Assert.True(committed.ShowGpuUsage);
+        Assert.True(committed.ShowRamUsage);
+        Assert.True(committed.ShowCpuTemp);
+        Assert.True(committed.ShowCpuTempDetail);
+        Assert.True(committed.ShowHardwareDetails);
     }
 
     private static SettingsPanelViewModel CreateViewModel() =>

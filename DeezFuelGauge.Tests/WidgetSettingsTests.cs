@@ -239,4 +239,43 @@ public sealed class WidgetSettingsTests
 
         Assert.False(settings.IsPositionPinned);
     }
+
+    [Fact]
+    public void Deserialize_defaults_hardware_toggles_to_false_when_missing()
+    {
+        var json = """{"Left":10,"Top":20}""";
+
+        var settings = JsonSerializer.Deserialize<WidgetSettings>(json)!;
+
+        Assert.False(settings.ShowCpuUsage);
+        Assert.False(settings.ShowGpuUsage);
+        Assert.False(settings.ShowRamUsage);
+        Assert.False(settings.ShowCpuTemp);
+        Assert.True(settings.ShowCpuTempDetail);
+        Assert.True(settings.ShowHardwareDetails);
+    }
+
+    [Fact]
+    public void RoundTrip_preserves_hardware_toggles()
+    {
+        var settings = new WidgetSettings
+        {
+            ShowCpuUsage = true,
+            ShowGpuUsage = true,
+            ShowRamUsage = false,
+            ShowCpuTemp = true,
+            ShowCpuTempDetail = false,
+            ShowHardwareDetails = false
+        };
+
+        var json = JsonSerializer.Serialize(settings);
+        var restored = JsonSerializer.Deserialize<WidgetSettings>(json)!;
+
+        Assert.True(restored.ShowCpuUsage);
+        Assert.True(restored.ShowGpuUsage);
+        Assert.False(restored.ShowRamUsage);
+        Assert.True(restored.ShowCpuTemp);
+        Assert.False(restored.ShowCpuTempDetail);
+        Assert.False(restored.ShowHardwareDetails);
+    }
 }
