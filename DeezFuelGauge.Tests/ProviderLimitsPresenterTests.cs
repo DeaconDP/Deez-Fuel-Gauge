@@ -18,7 +18,7 @@ public sealed class ProviderLimitsPresenterTests
     {
         var summary = ProviderLimitsPresenter.FormatSessionWeeklySummary(84, 4);
 
-        Assert.Equal("84% 5h and 4% weekly used", summary);
+        Assert.Equal("84% 5-hour and 4% weekly used", summary);
     }
 
     [Fact]

@@ -98,18 +98,20 @@ public sealed class AntigravityUsageClientTests
     [Fact]
     public void ParseUserQuota_maps_per_model_buckets_to_gemini_group()
     {
-        const string json = """
+        var sessionResetAt = DateTimeOffset.UtcNow.AddHours(3).ToString("yyyy-MM-ddTHH:mm:ssZ");
+        var weeklyResetAt = DateTimeOffset.UtcNow.AddDays(5).ToString("yyyy-MM-ddTHH:mm:ssZ");
+        var json = $$"""
             {
               "buckets": [
                 {
                   "modelId": "gemini-2.5-pro",
                   "remainingFraction": 0.965,
-                  "resetTime": "2026-07-01T12:00:00Z"
+                  "resetTime": "{{sessionResetAt}}"
                 },
                 {
                   "modelId": "gemini-2.5-flash",
                   "remainingFraction": 0.50,
-                  "resetTime": "2026-07-08T12:00:00Z"
+                  "resetTime": "{{weeklyResetAt}}"
                 }
               ]
             }

@@ -10,5 +10,6 @@ public enum SettingsExpandedProvider
     OpenCode,
     Disk,
     Hardware,
-    Widget
+    Widget,
+    Claude
 }

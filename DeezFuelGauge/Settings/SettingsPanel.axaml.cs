@@ -55,6 +55,15 @@ public partial class SettingsPanel : UserControl
     internal void RequestClearSession(ProviderSourceKind kind) =>
         ViewModel.ClearSession(kind);
 
+    internal void RequestBeginClaudeSignIn(ProviderSourceKind kind) =>
+        BeginClaudeSignIn(kind);
+
+    internal void RequestCompleteClaudeSignIn(ProviderSourceKind kind, string? code) =>
+        _ = CompleteClaudeSignInAsync(kind, code);
+
+    internal void RequestDisconnectClaudeOAuth(ProviderSourceKind kind) =>
+        ViewModel.DisconnectClaudeOAuth(RequireSettings());
+
     private WidgetSettings RequireSettings() =>
         _settings ?? throw new InvalidOperationException("SettingsPanel is not initialized.");
 
@@ -66,6 +75,22 @@ public partial class SettingsPanel : UserControl
     private async Task TestAsync(ProviderSourceKind kind)
     {
         await ViewModel.TestAsync(kind, RequireSettings());
+    }
+
+    private void BeginClaudeSignIn(ProviderSourceKind kind)
+    {
+        if (kind != ProviderSourceKind.ClaudePro)
+            return;
+
+        ViewModel.BeginClaudeSignIn(RequireSettings());
+    }
+
+    private async Task CompleteClaudeSignInAsync(ProviderSourceKind kind, string? code)
+    {
+        if (kind != ProviderSourceKind.ClaudePro)
+            return;
+
+        await ViewModel.CompleteClaudeSignInAsync(RequireSettings(), code);
     }
 
     private void SettingsPanel_PointerPressed(object? sender, PointerPressedEventArgs e) => e.Handled = true;

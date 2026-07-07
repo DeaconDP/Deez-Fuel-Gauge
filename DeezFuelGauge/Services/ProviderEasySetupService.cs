@@ -5,6 +5,7 @@ namespace DeezFuelGauge.Services;
 public sealed class ProviderEasySetupService
 {
     private readonly CodexUsageClient _codex;
+    private readonly ClaudeProUsageClient _claudePro;
     private readonly AntigravityUsageClient _antigravity;
     private readonly OpenRouterUsageClient _openRouter;
     private readonly ExternalSetupLauncher _launcher;
@@ -15,6 +16,7 @@ public sealed class ProviderEasySetupService
 
     public ProviderEasySetupService(
         CodexUsageClient? codex = null,
+        ClaudeProUsageClient? claudePro = null,
         AntigravityUsageClient? antigravity = null,
         OpenRouterUsageClient? openRouter = null,
         ExternalSetupLauncher? launcher = null,
@@ -24,6 +26,7 @@ public sealed class ProviderEasySetupService
         OpenCodeAuthResolver? openCodeAuthResolver = null)
     {
         _codex = codex ?? new CodexUsageClient();
+        _claudePro = claudePro ?? new ClaudeProUsageClient();
         _antigravity = antigravity ?? new AntigravityUsageClient();
         _openRouter = openRouter ?? new OpenRouterUsageClient();
         _launcher = launcher ?? new ExternalSetupLauncher();
@@ -108,6 +111,22 @@ public sealed class ProviderEasySetupService
         settings.Gemini.ShowCursorSource = true;
         settings.Gemini.ShowDetails = true;
         return Task.FromResult(new EasySetupResult("Via Cursor: enabled"));
+    }
+
+    public async Task<EasySetupResult> SetupClaudeAsync(
+        WidgetSettings settings,
+        CancellationToken cancellationToken = default)
+    {
+        settings.Claude.ShowProLimits = true;
+
+        var status = await _claudePro.RefreshAndConnectAsync(settings.Claude, cancellationToken);
+        if (status.StartsWith("Connected", StringComparison.OrdinalIgnoreCase))
+            return new EasySetupResult(status);
+
+        _launcher.OpenClaudeAi();
+        const string message = "Run 'claude login', or paste a session key in Settings, then click Refresh";
+        settings.Claude.ProLastConnectionStatus = message;
+        return new EasySetupResult(message, OpenedExternalUrl: true);
     }
 
     public async Task<EasySetupResult> SetupGeminiAsync(

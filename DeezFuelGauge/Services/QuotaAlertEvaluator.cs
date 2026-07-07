@@ -40,7 +40,7 @@ public static class QuotaAlertEvaluator
             evaluatedAt,
             alerts,
             "openai-cursor",
-            "openai",
+            "cursor",
             "OpenAI (Cursor plan)");
 
         TryAdd(
@@ -59,6 +59,32 @@ public static class QuotaAlertEvaluator
 
         TryAdd(
             results,
+            alerts.ClaudeCursor,
+            settings.Claude.ShowCursorSource && snapshot.Claude.IsAvailable,
+            snapshot.Claude.PercentUsed,
+            cursorCycleEnd,
+            evaluatedAt,
+            alerts,
+            "claude-cursor",
+            "cursor",
+            "Claude (Cursor plan)");
+
+        TryAdd(
+            results,
+            alerts.ClaudeApi,
+            settings.Claude.ShowApiConsoleBilling
+            && snapshot.ClaudeDirect.IsAvailable
+            && settings.Claude.MonthlyBudgetUsd is > 0,
+            snapshot.ClaudeDirect.PercentUsed,
+            cursorCycleEnd,
+            evaluatedAt,
+            alerts,
+            "claude-api",
+            "claude",
+            "Claude API Console");
+
+        TryAdd(
+            results,
             alerts.GeminiCursor,
             settings.Gemini.ShowCursorSource && snapshot.Gemini.IsAvailable,
             snapshot.Gemini.PercentUsed,
@@ -66,7 +92,7 @@ public static class QuotaAlertEvaluator
             evaluatedAt,
             alerts,
             "gemini-cursor",
-            "gemini",
+            "cursor",
             "Gemini (Cursor plan)");
 
         if (alerts.OpenRouterKeyLimit

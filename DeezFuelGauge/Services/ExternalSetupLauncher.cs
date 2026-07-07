@@ -68,6 +68,8 @@ public class ExternalSetupLauncher
 
     public void OpenChatGpt() => OpenUrl("https://chatgpt.com");
 
+    public void OpenClaudeAi() => OpenUrl("https://claude.ai/settings/usage");
+
     public virtual bool IsGeminiCliOnPath()
     {
         var pathEnv = Environment.GetEnvironmentVariable("PATH") ?? "";

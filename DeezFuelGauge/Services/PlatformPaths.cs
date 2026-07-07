@@ -73,4 +73,19 @@ public static class PlatformPaths
 
     public static string GeminiOAuthCredentialsPath =>
         Path.Combine(GeminiConfigDirectory, "oauth_creds.json");
+
+    public static string ClaudeConfigDirectory
+    {
+        get
+        {
+            var configDir = Environment.GetEnvironmentVariable("CLAUDE_CONFIG_DIR");
+            if (!string.IsNullOrWhiteSpace(configDir))
+                return configDir;
+
+            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".claude");
+        }
+    }
+
+    public static string ClaudeCodeCredentialsPath =>
+        Path.Combine(ClaudeConfigDirectory, ".credentials.json");
 }

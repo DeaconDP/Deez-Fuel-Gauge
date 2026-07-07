@@ -132,7 +132,108 @@ public sealed class ProviderEasySetupServiceTests
         Assert.Contains("codex login", result.StatusMessage, StringComparison.OrdinalIgnoreCase);
     }
     [Fact]
-    public async Task SetupGemini_launches_antigravity_ide_when_tokens_missing()
+    public async Task SetupClaude_opens_claude_when_auth_missing()
+    {
+        var settings = new WidgetSettings();
+        var launcher = new RecordingLauncher();
+        var service = new ProviderEasySetupService(
+            claudePro: new ClaudeProUsageClient(
+                new HttpClient(new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.OK))),
+                new ClaudeProAuthResolver(
+                    claudeCodeReader: () => null,
+                    savedSessionReader: _ => null)),
+            launcher: launcher);
+
+        var result = await service.SetupClaudeAsync(settings);
+
+        Assert.True(settings.Claude.ShowProLimits);
+        Assert.False(settings.Claude.ShowApiConsoleBilling);
+        Assert.Contains("https://claude.ai/settings/usage", launcher.OpenedUrls);
+        Assert.Contains("Refresh", result.StatusMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task SetupClaude_tests_existing_session_cookie()
+    {
+        var settings = new WidgetSettings
+        {
+            Claude = { ProSessionCredentialId = CredentialStore.Store("claude-pro-test", "session-key") }
+        };
+
+        try
+        {
+            var handler = new StubHttpHandler(request =>
+            {
+                if (request.RequestUri!.AbsolutePath == "/api/account")
+                {
+                    return new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(
+                            """{"memberships":[{"organization":{"uuid":"org-1"}}]}""",
+                            Encoding.UTF8,
+                            "application/json")
+                    };
+                }
+
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(
+                        """{"five_hour":{"utilization":0.1},"seven_day":{"utilization":20}}""",
+                        Encoding.UTF8,
+                        "application/json")
+                };
+            });
+
+            var service = new ProviderEasySetupService(
+                claudePro: new ClaudeProUsageClient(
+                    new HttpClient(handler),
+                    new ClaudeProAuthResolver(
+                        claudeCodeReader: () => null,
+                        appOAuthReader: _ => null)),
+                launcher: new RecordingLauncher());
+
+            var result = await service.SetupClaudeAsync(settings);
+
+            Assert.Equal("Connected", result.StatusMessage);
+        }
+        finally
+        {
+            CredentialStore.Delete(settings.Claude.ProSessionCredentialId);
+        }
+    }
+
+    [Fact]
+    public async Task SetupClaude_connects_via_claude_code_oauth()
+    {
+        var handler = new StubHttpHandler(request =>
+        {
+            Assert.Equal("/api/oauth/usage", request.RequestUri!.AbsolutePath);
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    """{"five_hour":{"utilization":0.5},"seven_day":{"utilization":0.6}}""",
+                    Encoding.UTF8,
+                    "application/json")
+            };
+        });
+
+        var launcher = new RecordingLauncher();
+        var service = new ProviderEasySetupService(
+            claudePro: new ClaudeProUsageClient(
+                new HttpClient(handler),
+                new ClaudeProAuthResolver(
+                    claudeCodeReader: () => new ClaudeCodeOAuthCredential { AccessToken = "oauth-token" },
+                    savedSessionReader: _ => null)),
+            launcher: launcher);
+
+        var result = await service.SetupClaudeAsync(new WidgetSettings());
+
+        Assert.Equal("Connected", result.StatusMessage);
+        Assert.Empty(launcher.OpenedUrls);
+    }
+
+    [Fact]
+    public async Task SetupGemini_opens_antigravity_when_tokens_missing()
     {
         var settings = new WidgetSettings();
         var launcher = new RecordingLauncher();

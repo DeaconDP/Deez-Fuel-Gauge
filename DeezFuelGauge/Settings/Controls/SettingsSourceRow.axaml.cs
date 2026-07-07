@@ -78,4 +78,22 @@ public partial class SettingsSourceRow : UserControl
         if (Vm is not null)
             FindPanel()?.RequestClearSession(Vm.Kind);
     }
+
+    private void SignInWithClaude_Click(object? sender, RoutedEventArgs e)
+    {
+        if (Vm is not null)
+            FindPanel()?.RequestBeginClaudeSignIn(Vm.Kind);
+    }
+
+    private void ConnectOAuthCode_Click(object? sender, RoutedEventArgs e)
+    {
+        if (Vm is not null)
+            FindPanel()?.RequestCompleteClaudeSignIn(Vm.Kind, OAuthCodeBox.Text);
+    }
+
+    private void DisconnectOAuth_Click(object? sender, RoutedEventArgs e)
+    {
+        if (Vm is not null)
+            FindPanel()?.RequestDisconnectClaudeOAuth(Vm.Kind);
+    }
 }

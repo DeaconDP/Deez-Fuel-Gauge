@@ -15,6 +15,7 @@ internal static class SettingsSectionMapper
 
         sections.Add(BuildCursorSection(settings, host));
         sections.Add(BuildOpenAiSection(settings, host));
+        sections.Add(BuildClaudeSection(settings, host));
         sections.Add(BuildGeminiSection(settings, host));
         if (ProviderFeatureFlags.OpenRouterEnabled)
             sections.Add(BuildOpenRouterSection(settings, host));
@@ -40,6 +41,9 @@ internal static class SettingsSectionMapper
                     break;
                 case SettingsExpandedProvider.OpenAi:
                     ApplyOpenAi(section, settings);
+                    break;
+                case SettingsExpandedProvider.Claude:
+                    ApplyClaude(section, settings);
                     break;
                 case SettingsExpandedProvider.Gemini:
                     ApplyGemini(section, settings);
@@ -108,6 +112,15 @@ internal static class SettingsSectionMapper
             showConnect: true,
             showTest: true);
 
+        var claudeViaCursor = CreateSource(
+            ProviderSourceKind.ClaudeViaCursor,
+            "Claude (via Cursor)",
+            settings.Claude.ShowCursorSource,
+            settings.Claude.ShowDetails,
+            settings.Claude.LastConnectionStatus ?? "",
+            showConnect: true,
+            showTest: true);
+
         var section = new ProviderSettingsSectionViewModel
         {
             ProviderId = SettingsExpandedProvider.Cursor,
@@ -117,8 +130,70 @@ internal static class SettingsSectionMapper
         };
         section.Sources.Add(main);
         section.Sources.Add(openAiViaCursor);
+        section.Sources.Add(claudeViaCursor);
         section.Sources.Add(geminiViaCursor);
         section.Sources.Add(breakdown);
+        return section;
+    }
+
+    private static ProviderSettingsSectionViewModel BuildClaudeSection(
+        WidgetSettings settings,
+        SettingsPanelViewModel host)
+    {
+        var pro = CreateSource(
+            ProviderSourceKind.ClaudePro,
+            "Plan usage",
+            settings.Claude.ShowProLimits,
+            settings.Claude.EffectiveShowProDetails,
+            settings.Claude.ProLastConnectionStatus ?? "",
+            showConnect: true,
+            showTest: true);
+        pro.HasLimitsToggle = true;
+        pro.ShowLimits = settings.Claude.ShowProBreakdown;
+        pro.SupportsAdvanced = true;
+        pro.HasAutoAuth = host.HasClaudeCodeAuth;
+        pro.AutoAuthSummary = host.ClaudeCodeAutoAuthSummary;
+        var showProCredentials = settings.Claude.ShowProLimits
+                                 && !host.HasClaudeCodeAuth
+                                 && !host.HasClaudeAppOAuthSaved
+                                 && !host.HasClaudeSessionCookieSaved;
+        pro.ShowSessionField = showProCredentials;
+        pro.SessionWatermark = host.ClaudeProSessionWatermark;
+        pro.HasSessionSaved = host.HasClaudeSessionCookieSaved;
+        pro.ShowSignInButton = settings.Claude.ShowProLimits
+                               && !host.HasClaudeCodeAuth
+                               && !host.HasClaudeAppOAuthSaved;
+        pro.ShowDisconnectOAuth = host.HasClaudeAppOAuthSaved;
+        pro.IsOAuthPending = host.IsClaudeOAuthPending;
+        pro.AdvancedHint =
+            "Sign in with Claude, or run 'claude login'. Paste a session key in Advanced as fallback.";
+        pro.ShowAdvancedSection = showProCredentials;
+
+        var apiConsole = CreateSource(
+            ProviderSourceKind.ClaudeApiConsole,
+            "API Console",
+            settings.Claude.ShowApiConsoleBilling,
+            settings.Claude.EffectiveShowDirectDetails,
+            settings.Claude.LastConnectionStatus ?? "",
+            showConnect: false,
+            showTest: true);
+        apiConsole.SupportsAdvanced = true;
+        apiConsole.ShowApiKeyField = !host.HasClaudeApiKeySaved;
+        apiConsole.ShowBudgetField = settings.Claude.ShowApiConsoleBilling;
+        apiConsole.Budget = FormatBudget(settings.Claude.MonthlyBudgetUsd);
+        apiConsole.ApiKeyWatermark = host.ClaudeApiKeyWatermark;
+        apiConsole.HasApiKeySaved = host.HasClaudeApiKeySaved;
+        apiConsole.AdvancedHint = "Admin API key with api.usage.read scope.";
+        apiConsole.ShowAdvancedSection = settings.Claude.ShowApiConsoleBilling;
+
+        var section = CreateSection(
+            SettingsExpandedProvider.Claude,
+            "Claude",
+            pro.Status,
+            apiConsole.Status);
+        section.MasterEnable = settings.Claude.ShowProLimits || settings.Claude.ShowApiConsoleBilling;
+        section.Sources.Add(pro);
+        section.Sources.Add(apiConsole);
         return section;
     }
 
@@ -351,12 +426,14 @@ internal static class SettingsSectionMapper
     private static bool HasAnyCursorDashboardSource(WidgetSettings settings) =>
         settings.Cursor.ShowCursorSource
         || settings.OpenAi.ShowCursorSource
+        || settings.Claude.ShowCursorSource
         || settings.Gemini.ShowCursorSource;
 
     private static void ApplyCursor(ProviderSettingsSectionViewModel section, WidgetSettings settings)
     {
         var main = section.Sources.First(s => s.Kind == ProviderSourceKind.CursorWidget && s.HasEnableToggle);
         var openAiViaCursor = section.Sources.First(s => s.Kind == ProviderSourceKind.OpenAiViaCursor);
+        var claudeViaCursor = section.Sources.First(s => s.Kind == ProviderSourceKind.ClaudeViaCursor);
         var geminiViaCursor = section.Sources.First(s => s.Kind == ProviderSourceKind.GeminiViaCursor);
         var breakdown = section.Sources.First(s => s.HasBreakdownToggle);
 
@@ -366,6 +443,9 @@ internal static class SettingsSectionMapper
         settings.OpenAi.ShowCursorSource = openAiViaCursor.IsEnabled;
         settings.OpenAi.ShowDetails = openAiViaCursor.ShowDetails;
         settings.OpenAi.LastConnectionStatus = NullIfEmpty(openAiViaCursor.Status);
+        settings.Claude.ShowCursorSource = claudeViaCursor.IsEnabled;
+        settings.Claude.ShowDetails = claudeViaCursor.ShowDetails;
+        settings.Claude.LastConnectionStatus = NullIfEmpty(claudeViaCursor.Status);
         settings.Gemini.ShowCursorSource = geminiViaCursor.IsEnabled;
         settings.Gemini.ShowDetails = geminiViaCursor.ShowDetails;
         settings.ShowBreakdown = breakdown.ShowBreakdown;
@@ -386,6 +466,22 @@ internal static class SettingsSectionMapper
         settings.OpenAi.ShowProBreakdown = codex.ShowLimits;
         settings.OpenAi.ProLastConnectionStatus = NullIfEmpty(codex.Status);
         section.MasterEnable = settings.OpenAi.ShowDirectSource || settings.OpenAi.ShowProLimits;
+    }
+
+    private static void ApplyClaude(ProviderSettingsSectionViewModel section, WidgetSettings settings)
+    {
+        var pro = section.Sources.First(s => s.Kind == ProviderSourceKind.ClaudePro);
+        var apiConsole = section.Sources.First(s => s.Kind == ProviderSourceKind.ClaudeApiConsole);
+
+        settings.Claude.ShowProLimits = pro.IsEnabled;
+        settings.Claude.ShowProDetails = pro.ShowDetails;
+        settings.Claude.ShowProBreakdown = pro.ShowLimits;
+        settings.Claude.ProLastConnectionStatus = NullIfEmpty(pro.Status);
+        settings.Claude.ShowApiConsoleBilling = apiConsole.IsEnabled;
+        settings.Claude.ShowDirectDetails = apiConsole.ShowDetails;
+        settings.Claude.MonthlyBudgetUsd = ParseBudget(apiConsole.Budget);
+        settings.Claude.LastConnectionStatus = NullIfEmpty(apiConsole.Status);
+        section.MasterEnable = settings.Claude.ShowProLimits || settings.Claude.ShowApiConsoleBilling;
     }
 
     private static void ApplyGemini(ProviderSettingsSectionViewModel section, WidgetSettings settings)
