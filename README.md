@@ -1,4 +1,5 @@
 <img width="386" height="486" alt="2026-07-07 12_32_53-" src="https://github.com/user-attachments/assets/7433381f-f041-4dca-8102-34a8f412f2b8" />
+
 # Cursor Usage Widget
 
 A lightweight, draggable desktop overlay that shows how much of your Cursor included usage cap you've used.
