@@ -77,6 +77,7 @@ public sealed class SettingsPanelViewModel : ViewModelBase
     public bool IsOpenRouterExpanded => ExpandedProvider == SettingsExpandedProvider.OpenRouter;
     public bool IsOpenCodeExpanded => ExpandedProvider == SettingsExpandedProvider.OpenCode;
     public bool IsDiskExpanded => ExpandedProvider == SettingsExpandedProvider.Disk;
+    public bool IsHardwareExpanded => ExpandedProvider == SettingsExpandedProvider.Hardware;
 
     public bool ShowCursor
     {
@@ -342,6 +343,42 @@ public sealed class SettingsPanelViewModel : ViewModelBase
         set => SetSourceDetail(GetSource(ProviderSourceKind.DiskDrives), value);
     }
 
+    public bool ShowCpuUsage
+    {
+        get => GetSource(ProviderSourceKind.HardwareCpuUsage).IsEnabled;
+        set => SetSourceEnabled(GetSource(ProviderSourceKind.HardwareCpuUsage), value);
+    }
+
+    public bool ShowGpuUsage
+    {
+        get => GetSource(ProviderSourceKind.HardwareGpuUsage).IsEnabled;
+        set => SetSourceEnabled(GetSource(ProviderSourceKind.HardwareGpuUsage), value);
+    }
+
+    public bool ShowRamUsage
+    {
+        get => GetSource(ProviderSourceKind.HardwareRamUsage).IsEnabled;
+        set => SetSourceEnabled(GetSource(ProviderSourceKind.HardwareRamUsage), value);
+    }
+
+    public bool ShowCpuTemp
+    {
+        get => GetSource(ProviderSourceKind.HardwareCpuTemp).IsEnabled;
+        set => SetSourceEnabled(GetSource(ProviderSourceKind.HardwareCpuTemp), value);
+    }
+
+    public bool ShowCpuTempDetail
+    {
+        get => GetSource(ProviderSourceKind.HardwareCpuTemp).ShowDetails;
+        set => SetSourceDetail(GetSource(ProviderSourceKind.HardwareCpuTemp), value);
+    }
+
+    public bool ShowHardwareDetails
+    {
+        get => GetSource(ProviderSourceKind.HardwareRamUsage).ShowDetails;
+        set => SetSourceDetail(GetSource(ProviderSourceKind.HardwareRamUsage), value);
+    }
+
     public string OpenAiApiKeyWatermark => BuildWatermark("Admin API key", _openAiCredentialId);
     public string OpenAiSessionCookieWatermark => BuildWatermark("ChatGPT session cookie", _openAiProSessionCredentialId);
     public string OpenRouterApiKeyWatermark => BuildWatermark("API key (sk-or-...)", _openRouterCredentialId);
@@ -524,6 +561,12 @@ public sealed class SettingsPanelViewModel : ViewModelBase
         SetSectionColor(
             SettingsExpandedProvider.Disk,
             ShowDiskDrives ? ProviderConnectionState.Connected : ProviderConnectionState.Off);
+
+        SetSectionColor(
+            SettingsExpandedProvider.Hardware,
+            ShowCpuUsage || ShowGpuUsage || ShowRamUsage || ShowCpuTemp
+                ? ProviderConnectionState.Connected
+                : ProviderConnectionState.Off);
     }
 
     public async Task ConnectAsync(ProviderSourceKind kind, WidgetSettings settings)
@@ -679,7 +722,8 @@ public sealed class SettingsPanelViewModel : ViewModelBase
         foreach (var source in section.Sources.Where(s => s.HasEnableToggle))
             source.IsEnabled = enabled;
 
-        if (section.ProviderId == SettingsExpandedProvider.Disk)
+        if (section.ProviderId == SettingsExpandedProvider.Disk
+            || section.ProviderId == SettingsExpandedProvider.Hardware)
             section.SummaryStatus = enabled ? "Enabled" : "Off";
 
         NotifyChanged();
@@ -999,6 +1043,7 @@ public sealed class SettingsPanelViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsOpenRouterExpanded));
         OnPropertyChanged(nameof(IsOpenCodeExpanded));
         OnPropertyChanged(nameof(IsDiskExpanded));
+        OnPropertyChanged(nameof(IsHardwareExpanded));
     }
 
     private static string BuildWatermark(string label, string? credentialId) =>

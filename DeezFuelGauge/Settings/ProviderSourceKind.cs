@@ -11,5 +11,9 @@ public enum ProviderSourceKind
     OpenRouterCredits,
     OpenCodeZen,
     OpenCodeGo,
-    DiskDrives
+    DiskDrives,
+    HardwareCpuUsage,
+    HardwareGpuUsage,
+    HardwareRamUsage,
+    HardwareCpuTemp
 }

@@ -24,6 +24,12 @@ public sealed class WidgetSettings
     public bool ShowBreakdown { get; set; } = true;
     public bool ShowDiskDrives { get; set; } = true;
     public bool ShowDiskDetails { get; set; } = true;
+    public bool ShowCpuUsage { get; set; }
+    public bool ShowGpuUsage { get; set; }
+    public bool ShowRamUsage { get; set; }
+    public bool ShowCpuTemp { get; set; }
+    public bool ShowCpuTempDetail { get; set; } = true;
+    public bool ShowHardwareDetails { get; set; } = true;
     public int RefreshIntervalMinutes { get; set; } = 5;
     public bool LaunchAtLogin { get; set; }
     public bool HasCompletedFirstRun { get; set; }

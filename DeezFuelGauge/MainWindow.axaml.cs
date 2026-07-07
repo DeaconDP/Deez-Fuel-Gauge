@@ -63,6 +63,10 @@ public partial class MainWindow : Window, ISettingsPanelHost
     private double _lastOpenCodeHeadlinePercent;
     private UsageSnapshot? _lastSnapshot;
     private readonly List<DiskBarRow> _diskBarRows = [];
+    private readonly HardwareMetricsProvider _hardwareMetricsProvider = new();
+    private readonly List<HardwareBarRow> _hardwareBarRows = [];
+    private readonly DispatcherTimer _hardwareTimer;
+    private static readonly TimeSpan HardwareRefreshInterval = TimeSpan.FromSeconds(1);
     private double _settingsAnchorHeight;
     private bool _compensateSettingsAnchor;
 
@@ -70,6 +74,17 @@ public partial class MainWindow : Window, ISettingsPanelHost
     {
         public required string Name { get; init; }
         public required StackPanel Container { get; init; }
+        public required Grid Track { get; init; }
+        public required Border Fill { get; init; }
+        public required TextBlock Detail { get; init; }
+        public double LastPercent { get; set; }
+    }
+
+    private sealed class HardwareBarRow
+    {
+        public required string Key { get; init; }
+        public required StackPanel Container { get; init; }
+        public required Grid BarGrid { get; init; }
         public required Grid Track { get; init; }
         public required Border Fill { get; init; }
         public required TextBlock Detail { get; init; }
@@ -129,6 +144,10 @@ public partial class MainWindow : Window, ISettingsPanelHost
         };
         _pollTimer.Tick += async (_, _) => await RefreshAsync();
         _pollTimer.Start();
+
+        _hardwareTimer = new DispatcherTimer { Interval = HardwareRefreshInterval };
+        _hardwareTimer.Tick += (_, _) => RefreshHardwareMetrics();
+        ApplyHardwareTimerState();
 
         Opened += async (_, _) => await RefreshAsync();
         SizeChanged += (_, _) => UpdateAllProgressWidths();
@@ -198,6 +217,8 @@ public partial class MainWindow : Window, ISettingsPanelHost
             ApplySnapshot(_lastSnapshot);
 
         RefreshDiskVolumes();
+        ApplyHardwareTimerState();
+        RefreshHardwareMetrics();
     }
 
     public async Task OnEasySetupCompletedAsync()
@@ -635,6 +656,8 @@ public partial class MainWindow : Window, ISettingsPanelHost
         }
 
         RefreshDiskVolumes();
+        ApplyHardwareTimerState();
+        RefreshHardwareMetrics();
     }
 
     private void RefreshDiskVolumes()
@@ -647,6 +670,288 @@ public partial class MainWindow : Window, ISettingsPanelHost
         {
             ApplyDiskVolumes([]);
         }
+    }
+
+    private bool IsAnyHardwareMetricEnabled() =>
+        _settings.ShowCpuUsage
+        || _settings.ShowGpuUsage
+        || _settings.ShowRamUsage
+        || _settings.ShowCpuTemp;
+
+    private void ApplyHardwareTimerState()
+    {
+        if (IsAnyHardwareMetricEnabled())
+        {
+            if (!_hardwareTimer.IsEnabled)
+            {
+                _hardwareMetricsProvider.ResetCpuBaseline();
+                _hardwareTimer.Start();
+            }
+
+            return;
+        }
+
+        if (_hardwareTimer.IsEnabled)
+            _hardwareTimer.Stop();
+    }
+
+    private void RefreshHardwareMetrics()
+    {
+        if (!IsAnyHardwareMetricEnabled())
+        {
+            ApplyHardwareMetrics(null);
+            return;
+        }
+
+        try
+        {
+            ApplyHardwareMetrics(_hardwareMetricsProvider.Sample());
+        }
+        catch
+        {
+            ApplyHardwareMetrics(null);
+        }
+    }
+
+    private void ApplyHardwareMetrics(HardwareMetricsSnapshot? snapshot)
+    {
+        var showCpuRow = _settings.ShowCpuUsage || ShouldShowCpuTempDetail();
+        var showGpuRow = _settings.ShowGpuUsage && snapshot?.IsGpuAvailable == true;
+        var showRamRow = _settings.ShowRamUsage;
+
+        if (!showCpuRow && !showGpuRow && !showRamRow)
+        {
+            HardwareSection.IsVisible = false;
+            ClearHardwareBarRows();
+            RefreshWindowHeight();
+            return;
+        }
+
+        HardwareSection.IsVisible = true;
+        var desiredKeys = new List<string>();
+        if (showCpuRow)
+            desiredKeys.Add("cpu");
+        if (showGpuRow)
+            desiredKeys.Add("gpu");
+        if (showRamRow)
+            desiredKeys.Add("ram");
+
+        for (var i = _hardwareBarRows.Count - 1; i >= 0; i--)
+        {
+            if (!desiredKeys.Contains(_hardwareBarRows[i].Key, StringComparer.Ordinal))
+            {
+                HardwareSection.Children.Remove(_hardwareBarRows[i].Container);
+                _hardwareBarRows.RemoveAt(i);
+            }
+        }
+
+        if (showCpuRow)
+            ApplyHardwareBarRow(GetOrCreateHardwareRow("cpu", "CPU"), snapshot, isCpu: true);
+        if (showGpuRow)
+            ApplyHardwareBarRow(GetOrCreateHardwareRow("gpu", "GPU"), snapshot, isCpu: false);
+        if (showRamRow)
+            ApplyHardwareBarRow(GetOrCreateHardwareRow("ram", "RAM"), snapshot, isCpu: false);
+
+        ReorderHardwareBarRows(desiredKeys);
+        UpdateHardwareProgressWidths();
+        RefreshWindowHeight();
+    }
+
+    private HardwareBarRow GetOrCreateHardwareRow(string key, string label)
+    {
+        var row = _hardwareBarRows.FirstOrDefault(r =>
+            string.Equals(r.Key, key, StringComparison.Ordinal));
+        if (row is not null)
+            return row;
+
+        row = CreateHardwareBarRow(key, label);
+        _hardwareBarRows.Add(row);
+        HardwareSection.Children.Add(row.Container);
+        return row;
+    }
+
+    private void ReorderHardwareBarRows(IReadOnlyList<string> keys)
+    {
+        foreach (var row in _hardwareBarRows)
+            HardwareSection.Children.Remove(row.Container);
+
+        foreach (var key in keys)
+        {
+            var row = _hardwareBarRows.First(r => string.Equals(r.Key, key, StringComparison.Ordinal));
+            HardwareSection.Children.Add(row.Container);
+        }
+    }
+
+    private bool ShouldShowCpuTempDetail() =>
+        _settings.ShowCpuTemp && _settings.ShowCpuTempDetail;
+
+    private void ApplyHardwareBarRow(HardwareBarRow row, HardwareMetricsSnapshot? snapshot, bool isCpu)
+    {
+        if (isCpu)
+        {
+            row.BarGrid.IsVisible = true;
+            row.Track.IsVisible = _settings.ShowCpuUsage;
+            row.Fill.IsVisible = _settings.ShowCpuUsage;
+
+            if (!_settings.ShowCpuUsage)
+            {
+                row.LastPercent = 0;
+                row.Fill.Width = 0;
+                row.Detail.Text = ShouldShowCpuTempDetail()
+                    ? HardwareMetricsSnapshot.FormatCpuTemp(snapshot?.CpuTempCelsius)
+                    : "";
+                row.Detail.IsVisible = ShouldShowCpuTempDetail();
+                return;
+            }
+
+            var cpuPercent = snapshot?.CpuPercent;
+            var isAvailable = cpuPercent is not null;
+            var percent = cpuPercent ?? 0;
+            var detail = BuildCpuDetail(snapshot);
+            var lastPercent = row.LastPercent;
+            ProviderBarPresenter.ApplyUsageBar(
+                row.Track,
+                row.Fill,
+                ref lastPercent,
+                percent,
+                isAvailable,
+                "—",
+                detail,
+                ShouldShowCpuTempDetail(),
+                row.Detail);
+            row.LastPercent = lastPercent;
+            return;
+        }
+
+        if (string.Equals(row.Key, "gpu", StringComparison.Ordinal))
+        {
+            var gpuPercent = snapshot?.GpuPercent;
+            var isAvailable = gpuPercent is not null;
+            var percent = gpuPercent ?? 0;
+            var lastPercent = row.LastPercent;
+            ProviderBarPresenter.ApplyUsageBar(
+                row.Track,
+                row.Fill,
+                ref lastPercent,
+                percent,
+                isAvailable,
+                "—",
+                "",
+                false,
+                row.Detail);
+            row.LastPercent = lastPercent;
+            return;
+        }
+
+        var ramPercent = snapshot?.RamPercent ?? 0;
+        var ramDetail = snapshot is not null && _settings.ShowHardwareDetails
+            ? HardwareMetricsSnapshot.FormatRamDetail(snapshot.RamUsedBytes, snapshot.RamTotalBytes)
+            : "";
+        var ramLastPercent = row.LastPercent;
+        ProviderBarPresenter.ApplyUsageBar(
+            row.Track,
+            row.Fill,
+            ref ramLastPercent,
+            ramPercent,
+            snapshot is not null,
+            "—",
+            ramDetail,
+            _settings.ShowHardwareDetails,
+            row.Detail);
+        row.LastPercent = ramLastPercent;
+    }
+
+    private string BuildCpuDetail(HardwareMetricsSnapshot? snapshot)
+    {
+        var parts = new List<string>();
+        if (ShouldShowCpuTempDetail())
+            parts.Add(HardwareMetricsSnapshot.FormatCpuTemp(snapshot?.CpuTempCelsius));
+
+        return string.Join(" · ", parts.Where(part => part.Length > 0));
+    }
+
+    private HardwareBarRow CreateHardwareBarRow(string key, string label)
+    {
+        var labelBlock = new TextBlock
+        {
+            Text = label,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 8, 0),
+            FontFamily = new FontFamily("Segoe UI Semibold, Segoe UI, sans-serif"),
+            FontSize = 11,
+            FontWeight = FontWeight.SemiBold,
+            Foreground = new SolidColorBrush(Color.FromRgb(0xB0, 0xB0, 0xB0)),
+            MaxWidth = 52,
+            TextTrimming = TextTrimming.CharacterEllipsis
+        };
+
+        var fill = new Border
+        {
+            CornerRadius = new CornerRadius(3),
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left,
+            Width = 0,
+            Background = new SolidColorBrush(Color.FromRgb(0x4C, 0xAF, 0x50))
+        };
+
+        var track = new Grid
+        {
+            Height = 6,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            Children =
+            {
+                new Border { CornerRadius = new CornerRadius(3), Background = new SolidColorBrush(Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF)) },
+                fill
+            }
+        };
+
+        var barGrid = new Grid
+        {
+            ColumnDefinitions =
+            {
+                new ColumnDefinition(GridLength.Auto),
+                new ColumnDefinition(GridLength.Star)
+            },
+            Children = { labelBlock, track }
+        };
+        Grid.SetColumn(labelBlock, 0);
+        Grid.SetColumn(track, 1);
+
+        var detail = new TextBlock
+        {
+            Margin = new Thickness(0, 2, 0, 4),
+            FontSize = 9,
+            LineHeight = 12,
+            Foreground = new SolidColorBrush(Color.FromRgb(0x77, 0x77, 0x77)),
+            IsVisible = false
+        };
+
+        var container = new StackPanel
+        {
+            Spacing = 0,
+            Children = { barGrid, detail }
+        };
+
+        return new HardwareBarRow
+        {
+            Key = key,
+            Container = container,
+            BarGrid = barGrid,
+            Track = track,
+            Fill = fill,
+            Detail = detail
+        };
+    }
+
+    private void ClearHardwareBarRows()
+    {
+        HardwareSection.Children.Clear();
+        _hardwareBarRows.Clear();
+    }
+
+    private void UpdateHardwareProgressWidths()
+    {
+        foreach (var row in _hardwareBarRows)
+            ProviderBarPresenter.UpdateProgressWidth(row.Track, row.Fill, row.LastPercent);
     }
 
     private void ApplySnapshot(UsageSnapshot snapshot)
@@ -1128,6 +1433,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
         ProviderBarPresenter.UpdateProgressWidth(OpenAiDirectProgressTrack, OpenAiDirectProgressFill, _lastOpenAiDirectPercent);
         ProviderBarPresenter.UpdateProgressWidth(OpenCodeZenProgressTrack, OpenCodeZenProgressFill, _lastOpenCodeZenPercent);
         UpdateDiskProgressWidths();
+        UpdateHardwareProgressWidths();
     }
 
     private void UpdateLimitsProgressWidths()
@@ -1371,6 +1677,8 @@ public partial class MainWindow : Window, ISettingsPanelHost
     protected override void OnClosed(EventArgs e)
     {
         _pollTimer.Stop();
+        _hardwareTimer.Stop();
+        _hardwareMetricsProvider.Dispose();
         _usageClient.Dispose();
         _directBilling.Dispose();
         _openAiBilling.Dispose();
