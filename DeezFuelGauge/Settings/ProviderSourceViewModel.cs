@@ -135,6 +135,12 @@ public sealed class ProviderSourceViewModel : ViewModelBase
 
     public bool HasAutoAuth { get; set; }
 
+    public bool ShowSignInButton { get; set; }
+
+    public bool ShowDisconnectOAuth { get; set; }
+
+    public bool IsOAuthPending { get; set; }
+
     public void NotifyAdvancedVisibility()
     {
         OnPropertyChanged(nameof(ShowAdvancedSection));
@@ -145,5 +151,8 @@ public sealed class ProviderSourceViewModel : ViewModelBase
         OnPropertyChanged(nameof(HasManagementApiKeySaved));
         OnPropertyChanged(nameof(ManagementApiKeyWatermark));
         OnPropertyChanged(nameof(ShowSessionField));
+        OnPropertyChanged(nameof(ShowSignInButton));
+        OnPropertyChanged(nameof(ShowDisconnectOAuth));
+        OnPropertyChanged(nameof(IsOAuthPending));
     }
 }

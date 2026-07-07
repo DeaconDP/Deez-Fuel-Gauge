@@ -1,2 +1,4 @@
 *.sh text eol=lf
+*.command text eol=lf
+*.bat text eol=crlf
 setup-and-run.app/Contents/MacOS/setup-and-run text eol=lf

@@ -25,6 +25,38 @@
                    FontSize="8"
                    Foreground="#FF666666"
                    IsVisible="{Binding HasAutoAuth}" />
+        <StackPanel Orientation="Horizontal"
+                    Spacing="4"
+                    IsVisible="{Binding ShowSignInButton}">
+            <Button Content="Sign in with Claude"
+                    Classes="action-button"
+                    Click="SignInWithClaude_Click" />
+        </StackPanel>
+        <StackPanel Spacing="2"
+                    IsVisible="{Binding IsOAuthPending}">
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBox x:Name="OAuthCodeBox"
+                         Grid.Column="0"
+                         Watermark="Paste code from browser (code#state)"
+                         FontSize="9" />
+                <Button Grid.Column="1"
+                        Content="Connect"
+                        Padding="4,2"
+                        Margin="4,0,0,0"
+                        Click="ConnectOAuthCode_Click" />
+            </Grid>
+            <TextBlock Text="Approve the sign-in in your browser, copy the code it shows, paste it here, then click Connect."
+                       FontSize="8"
+                       Foreground="#FF666666"
+                       TextWrapping="Wrap" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal"
+                    Spacing="4"
+                    IsVisible="{Binding ShowDisconnectOAuth}">
+            <Button Content="Disconnect"
+                    Classes="action-button"
+                    Click="DisconnectOAuth_Click" />
+        </StackPanel>
         <WrapPanel Orientation="Horizontal">
             <CheckBox Content="Enable"
                       Classes="toggle-checkbox"
