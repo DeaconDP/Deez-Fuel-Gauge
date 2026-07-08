@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using DeezFuelGauge.Models;
 using DeezFuelGauge.Services;
@@ -32,21 +33,52 @@ public sealed class DirectBillingServiceTests
     [Fact]
     public async Task EnrichAsync_fetches_enabled_providers_in_parallel()
     {
-        var settings = new WidgetSettings
+        var handler = new ConcurrentTrackingHandler();
+        var openAiKey = CredentialStore.Store("test-openai", "sk-openai-test");
+
+        try
         {
-            OpenAi = new ProviderBillingSettings { ShowProLimits = true },
-            Gemini = new ProviderBillingSettings { ShowProLimits = true },
-            OpenRouter = new ProviderBillingSettings { ShowProLimits = true },
-            OpenCode = new ProviderBillingSettings { ShowProLimits = true, ShowDirectSource = true }
-        };
+            var settings = new WidgetSettings
+            {
+                OpenAi = new ProviderBillingSettings
+                {
+                    ShowDirectSource = true,
+                    ShowProLimits = true,
+                    CredentialId = openAiKey
+                }
+            };
 
-        var source = new UsageSnapshot { PercentUsed = 10 };
-        using var service = CreateOfflineService();
-        var enriched = await service.EnrichAsync(source, settings);
+            var http = new HttpClient(handler);
+            using var service = new DirectBillingService(
+                new OpenAiBillingClient(http),
+                new CodexUsageClient(
+                    http,
+                    authFilePathResolver: () => null,
+                    authResolver: new CodexAuthResolver(
+                        authFileReader: () => new CodexAuth("token", "account"),
+                        browserCookieReader: () => null,
+                        savedSessionReader: _ => null)),
+                new AnthropicBillingClient(http),
+                new ClaudeProUsageClient(http),
+                new AntigravityUsageClient(http),
+                new OpenRouterUsageClient(http),
+                new OpenCodeUsageClient(http));
 
-        Assert.Equal(10, enriched.PercentUsed);
-        Assert.False(enriched.Codex.IsAvailable);
-        Assert.False(enriched.Antigravity.IsAvailable);
+            var source = new UsageSnapshot { PercentUsed = 10 };
+            var sw = Stopwatch.StartNew();
+            var enriched = await service.EnrichAsync(source, settings);
+            sw.Stop();
+
+            Assert.Equal(10, enriched.PercentUsed);
+            Assert.True(handler.TotalRequests >= 3, $"expected HTTP calls from OpenAI and Codex, saw {handler.TotalRequests}");
+            Assert.True(
+                sw.ElapsedMilliseconds < 250,
+                $"expected parallel fetches (~150ms), took {sw.ElapsedMilliseconds}ms (sequential would be ~225ms+)");
+        }
+        finally
+        {
+            CredentialStore.Delete(openAiKey);
+        }
     }
 
     private static DirectBillingService CreateServiceWithoutLocalAuth()
@@ -82,33 +114,38 @@ public sealed class DirectBillingServiceTests
             Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
     }
 
-    // Builds a service whose clients see no stored credentials and whose HTTP requests all
-    // fail, so results don't depend on what's signed in on the machine running the tests.
-    private static DirectBillingService CreateOfflineService()
+    private sealed class ConcurrentTrackingHandler : HttpMessageHandler
     {
-        var http = new HttpClient(new UnauthorizedHttpHandler());
-        return new DirectBillingService(
-            new OpenAiBillingClient(http),
-            new CodexUsageClient(http, authFilePathResolver: () => null),
-            new AnthropicBillingClient(http),
-            new ClaudeProUsageClient(http, new ClaudeProAuthResolver(
-                claudeCodeReader: () => null,
-                appOAuthReader: _ => null,
-                savedSessionReader: _ => null)),
-            new AntigravityUsageClient(http, authResolver: new GeminiAuthResolver(
-                antigravityReader: () => new AntigravityOAuthTokens())),
-            new OpenRouterUsageClient(http),
-            new OpenCodeUsageClient(http));
-    }
+        private readonly object _lock = new();
+        private int _inFlight;
 
-    private sealed class UnauthorizedHttpHandler : HttpMessageHandler
-    {
-        protected override Task<HttpResponseMessage> SendAsync(
+        public int MaxConcurrent { get; private set; }
+        public int TotalRequests { get; private set; }
+
+        protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
-            CancellationToken cancellationToken) =>
-            Task.FromResult(new HttpResponseMessage(HttpStatusCode.Unauthorized)
+            CancellationToken cancellationToken)
+        {
+            lock (_lock)
             {
-                Content = new StringContent("{}")
-            });
+                TotalRequests++;
+                _inFlight++;
+                MaxConcurrent = Math.Max(MaxConcurrent, _inFlight);
+            }
+
+            try
+            {
+                await Task.Delay(75, cancellationToken);
+                return new HttpResponseMessage(HttpStatusCode.Unauthorized)
+                {
+                    Content = new StringContent("{}")
+                };
+            }
+            finally
+            {
+                lock (_lock)
+                    _inFlight--;
+            }
+        }
     }
 }

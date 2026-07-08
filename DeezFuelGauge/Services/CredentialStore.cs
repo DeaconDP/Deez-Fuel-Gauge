@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.IO;
 using System.Text;
 using DeezFuelGauge.Services.Credentials;
@@ -7,6 +8,7 @@ namespace DeezFuelGauge.Services;
 public static class CredentialStore
 {
     private static readonly string CredentialsDir = Path.Combine(PlatformPaths.SettingsDirectory, "credentials");
+    private static readonly ConcurrentDictionary<string, string?> MemoryCache = new(StringComparer.Ordinal);
 
     public static string Store(string provider, string secret)
     {
@@ -18,6 +20,7 @@ public static class CredentialStore
         var path = GetPath(id);
         var protectedBytes = CredentialProtector.Protect(Encoding.UTF8.GetBytes(secret));
         File.WriteAllBytes(path, protectedBytes);
+        MemoryCache[id] = secret;
         return id;
     }
 
@@ -26,18 +29,27 @@ public static class CredentialStore
         if (string.IsNullOrWhiteSpace(credentialId))
             return null;
 
+        if (MemoryCache.TryGetValue(credentialId, out var cached))
+            return cached;
+
         var path = GetPath(credentialId);
         if (!File.Exists(path))
+        {
+            MemoryCache[credentialId] = null;
             return null;
+        }
 
         try
         {
             var protectedBytes = File.ReadAllBytes(path);
             var plainBytes = CredentialProtector.Unprotect(protectedBytes);
-            return Encoding.UTF8.GetString(plainBytes);
+            var secret = Encoding.UTF8.GetString(plainBytes);
+            MemoryCache[credentialId] = secret;
+            return secret;
         }
         catch
         {
+            MemoryCache[credentialId] = null;
             return null;
         }
     }
@@ -46,6 +58,8 @@ public static class CredentialStore
     {
         if (string.IsNullOrWhiteSpace(credentialId))
             return;
+
+        MemoryCache.TryRemove(credentialId, out _);
 
         var path = GetPath(credentialId);
         try
@@ -69,9 +83,7 @@ public static class CredentialStore
         }
 
         if (!string.IsNullOrWhiteSpace(existingId))
-        {
             Delete(existingId);
-        }
 
         setCredentialId(Store(provider, newSecret));
     }

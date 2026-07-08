@@ -4,6 +4,8 @@ namespace DeezFuelGauge.Services;
 
 public sealed class DirectBillingService : IDisposable
 {
+    internal static readonly TimeSpan ProviderTimeout = TimeSpan.FromSeconds(30);
+
     private readonly OpenAiBillingClient _openAi;
     private readonly CodexUsageClient _codex;
     private readonly AnthropicBillingClient _anthropic;
@@ -38,43 +40,99 @@ public sealed class DirectBillingService : IDisposable
         WidgetSettings settings,
         CancellationToken cancellationToken = default)
     {
-        var openAiDirect = settings.OpenAi.ShowDirectSource
-            ? await _openAi.FetchAsync(
-                settings.OpenAi,
-                snapshot.BillingCycleStartMs,
-                snapshot.BillingCycleEndMs,
+        var openAiDirectTask = settings.OpenAi.ShowDirectSource
+            ? FetchWithTimeout(
+                ct => _openAi.FetchAsync(
+                    settings.OpenAi,
+                    snapshot.BillingCycleStartMs,
+                    snapshot.BillingCycleEndMs,
+                    ct),
+                DirectProviderSnapshot.Unavailable(),
                 cancellationToken)
-            : DirectProviderSnapshot.Unavailable();
+            : Task.FromResult(DirectProviderSnapshot.Unavailable());
 
-        var codex = settings.OpenAi.ShowProLimits
-            ? await _codex.FetchAsync(settings.OpenAi, cancellationToken)
-            : CodexSnapshot.Unavailable();
-
-        var claudeDirect = settings.Claude.ShowApiConsoleBilling
-            ? await _anthropic.FetchAsync(
-                settings.Claude,
-                snapshot.BillingCycleStartMs,
-                snapshot.BillingCycleEndMs,
+        var codexTask = settings.OpenAi.ShowProLimits
+            ? FetchWithTimeout(
+                ct => _codex.FetchAsync(settings.OpenAi, ct),
+                CodexSnapshot.Unavailable(),
                 cancellationToken)
-            : DirectProviderSnapshot.Unavailable();
+            : Task.FromResult(CodexSnapshot.Unavailable());
 
-        var claudePro = settings.Claude.ShowProLimits
-            ? await _claudePro.FetchAsync(settings.Claude, cancellationToken)
-            : ClaudeProSnapshot.Unavailable();
+        var claudeDirectTask = settings.Claude.ShowApiConsoleBilling
+            ? FetchWithTimeout(
+                ct => _anthropic.FetchAsync(
+                    settings.Claude,
+                    snapshot.BillingCycleStartMs,
+                    snapshot.BillingCycleEndMs,
+                    ct),
+                DirectProviderSnapshot.Unavailable(),
+                cancellationToken)
+            : Task.FromResult(DirectProviderSnapshot.Unavailable());
 
-        var antigravity = settings.Gemini.ShowProLimits
-            ? await _antigravity.FetchAsync(settings.Gemini, cancellationToken)
-            : AntigravitySnapshot.Unavailable();
+        var claudeProTask = settings.Claude.ShowProLimits
+            ? FetchWithTimeout(
+                ct => _claudePro.FetchAsync(settings.Claude, ct),
+                ClaudeProSnapshot.Unavailable(),
+                cancellationToken)
+            : Task.FromResult(ClaudeProSnapshot.Unavailable());
 
-        var openRouter = ProviderFeatureFlags.OpenRouterEnabled && settings.OpenRouter.ShowProLimits
-            ? await _openRouter.FetchAsync(settings.OpenRouter, cancellationToken)
-            : OpenRouterSnapshot.Unavailable();
+        var antigravityTask = settings.Gemini.ShowProLimits
+            ? FetchWithTimeout(
+                ct => _antigravity.FetchAsync(settings.Gemini, ct),
+                AntigravitySnapshot.Unavailable(),
+                cancellationToken)
+            : Task.FromResult(AntigravitySnapshot.Unavailable());
 
-        var openCode = settings.OpenCode.ShowDirectSource || settings.OpenCode.ShowProLimits
-            ? await _openCode.FetchAsync(settings.OpenCode, cancellationToken)
-            : OpenCodeSnapshot.Unavailable();
+        var openRouterTask = ProviderFeatureFlags.OpenRouterEnabled && settings.OpenRouter.ShowProLimits
+            ? FetchWithTimeout(
+                ct => _openRouter.FetchAsync(settings.OpenRouter, ct),
+                OpenRouterSnapshot.Unavailable(),
+                cancellationToken)
+            : Task.FromResult(OpenRouterSnapshot.Unavailable());
 
-        return CopyWithEnrichment(snapshot, openAiDirect, codex, claudeDirect, claudePro, antigravity, openRouter, openCode);
+        var openCodeTask = settings.OpenCode.ShowDirectSource || settings.OpenCode.ShowProLimits
+            ? FetchWithTimeout(
+                ct => _openCode.FetchAsync(settings.OpenCode, ct),
+                OpenCodeSnapshot.Unavailable(),
+                cancellationToken)
+            : Task.FromResult(OpenCodeSnapshot.Unavailable());
+
+        await Task.WhenAll(
+            openAiDirectTask,
+            codexTask,
+            claudeDirectTask,
+            claudeProTask,
+            antigravityTask,
+            openRouterTask,
+            openCodeTask);
+
+        return CopyWithEnrichment(
+            snapshot,
+            await openAiDirectTask,
+            await codexTask,
+            await claudeDirectTask,
+            await claudeProTask,
+            await antigravityTask,
+            await openRouterTask,
+            await openCodeTask);
+    }
+
+    private static async Task<T> FetchWithTimeout<T>(
+        Func<CancellationToken, Task<T>> fetch,
+        T fallback,
+        CancellationToken cancellationToken)
+    {
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutCts.CancelAfter(ProviderTimeout);
+
+        try
+        {
+            return await fetch(timeoutCts.Token);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return fallback;
+        }
     }
 
     internal static UsageSnapshot CopyWithEnrichment(

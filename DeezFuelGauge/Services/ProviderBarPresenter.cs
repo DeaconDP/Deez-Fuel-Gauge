@@ -29,7 +29,7 @@ public static class ProviderBarPresenter
         {
             lastPercent = 0;
             fill.Width = 0;
-            fill.Background = new SolidColorBrush(UnavailableColor);
+            fill.Background = UsageBarBrushes.GetBrush(UnavailableColor);
             track.Opacity = 0.45;
             if (detailText is not null)
             {
@@ -43,7 +43,7 @@ public static class ProviderBarPresenter
 
         track.Opacity = 1;
         lastPercent = percentUsed;
-        fill.Background = new SolidColorBrush(UsageBarColors.GetColorForPercent(percentUsed));
+        fill.Background = UsageBarBrushes.GetBrushForPercent(percentUsed);
         UpdateProgressWidth(track, fill, lastPercent);
         if (detailText is not null)
         {

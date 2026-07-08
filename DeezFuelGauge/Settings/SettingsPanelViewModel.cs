@@ -40,6 +40,14 @@ public sealed class SettingsPanelViewModel : ViewModelBase
     private string? _claudeOAuthRedirectUri;
     private CancellationTokenSource? _claudeOAuthListenerCts;
     private ClaudeOAuthCallbackListener? _claudeOAuthListener;
+    private AuthDetectionCache? _authDetectionCache;
+    private static readonly TimeSpan AuthDetectionCacheTtl = TimeSpan.FromSeconds(30);
+
+    private sealed record AuthDetectionCache(
+        bool Codex,
+        bool Gemini,
+        bool OpenCode,
+        DateTimeOffset CachedAt);
 
     public SettingsPanelViewModel(
         ProviderEasySetupService easySetup,
@@ -75,6 +83,8 @@ public sealed class SettingsPanelViewModel : ViewModelBase
     public ObservableCollection<ProviderSettingsSectionViewModel> Sections { get; } = [];
 
     public void AttachHost(ISettingsPanelHost host) => _host = host;
+
+    public void NotifyLayoutChanged() => _host?.OnSettingsLayoutChanged();
 
     public SettingsExpandedProvider ExpandedProvider
     {
@@ -507,11 +517,17 @@ public sealed class SettingsPanelViewModel : ViewModelBase
 
     public string ClaudeCodeAutoAuthSummary => HasClaudeCodeAuth ? "Signed in via Claude Code CLI" : "";
 
-    public bool HasOpenCodeAutoAuth =>
-        _openCodeAuthResolver.HasDetectableAuth(CreateOpenCodeBillingSettings());
+    public bool HasOpenCodeAutoAuth => GetAuthCache().OpenCode;
 
-    public bool HasOpenCodeAutoAuthFor(ProviderBillingSettings openCode) =>
-        _openCodeAuthResolver.HasDetectableAuth(openCode);
+    public bool HasOpenCodeAutoAuthFor(ProviderBillingSettings openCode)
+    {
+        var defaults = CreateOpenCodeBillingSettings();
+        if (openCode.ProSessionCredentialId == defaults.ProSessionCredentialId
+            && openCode.WorkspaceId == defaults.WorkspaceId)
+            return GetAuthCache().OpenCode;
+
+        return _openCodeAuthResolver.HasDetectableAuth(openCode);
+    }
 
     public bool HasOpenCodeApiKeyAuth => _openCodeAuthResolver.HasApiKeyAuth();
 
@@ -536,7 +552,7 @@ public sealed class SettingsPanelViewModel : ViewModelBase
         && !HasOpenCodeAutoAuthFor(openCode)
         && !HasOpenCodeSessionSaved;
 
-    public bool HasCodexAutoAuth => _codexAuthResolver.HasDetectableAuth(CreateOpenAiBillingSettings());
+    public bool HasCodexAutoAuth => GetAuthCache().Codex;
 
     public string CodexAutoAuthSummary => HasCodexAutoAuth
         ? (_codexAuthResolver.Resolve(CreateOpenAiBillingSettings(), tryBrowserCookies: false).Source switch
@@ -552,7 +568,7 @@ public sealed class SettingsPanelViewModel : ViewModelBase
 
     public bool ShowOpenAiDirectCredentials => ShowOpenAiDirect && !HasOpenAiApiKeySaved;
 
-    public bool HasGeminiAutoAuth => _geminiAuthResolver.HasDetectableAuth();
+    public bool HasGeminiAutoAuth => GetAuthCache().Gemini;
 
     public string GeminiAutoAuthSummary => HasGeminiAutoAuth
         ? (_geminiAuthResolver.DetectedSource() switch
@@ -815,6 +831,7 @@ public sealed class SettingsPanelViewModel : ViewModelBase
                 break;
         }
 
+        InvalidateAuthDetectionCache();
         UpdateCredentialDerivedState();
         NotifyChanged();
     }
@@ -837,6 +854,7 @@ public sealed class SettingsPanelViewModel : ViewModelBase
                 break;
         }
 
+        InvalidateAuthDetectionCache();
         UpdateCredentialDerivedState();
         NotifyChanged();
     }
@@ -870,6 +888,7 @@ public sealed class SettingsPanelViewModel : ViewModelBase
                 break;
         }
 
+        InvalidateAuthDetectionCache();
         UpdateCredentialDerivedState();
         NotifyChanged();
     }
@@ -1086,6 +1105,7 @@ public sealed class SettingsPanelViewModel : ViewModelBase
         _claudeProOAuthCredentialId = null;
         settings.Claude.ProLastConnectionStatus = null;
         ClaudeProStatus = "";
+        InvalidateAuthDetectionCache();
         UpdateClaudeOAuthDerivedState();
         Commit(settings);
         _host?.OnSettingsChanged();
@@ -1242,6 +1262,23 @@ public sealed class SettingsPanelViewModel : ViewModelBase
         }
 
         return true;
+    }
+
+    public void InvalidateAuthDetectionCache() => _authDetectionCache = null;
+
+    private AuthDetectionCache GetAuthCache()
+    {
+        if (_authDetectionCache is { } cached
+            && DateTimeOffset.UtcNow - cached.CachedAt < AuthDetectionCacheTtl)
+            return cached;
+
+        cached = new AuthDetectionCache(
+            Codex: _codexAuthResolver.HasDetectableAuth(CreateOpenAiBillingSettings()),
+            Gemini: _geminiAuthResolver.HasDetectableAuth(),
+            OpenCode: _openCodeAuthResolver.HasDetectableAuth(CreateOpenCodeBillingSettings()),
+            CachedAt: DateTimeOffset.UtcNow);
+        _authDetectionCache = cached;
+        return cached;
     }
 
     private void NotifyChanged()

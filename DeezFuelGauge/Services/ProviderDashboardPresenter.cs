@@ -27,25 +27,16 @@ public static class ProviderDashboardPresenter
 
     public static double ComputeCursorHeadline(UsageSnapshot snapshot, WidgetSettings settings)
     {
-        var values = new List<double>();
-
+        // Aggregate plan usage — do not Max with Auto/API/per-model (that misleads the collapsed bar).
         if (settings.Cursor.ShowCursorSource)
-            values.Add(snapshot.PercentUsed);
+            return snapshot.PercentUsed;
 
-        if (settings.ShowBreakdown && snapshot.HasBreakdown)
-        {
-            if (snapshot.AutoPercentUsed is { } auto)
-                values.Add(auto);
-            if (snapshot.ApiPercentUsed is { } api)
-                values.Add(api);
-        }
-
+        // Fallback when only per-model Cursor sources are enabled.
+        var values = new List<double>();
         if (settings.OpenAi.ShowCursorSource && snapshot.OpenAi.IsAvailable)
             values.Add(snapshot.OpenAi.PercentUsed);
-
         if (settings.Claude.ShowCursorSource && snapshot.Claude.IsAvailable)
             values.Add(snapshot.Claude.PercentUsed);
-
         if (settings.Gemini.ShowCursorSource && snapshot.Gemini.IsAvailable)
             values.Add(snapshot.Gemini.PercentUsed);
 

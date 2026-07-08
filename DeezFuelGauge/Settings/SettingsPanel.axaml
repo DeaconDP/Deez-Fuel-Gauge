@@ -8,7 +8,7 @@
     <UserControl.Styles>
         <StyleInclude Source="avares://DeezFuelGauge/Settings/SettingsStyles.axaml" />
     </UserControl.Styles>
-    <ScrollViewer MaxHeight="420"
+    <ScrollViewer MaxHeight="300"
                   HorizontalScrollBarVisibility="Disabled">
         <ItemsControl ItemsSource="{Binding Sections}">
             <ItemsControl.ItemTemplate>

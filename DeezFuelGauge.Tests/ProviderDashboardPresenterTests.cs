@@ -76,7 +76,7 @@ public sealed class ProviderDashboardPresenterTests
     }
 
     [Fact]
-    public void ComputeCursorHeadline_includes_auto_and_api_when_breakdown_enabled()
+    public void ComputeCursorHeadline_uses_aggregate_percent_even_when_auto_is_higher()
     {
         var snapshot = new UsageSnapshot
         {
@@ -86,7 +86,7 @@ public sealed class ProviderDashboardPresenterTests
         };
         var settings = new WidgetSettings { ShowBreakdown = true };
 
-        Assert.Equal(90, ProviderDashboardPresenter.ComputeCursorHeadline(snapshot, settings));
+        Assert.Equal(40, ProviderDashboardPresenter.ComputeCursorHeadline(snapshot, settings));
     }
 
     [Fact]
@@ -104,7 +104,7 @@ public sealed class ProviderDashboardPresenterTests
     }
 
     [Fact]
-    public void ComputeCursorHeadline_includes_per_model_cursor_readings()
+    public void ComputeCursorHeadline_ignores_per_model_when_cursor_source_enabled()
     {
         var snapshot = new UsageSnapshot
         {
@@ -114,6 +114,22 @@ public sealed class ProviderDashboardPresenterTests
             Gemini = new ProviderUsageSnapshot { IsAvailable = true, PercentUsed = 25 }
         };
         var settings = new WidgetSettings { ShowBreakdown = false };
+
+        Assert.Equal(40, ProviderDashboardPresenter.ComputeCursorHeadline(snapshot, settings));
+    }
+
+    [Fact]
+    public void ComputeCursorHeadline_falls_back_to_per_model_max_when_cursor_source_disabled()
+    {
+        var snapshot = new UsageSnapshot
+        {
+            PercentUsed = 40,
+            OpenAi = new ProviderUsageSnapshot { IsAvailable = true, PercentUsed = 55 },
+            Claude = new ProviderUsageSnapshot { IsAvailable = true, PercentUsed = 88 },
+            Gemini = new ProviderUsageSnapshot { IsAvailable = true, PercentUsed = 25 }
+        };
+        var settings = new WidgetSettings { ShowBreakdown = false };
+        settings.Cursor.ShowCursorSource = false;
 
         Assert.Equal(88, ProviderDashboardPresenter.ComputeCursorHeadline(snapshot, settings));
     }
@@ -127,9 +143,10 @@ public sealed class ProviderDashboardPresenterTests
             Claude = new ProviderUsageSnapshot { IsAvailable = true, PercentUsed = 88 }
         };
         var settings = new WidgetSettings { ShowBreakdown = false };
+        settings.Cursor.ShowCursorSource = false;
         settings.Claude.ShowCursorSource = false;
 
-        Assert.Equal(40, ProviderDashboardPresenter.ComputeCursorHeadline(snapshot, settings));
+        Assert.Equal(0, ProviderDashboardPresenter.ComputeCursorHeadline(snapshot, settings));
     }
 
     [Fact]
