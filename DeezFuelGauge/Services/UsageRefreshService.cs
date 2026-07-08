@@ -4,8 +4,6 @@ namespace DeezFuelGauge.Services;
 
 public sealed class UsageRefreshService : IDisposable
 {
-    private static readonly TimeSpan ProviderTimeout = TimeSpan.FromSeconds(30);
-
     private readonly UsageClient _usageClient;
     private readonly DirectBillingService _directBilling;
     private readonly bool _ownsClients;

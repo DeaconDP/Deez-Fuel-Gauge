@@ -31,6 +31,8 @@ public partial class SettingsPanel : UserControl
 
     public void CommitToSettings(WidgetSettings settings) => ViewModel.Commit(settings);
 
+    internal void NotifyLayoutChanged() => ViewModel.NotifyLayoutChanged();
+
     internal void RequestConnect(ProviderSourceKind kind) =>
         _ = ConnectAsync(kind);
 

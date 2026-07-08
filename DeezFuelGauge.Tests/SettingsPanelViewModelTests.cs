@@ -275,6 +275,48 @@ public sealed class SettingsPanelViewModelTests
         Assert.True(committed.ShowHardwareDetails);
     }
 
+    [Fact]
+    public void ExpandedProvider_change_notifies_host_for_layout_refresh()
+    {
+        var host = new FakeSettingsPanelHost();
+        var viewModel = CreateViewModel();
+        viewModel.AttachHost(host);
+        viewModel.Load(new WidgetSettings());
+
+        viewModel.ExpandedProvider = SettingsExpandedProvider.OpenAi;
+
+        Assert.Equal(1, host.LayoutChangedCount);
+
+        viewModel.ExpandedProvider = SettingsExpandedProvider.None;
+
+        Assert.Equal(2, host.LayoutChangedCount);
+    }
+
+    [Fact]
+    public void NotifyLayoutChanged_forwards_to_host()
+    {
+        var host = new FakeSettingsPanelHost();
+        var viewModel = CreateViewModel();
+        viewModel.AttachHost(host);
+
+        viewModel.NotifyLayoutChanged();
+
+        Assert.Equal(1, host.LayoutChangedCount);
+    }
+
+    private sealed class FakeSettingsPanelHost : ISettingsPanelHost
+    {
+        public int LayoutChangedCount { get; private set; }
+
+        public void OnSettingsChanged()
+        {
+        }
+
+        public void OnSettingsLayoutChanged() => LayoutChangedCount++;
+
+        public Task OnEasySetupCompletedAsync() => Task.CompletedTask;
+    }
+
     private static SettingsPanelViewModel CreateViewModel() =>
         new(
             new ProviderEasySetupService(),

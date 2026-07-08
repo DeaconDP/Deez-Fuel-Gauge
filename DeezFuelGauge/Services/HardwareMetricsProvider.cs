@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using DeezFuelGauge.Models;
 using DeezFuelGauge.Services.Hardware;
 
@@ -16,18 +17,18 @@ public sealed class HardwareMetricsProvider : IDisposable
 
     public HardwareMetricsProvider()
     {
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        if (OperatingSystem.IsWindows())
             _windowsReader = new WindowsHardwareReader();
-        else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        else if (OperatingSystem.IsMacOS())
             _macReader = new MacOsHardwareReader();
     }
 
     public HardwareMetricsSnapshot Sample()
     {
-        if (_windowsReader is not null)
+        if (OperatingSystem.IsWindows() && _windowsReader is not null)
             return SampleWindows(_windowsReader);
 
-        if (_macReader is not null)
+        if (OperatingSystem.IsMacOS() && _macReader is not null)
             return SampleMacOs(_macReader);
 
         return new HardwareMetricsSnapshot();
@@ -44,9 +45,11 @@ public sealed class HardwareMetricsProvider : IDisposable
             return;
 
         _disposed = true;
-        _windowsReader?.Dispose();
+        if (OperatingSystem.IsWindows())
+            _windowsReader?.Dispose();
     }
 
+    [SupportedOSPlatform("windows")]
     private HardwareMetricsSnapshot SampleWindows(WindowsHardwareReader reader)
     {
         var (idle, kernel, user) = reader.ReadCpuTimes();

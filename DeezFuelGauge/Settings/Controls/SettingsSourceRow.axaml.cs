@@ -32,6 +32,8 @@ public partial class SettingsSourceRow : UserControl
     {
         if (Vm is not null)
             Vm.IsAdvancedExpanded = !Vm.IsAdvancedExpanded;
+
+        FindPanel()?.NotifyLayoutChanged();
     }
 
     private void ApiKeyBox_LostFocus(object? sender, RoutedEventArgs e)

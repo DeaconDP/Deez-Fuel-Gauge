@@ -47,18 +47,61 @@
                                Foreground="#FF00E5FF"
                                VerticalAlignment="Center" />
                 </StackPanel>
-                <Border Grid.Column="1"
-                        Background="Transparent"
-                        Cursor="Hand"
-                        Padding="2,0,0,0"
-                        PointerPressed="SettingsToggle_PointerPressed">
-                    <TextBlock x:Name="SettingsIcon"
-                               Text="&#x2699;"
-                               FontSize="14"
-                               LineHeight="18"
-                               Foreground="#FF888888"
-                               VerticalAlignment="Center" />
-                </Border>
+                <StackPanel Grid.Column="1"
+                            Orientation="Horizontal"
+                            VerticalAlignment="Center">
+                    <Border Background="Transparent"
+                            Cursor="Hand"
+                            Padding="2,0,0,0"
+                            ToolTip.Tip="Settings"
+                            PointerPressed="SettingsToggle_PointerPressed">
+                        <TextBlock x:Name="SettingsIcon"
+                                   Text="&#x2699;"
+                                   FontFamily="Segoe UI Symbol, Apple Symbols, sans-serif"
+                                   FontSize="14"
+                                   LineHeight="18"
+                                   Foreground="#FF44CC44"
+                                   VerticalAlignment="Center" />
+                    </Border>
+                    <Border Background="Transparent"
+                            Cursor="Hand"
+                            Margin="6,0,0,0"
+                            ToolTip.Tip="Refresh"
+                            PointerPressed="RefreshButton_PointerPressed">
+                        <TextBlock x:Name="RefreshIcon"
+                                   Text="&#x21BB;"
+                                   FontFamily="Segoe UI Symbol, Apple Symbols, sans-serif"
+                                   FontSize="14"
+                                   LineHeight="18"
+                                   Foreground="#FF88CCFF"
+                                   VerticalAlignment="Center" />
+                    </Border>
+                    <Border x:Name="PinButton"
+                            Background="Transparent"
+                            Cursor="Hand"
+                            Margin="6,0,0,0"
+                            PointerPressed="PinToggle_PointerPressed">
+                        <TextBlock x:Name="PinIcon"
+                                   Text="&#x2316;"
+                                   FontFamily="Segoe UI Symbol, Apple Symbols, sans-serif"
+                                   FontSize="14"
+                                   LineHeight="18"
+                                   Foreground="#FFFFCC00"
+                                   VerticalAlignment="Center" />
+                    </Border>
+                    <Border Background="Transparent"
+                            Cursor="Hand"
+                            Margin="6,0,0,0"
+                            ToolTip.Tip="Close"
+                            PointerPressed="CloseButton_PointerPressed">
+                        <TextBlock Text="&#x2715;"
+                                   FontFamily="Segoe UI Symbol, Apple Symbols, sans-serif"
+                                   FontSize="14"
+                                   LineHeight="18"
+                                   Foreground="#FFFF4444"
+                                   VerticalAlignment="Center" />
+                    </Border>
+                </StackPanel>
             </Grid>
             <Border x:Name="SettingsPanelHost"
                     Margin="0,0,0,8"
@@ -110,8 +153,7 @@
                            LineHeight="16"
                            Foreground="#FFE8E8E8" />
                 <Border x:Name="CursorBarBorder"
-                        Background="Transparent"
-                        PointerPressed="CursorBar_PointerPressed">
+                        Background="Transparent">
                     <Grid Margin="0,5,0,5">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
@@ -138,93 +180,69 @@
                         </Grid>
                     </Grid>
                 </Border>
-                <StackPanel x:Name="BreakdownSection"
-                            Margin="0,3,0,0"
-                            IsVisible="False">
-                    <StackPanel Orientation="Horizontal"
-                                Spacing="4">
-                        <TextBlock x:Name="BreakdownChevron"
-                                   Text="&#x25BE;"
-                                   FontSize="10"
-                                   LineHeight="14"
-                                   Foreground="#FF888888"
-                                   VerticalAlignment="Center" />
-                        <TextBlock x:Name="BreakdownSummary"
-                                   Text=""
-                                   FontSize="10"
-                                   LineHeight="14"
-                                   Foreground="#FF888888"
-                                   VerticalAlignment="Center"
-                                   TextWrapping="Wrap" />
-                    </StackPanel>
-                    <Border x:Name="BreakdownPanel"
-                            Margin="0,6,0,0"
-                            Padding="8,7"
-                            CornerRadius="6"
-                            Background="#FF121212"
-                            IsVisible="False">
-                        <StackPanel Spacing="10">
+                <Border x:Name="BreakdownPanel"
+                        Margin="0,3,0,0"
+                        Padding="6,5"
+                        CornerRadius="5"
+                        Background="#FF252525"
+                        IsVisible="False">
+                    <StackPanel Spacing="5">
+                        <Border x:Name="AutoBreakdownRow"
+                                Classes="breakdown-row"
+                                Background="Transparent">
                             <StackPanel>
-                                <Grid Margin="0,0,0,4">
+                                <Grid Margin="0,0,0,2">
                                     <TextBlock Text="Auto + Composer"
-                                               FontSize="10"
-                                               LineHeight="13"
+                                               FontSize="9.5"
+                                               LineHeight="12"
                                                Foreground="#FFE8E8E8"
                                                HorizontalAlignment="Left" />
                                     <TextBlock x:Name="AutoPercentText"
                                                Text=""
-                                               FontSize="10"
-                                               LineHeight="13"
+                                               FontSize="9.5"
+                                               LineHeight="12"
                                                Foreground="#FFE8E8E8"
                                                HorizontalAlignment="Right" />
                                 </Grid>
-                                <Grid x:Name="AutoProgressTrack" Height="5">
-                                    <Border CornerRadius="2.5" Background="#33FFFFFF" />
+                                <Grid x:Name="AutoProgressTrack" Height="4">
+                                    <Border CornerRadius="2" Background="#33FFFFFF" />
                                     <Border x:Name="AutoProgressFill"
-                                            CornerRadius="2.5"
+                                            CornerRadius="2"
                                             HorizontalAlignment="Left"
                                             Width="0"
                                             Background="#FF4D9FFF" />
                                 </Grid>
-                                <TextBlock Text="Additional usage beyond limits consumes API quota or on-demand spend."
-                                           FontSize="8.5"
-                                           LineHeight="12"
-                                           Foreground="#FF666666"
-                                           TextWrapping="Wrap"
-                                           Margin="0,4,0,0" />
                             </StackPanel>
+                        </Border>
+                        <Border x:Name="ApiBreakdownRow"
+                                Classes="breakdown-row"
+                                Background="Transparent">
                             <StackPanel>
-                                <Grid Margin="0,0,0,4">
+                                <Grid Margin="0,0,0,2">
                                     <TextBlock Text="API"
-                                               FontSize="10"
-                                               LineHeight="13"
+                                               FontSize="9.5"
+                                               LineHeight="12"
                                                Foreground="#FFE8E8E8"
                                                HorizontalAlignment="Left" />
                                     <TextBlock x:Name="ApiPercentText"
                                                Text=""
-                                               FontSize="10"
-                                               LineHeight="13"
+                                               FontSize="9.5"
+                                               LineHeight="12"
                                                Foreground="#FFE8E8E8"
                                                HorizontalAlignment="Right" />
                                 </Grid>
-                                <Grid x:Name="ApiProgressTrack" Height="5">
-                                    <Border CornerRadius="2.5" Background="#33FFFFFF" />
+                                <Grid x:Name="ApiProgressTrack" Height="4">
+                                    <Border CornerRadius="2" Background="#33FFFFFF" />
                                     <Border x:Name="ApiProgressFill"
-                                            CornerRadius="2.5"
+                                            CornerRadius="2"
                                             HorizontalAlignment="Left"
                                             Width="0"
                                             Background="#FF4D9FFF" />
                                 </Grid>
-                                <TextBlock Text="Additional usage beyond limits consumes on-demand spend."
-                                           FontSize="8.5"
-                                           LineHeight="12"
-                                           Foreground="#FF666666"
-                                           TextWrapping="Wrap"
-                                           Margin="0,4,0,0" />
                             </StackPanel>
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </Border>
                 <TextBlock x:Name="RemainingText"
                            Text=""
                            FontSize="11"
@@ -1201,35 +1219,50 @@
                         Margin="0,6,0,0"
                         Spacing="4"
                         IsVisible="False" />
-            <StackPanel Orientation="Horizontal"
-                        Margin="0,9,0,0"
-                        HorizontalAlignment="Center"
-                        Spacing="0">
-                <TextBlock Text="built by "
-                           FontSize="8.5"
-                           LineHeight="12"
+            <Grid Margin="0,9,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="LastRefreshedText"
+                           Grid.Column="0"
+                           FontSize="8"
+                           LineHeight="11"
                            Foreground="#44FFFFFF"
-                           VerticalAlignment="Center" />
-                <TextBlock Text="deac.online"
-                           FontSize="8.5"
-                           LineHeight="12"
-                           Foreground="#55AAAAAA"
-                           Cursor="Hand"
+                           HorizontalAlignment="Left"
                            VerticalAlignment="Center"
-                           PointerPressed="DeacLink_PointerPressed" />
-                <TextBlock Text=" @ "
-                           FontSize="8.5"
-                           LineHeight="12"
-                           Foreground="#44FFFFFF"
-                           VerticalAlignment="Center" />
-                <TextBlock Text="worldbuild.io"
-                           FontSize="8.5"
-                           LineHeight="12"
-                           Foreground="#55AAAAAA"
-                           Cursor="Hand"
-                           VerticalAlignment="Center"
-                           PointerPressed="WorldbuildLink_PointerPressed" />
-            </StackPanel>
+                           IsVisible="False" />
+                <StackPanel Grid.Column="1"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            Spacing="0">
+                    <TextBlock Text="built by "
+                               FontSize="8.5"
+                               LineHeight="12"
+                               Foreground="#44FFFFFF"
+                               VerticalAlignment="Center" />
+                    <TextBlock Text="deac.online"
+                               FontSize="8.5"
+                               LineHeight="12"
+                               Foreground="#55AAAAAA"
+                               Cursor="Hand"
+                               VerticalAlignment="Center"
+                               PointerPressed="DeacLink_PointerPressed" />
+                    <TextBlock Text=" @ "
+                               FontSize="8.5"
+                               LineHeight="12"
+                               Foreground="#44FFFFFF"
+                               VerticalAlignment="Center" />
+                    <TextBlock Text="worldbuild.io"
+                               FontSize="8.5"
+                               LineHeight="12"
+                               Foreground="#55AAAAAA"
+                               Cursor="Hand"
+                               VerticalAlignment="Center"
+                               PointerPressed="WorldbuildLink_PointerPressed" />
+                </StackPanel>
+            </Grid>
         </StackPanel>
     </Border>
 </Window>
