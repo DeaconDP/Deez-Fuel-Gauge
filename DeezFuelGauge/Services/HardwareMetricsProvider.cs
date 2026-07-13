@@ -55,8 +55,30 @@ public sealed class HardwareMetricsProvider : IDisposable
         var (idle, kernel, user) = reader.ReadCpuTimes();
         var cpuPercent = ReadCpuPercent(idle, kernel, user);
         var (ramPercent, ramUsed, ramTotal) = reader.ReadRam();
-        var gpuPercent = reader.ReadGpuPercent();
-        var cpuTemp = reader.ReadCpuTempCelsius();
+
+        // GPU / thermal perf-counter init can be slow or fail on some machines.
+        // Never let that block CPU/RAM from reaching the UI.
+        double? gpuPercent = null;
+        var gpuAvailable = false;
+        try
+        {
+            gpuPercent = reader.ReadGpuPercent();
+            gpuAvailable = reader.HasGpuSupport;
+        }
+        catch
+        {
+            // Keep CPU/RAM readings.
+        }
+
+        double? cpuTemp = null;
+        try
+        {
+            cpuTemp = reader.ReadCpuTempCelsius();
+        }
+        catch
+        {
+            // Optional metric.
+        }
 
         return new HardwareMetricsSnapshot
         {
@@ -65,7 +87,7 @@ public sealed class HardwareMetricsProvider : IDisposable
             RamPercent = ramPercent,
             RamUsedBytes = ramUsed,
             RamTotalBytes = ramTotal,
-            IsGpuAvailable = reader.HasGpuSupport,
+            IsGpuAvailable = gpuAvailable,
             IsCpuTempAvailable = cpuTemp is not null,
             CpuTempCelsius = cpuTemp
         };

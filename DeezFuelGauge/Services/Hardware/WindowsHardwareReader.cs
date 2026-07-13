@@ -11,21 +11,22 @@ internal sealed class WindowsHardwareReader : IDisposable
     private const string HighPrecisionTemperatureCounter = "High Precision Temperature";
     private const string TemperatureCounter = "Temperature";
 
+    // GPU Engine exposes one instance per process engtype; machines with many GPU clients
+    // can have hundreds. Cap + direct counter construction keeps Sample() from hanging.
+    internal const int MaxGpuEngineCounters = 48;
+
     private readonly List<ThermalCounter> _thermalCounters = [];
     private readonly List<PerformanceCounter> _gpuCounters = [];
+    private readonly object _gpuInitGate = new();
+    private readonly object _thermalInitGate = new();
+    private Task? _gpuInitTask;
+    private Task? _thermalInitTask;
     private bool _gpuCountersInitialized;
     private bool _thermalCountersInitialized;
     private bool _gpuWarmedUp;
     private bool _disposed;
 
-    public bool HasGpuSupport
-    {
-        get
-        {
-            EnsureGpuCounters();
-            return _gpuCounters.Count > 0;
-        }
-    }
+    public bool HasGpuSupport => _gpuCountersInitialized && _gpuCounters.Count > 0;
 
     public (ulong Idle, ulong Kernel, ulong User) ReadCpuTimes()
     {
@@ -50,8 +51,8 @@ internal sealed class WindowsHardwareReader : IDisposable
 
     public double? ReadGpuPercent()
     {
-        EnsureGpuCounters();
-        if (_gpuCounters.Count == 0)
+        EnsureGpuCountersAsync();
+        if (!_gpuCountersInitialized || _gpuCounters.Count == 0)
             return null;
 
         if (!_gpuWarmedUp)
@@ -72,8 +73,8 @@ internal sealed class WindowsHardwareReader : IDisposable
 
     public double? ReadCpuTempCelsius()
     {
-        EnsureThermalCounters();
-        if (_thermalCounters.Count == 0)
+        EnsureThermalCountersAsync();
+        if (!_thermalCountersInitialized || _thermalCounters.Count == 0)
             return null;
 
         var readings = new List<double>();
@@ -98,51 +99,122 @@ internal sealed class WindowsHardwareReader : IDisposable
             return;
 
         _disposed = true;
-        DisposeCounters(_gpuCounters);
-        foreach (var thermal in _thermalCounters)
-            thermal.Counter.Dispose();
+        try
+        {
+            _gpuInitTask?.Wait(TimeSpan.FromSeconds(2));
+            _thermalInitTask?.Wait(TimeSpan.FromSeconds(2));
+        }
+        catch
+        {
+            // Best-effort shutdown if background init is still running.
+        }
 
-        _thermalCounters.Clear();
+        lock (_gpuInitGate)
+            DisposeCounters(_gpuCounters);
+
+        lock (_thermalInitGate)
+        {
+            foreach (var thermal in _thermalCounters)
+                thermal.Counter.Dispose();
+
+            _thermalCounters.Clear();
+        }
     }
 
-    private void EnsureGpuCounters()
+    internal static IReadOnlyList<string> SelectGpuEngineInstances(
+        IEnumerable<string> instanceNames,
+        int maxCount = MaxGpuEngineCounters)
     {
-        if (_gpuCountersInitialized)
+        if (maxCount <= 0)
+            return [];
+
+        return instanceNames
+            .Where(name => name.EndsWith("engtype_3D", StringComparison.OrdinalIgnoreCase))
+            .Take(maxCount)
+            .ToArray();
+    }
+
+    private void EnsureGpuCountersAsync()
+    {
+        if (_gpuCountersInitialized || _gpuInitTask is not null)
             return;
 
-        _gpuCountersInitialized = true;
+        lock (_gpuInitGate)
+        {
+            if (_gpuCountersInitialized || _gpuInitTask is not null)
+                return;
+
+            _gpuInitTask = Task.Run(InitializeGpuCounters);
+        }
+    }
+
+    private void InitializeGpuCounters()
+    {
         try
         {
             if (!PerformanceCounterCategory.Exists("GPU Engine"))
                 return;
 
             var category = new PerformanceCounterCategory("GPU Engine");
-            foreach (var instance in category.GetInstanceNames())
+            var opened = new List<PerformanceCounter>();
+            foreach (var instance in SelectGpuEngineInstances(category.GetInstanceNames()))
             {
-                if (!instance.EndsWith("engtype_3D", StringComparison.OrdinalIgnoreCase))
-                    continue;
-
-                foreach (var counter in category.GetCounters(instance))
+                try
                 {
-                    if (!string.Equals(counter.CounterName, "Utilization Percentage", StringComparison.Ordinal))
-                        continue;
-
-                    _gpuCounters.Add(counter);
+                    // Construct the one counter we need — GetCounters(instance) enumerates every
+                    // counter for that instance and is extremely slow with hundreds of engines.
+                    opened.Add(new PerformanceCounter(
+                        "GPU Engine",
+                        "Utilization Percentage",
+                        instance,
+                        readOnly: true));
                 }
+                catch
+                {
+                    // Skip instances that disappear between enumeration and open.
+                }
+            }
+
+            lock (_gpuInitGate)
+            {
+                if (_disposed)
+                {
+                    DisposeCounters(opened);
+                    return;
+                }
+
+                _gpuCounters.AddRange(opened);
             }
         }
         catch
         {
-            _gpuCounters.Clear();
+            lock (_gpuInitGate)
+                DisposeCounters(_gpuCounters);
+        }
+        finally
+        {
+            lock (_gpuInitGate)
+                _gpuCountersInitialized = true;
         }
     }
 
-    private void EnsureThermalCounters()
+    private void EnsureThermalCountersAsync()
     {
-        if (_thermalCountersInitialized)
+        if (_thermalCountersInitialized || _thermalInitTask is not null)
             return;
 
-        _thermalCountersInitialized = true;
+        lock (_thermalInitGate)
+        {
+            if (_thermalCountersInitialized || _thermalInitTask is not null)
+                return;
+
+            _thermalInitTask = Task.Run(InitializeThermalCounters);
+        }
+    }
+
+    private void InitializeThermalCounters()
+    {
+        var opened = new List<ThermalCounter>();
         try
         {
             if (!PerformanceCounterCategory.Exists("Thermal Zone Information"))
@@ -152,33 +224,64 @@ internal sealed class WindowsHardwareReader : IDisposable
             foreach (var instance in category.GetInstanceNames())
             {
                 PerformanceCounter? highPrecision = null;
-                PerformanceCounter? temperature = null;
-
-                foreach (var counter in category.GetCounters(instance))
+                try
                 {
-                    if (string.Equals(counter.CounterName, HighPrecisionTemperatureCounter, StringComparison.Ordinal))
-                        highPrecision = counter;
-                    else if (string.Equals(counter.CounterName, TemperatureCounter, StringComparison.Ordinal))
-                        temperature = counter;
+                    highPrecision = new PerformanceCounter(
+                        "Thermal Zone Information",
+                        HighPrecisionTemperatureCounter,
+                        instance,
+                        readOnly: true);
+                }
+                catch
+                {
+                    // Not all zones expose the high-precision counter.
                 }
 
                 if (highPrecision is not null)
                 {
-                    _thermalCounters.Add(new ThermalCounter(highPrecision, IsHighPrecision: true));
-                    temperature?.Dispose();
+                    opened.Add(new ThermalCounter(highPrecision, IsHighPrecision: true));
                     continue;
                 }
 
-                if (temperature is not null)
-                    _thermalCounters.Add(new ThermalCounter(temperature, IsHighPrecision: false));
+                try
+                {
+                    var temperature = new PerformanceCounter(
+                        "Thermal Zone Information",
+                        TemperatureCounter,
+                        instance,
+                        readOnly: true);
+                    opened.Add(new ThermalCounter(temperature, IsHighPrecision: false));
+                }
+                catch
+                {
+                    // Skip zones without a usable temperature counter.
+                }
+            }
+
+            lock (_thermalInitGate)
+            {
+                if (_disposed)
+                {
+                    foreach (var thermal in opened)
+                        thermal.Counter.Dispose();
+                    return;
+                }
+
+                _thermalCounters.AddRange(opened);
             }
         }
         catch
         {
-            foreach (var thermal in _thermalCounters)
+            foreach (var thermal in opened)
                 thermal.Counter.Dispose();
 
-            _thermalCounters.Clear();
+            lock (_thermalInitGate)
+                _thermalCounters.Clear();
+        }
+        finally
+        {
+            lock (_thermalInitGate)
+                _thermalCountersInitialized = true;
         }
     }
 

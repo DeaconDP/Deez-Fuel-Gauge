@@ -881,6 +881,8 @@ public partial class MainWindow : Window, ISettingsPanelHost
             {
                 _hardwareMetricsProvider.ResetCpuBaseline();
                 _lastAppliedHardwareSnapshot = null;
+                // Show rows immediately so a slow first GPU sample can't hide CPU/RAM.
+                ApplyHardwareMetrics(new HardwareMetricsSnapshot(), structureChanged: true);
                 _hardwareTimer.Start();
                 _ = SampleHardwareMetricsAsync();
             }
@@ -890,6 +892,12 @@ public partial class MainWindow : Window, ISettingsPanelHost
 
         if (_hardwareTimer.IsEnabled)
             _hardwareTimer.Stop();
+
+        if (_lastAppliedHardwareSnapshot is not null || _hardwareBarRows.Count > 0)
+        {
+            _lastAppliedHardwareSnapshot = null;
+            ApplyHardwareMetrics(null, structureChanged: true);
+        }
     }
 
     private async Task SampleHardwareMetricsAsync()
@@ -919,11 +927,9 @@ public partial class MainWindow : Window, ISettingsPanelHost
         }
         catch
         {
-            if (_lastAppliedHardwareSnapshot is not null)
-            {
-                _lastAppliedHardwareSnapshot = null;
-                ApplyHardwareMetrics(null, structureChanged: true);
-            }
+            // Keep placeholder rows visible when sampling fails.
+            if (_hardwareBarRows.Count == 0)
+                ApplyHardwareMetrics(new HardwareMetricsSnapshot(), structureChanged: true);
         }
         finally
         {

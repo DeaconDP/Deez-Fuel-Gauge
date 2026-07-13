@@ -1,5 +1,5 @@
-using DeezFuelGauge.Models;
 using DeezFuelGauge.Services;
+using DeezFuelGauge.Services.Hardware;
 using Xunit;
 
 namespace DeezFuelGauge.Tests;
@@ -30,5 +30,22 @@ public sealed class HardwareMetricsProviderTests
 
         Assert.Null(afterReset.CpuPercent);
         Assert.True(afterReset.RamTotalBytes >= 0);
+    }
+
+    [Fact]
+    public void SelectGpuEngineInstances_keeps_only_3d_engines_up_to_cap()
+    {
+        var names = new[]
+        {
+            "pid_1_luid_0x00000000_0x00000000_phys_0_eng_0_engtype_3D",
+            "pid_2_luid_0x00000000_0x00000000_phys_0_eng_0_engtype_Copy",
+            "pid_3_luid_0x00000000_0x00000000_phys_0_eng_0_engtype_3D",
+            "pid_4_luid_0x00000000_0x00000000_phys_0_eng_0_engtype_3D",
+        };
+
+        var selected = WindowsHardwareReader.SelectGpuEngineInstances(names, maxCount: 2);
+
+        Assert.Equal(2, selected.Count);
+        Assert.All(selected, name => Assert.EndsWith("engtype_3D", name, StringComparison.OrdinalIgnoreCase));
     }
 }
