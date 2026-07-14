@@ -4,9 +4,9 @@ public static class ProviderHealthPresenter
 {
     private static readonly Dictionary<string, string> ProviderLabels = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["openai-platform"] = "OpenAI Platform",
+        ["openai-platform"] = "OpenAI API",
         ["codex"] = "Codex",
-        ["antigravity"] = "Antigravity",
+        ["antigravity"] = "Gemini App",
         ["openrouter"] = "OpenRouter",
         ["opencode"] = "OpenCode"
     };

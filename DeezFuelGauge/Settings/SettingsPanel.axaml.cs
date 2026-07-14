@@ -111,7 +111,7 @@ public partial class SettingsPanel : UserControl
 
     private void MasterEnable_Changed(object? sender, RoutedEventArgs e)
     {
-        if (sender is not CheckBox { Tag: ProviderSettingsSectionViewModel section, IsChecked: { } enabled })
+        if (sender is not ToggleSwitch { Tag: ProviderSettingsSectionViewModel section, IsChecked: { } enabled })
             return;
 
         ViewModel.OnMasterEnableChanged(section, enabled);

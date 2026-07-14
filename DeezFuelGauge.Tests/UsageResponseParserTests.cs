@@ -62,4 +62,23 @@ public sealed class UsageResponseParserTests
 
         Assert.Null(snapshot);
     }
+
+    [Theory]
+    [InlineData("""{ "planUsage": { "limit": 2000, "includedSpend": 500, "remaining": 1500 }, "billingCycleStart": "2026-04-02T14:11:55.000Z", "billingCycleEnd": "2026-05-02T14:11:55.000Z" }""", 1775139115000L, 1777731115000L)]
+    [InlineData("""{ "planUsage": { "limit": 2000, "includedSpend": 500, "remaining": 1500 }, "billingCycleStart": "1775139115000", "billingCycleEnd": "1777731115000" }""", 1775139115000L, 1777731115000L)]
+    [InlineData("""{ "planUsage": { "limit": 2000, "includedSpend": 500, "remaining": 1500 }, "billingCycleStart": 1775139115000, "billingCycleEnd": 1777731115000 }""", 1775139115000L, 1777731115000L)]
+    [InlineData("""{ "planUsage": { "limit": 2000, "includedSpend": 500, "remaining": 1500 }, "billingCycleStart": 1775139115, "billingCycleEnd": 1777731115 }""", 1775139115000L, 1777731115000L)]
+    public void ParseCurrentPeriodUsage_ParsesFlexibleBillingCycleTimestamps(
+        string json,
+        long expectedStartMs,
+        long expectedEndMs)
+    {
+        using var document = JsonDocument.Parse(json);
+
+        var snapshot = UsageResponseParser.ParseCurrentPeriodUsage(document.RootElement);
+
+        Assert.NotNull(snapshot);
+        Assert.Equal(expectedStartMs, snapshot.BillingCycleStartMs);
+        Assert.Equal(expectedEndMs, snapshot.BillingCycleEndMs);
+    }
 }

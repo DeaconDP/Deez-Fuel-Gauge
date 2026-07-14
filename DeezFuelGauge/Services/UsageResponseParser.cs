@@ -34,15 +34,6 @@ internal static class UsageResponseParser
         var autoPercent = GetFinitePercent(planUsage, "autoPercentUsed");
         var apiPercent = GetFinitePercent(planUsage, "apiPercentUsed");
 
-        long? billingCycleStartMs = null;
-        long? billingCycleEndMs = null;
-        if (root.TryGetProperty("billingCycleStart", out var startEl)
-            && long.TryParse(startEl.GetString(), out var startMs))
-            billingCycleStartMs = startMs;
-        if (root.TryGetProperty("billingCycleEnd", out var endEl)
-            && long.TryParse(endEl.GetString(), out var endMs))
-            billingCycleEndMs = endMs;
-
         return new UsageSnapshot
         {
             PercentUsed = Math.Clamp(percent.Value, 0, 100),
@@ -50,10 +41,58 @@ internal static class UsageResponseParser
             AutoPercentUsed = autoPercent is not null ? Math.Clamp(autoPercent.Value, 0, 100) : null,
             ApiPercentUsed = apiPercent is not null ? Math.Clamp(apiPercent.Value, 0, 100) : null,
             PlanLimitCents = limit,
-            BillingCycleStartMs = billingCycleStartMs,
-            BillingCycleEndMs = billingCycleEndMs
+            BillingCycleStartMs = TryParseTimestampMs(root, "billingCycleStart"),
+            BillingCycleEndMs = TryParseTimestampMs(root, "billingCycleEnd")
         };
     }
+
+    /// <summary>
+    /// Cursor returns cycle bounds as unix-ms strings, unix-ms numbers, or ISO-8601 strings.
+    /// </summary>
+    internal static long? TryParseTimestampMs(JsonElement root, string propertyName)
+    {
+        if (!root.TryGetProperty(propertyName, out var element))
+            return null;
+
+        return TryParseTimestampMs(element);
+    }
+
+    internal static long? TryParseTimestampMs(JsonElement element)
+    {
+        if (element.ValueKind == JsonValueKind.Number)
+        {
+            if (element.TryGetInt64(out var numeric))
+                return NormalizeUnixTimestampMs(numeric);
+
+            if (element.TryGetDouble(out var floating) && double.IsFinite(floating) && floating > 0)
+                return NormalizeUnixTimestampMs((long)floating);
+
+            return null;
+        }
+
+        if (element.ValueKind != JsonValueKind.String)
+            return null;
+
+        var text = element.GetString();
+        if (string.IsNullOrWhiteSpace(text))
+            return null;
+
+        if (long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var ms))
+            return NormalizeUnixTimestampMs(ms);
+
+        if (DateTimeOffset.TryParse(
+                text,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+                out var iso))
+            return iso.ToUnixTimeMilliseconds();
+
+        return null;
+    }
+
+    private static long NormalizeUnixTimestampMs(long value) =>
+        // Values below ~2001-09-09 in ms are almost certainly unix seconds.
+        value > 1_000_000_000_000 ? value : value * 1000;
 
     private static double? GetFinitePercent(JsonElement parent, string propertyName)
     {

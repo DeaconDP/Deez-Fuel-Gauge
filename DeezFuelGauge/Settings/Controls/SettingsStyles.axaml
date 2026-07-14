@@ -24,10 +24,12 @@
         <Setter Property="TextWrapping" Value="Wrap" />
         <Setter Property="MaxLines" Value="3" />
     </Style>
-    <Style Selector="CheckBox.toggle-checkbox">
+    <Style Selector="ToggleSwitch.settings-toggle">
         <Setter Property="FontSize" Value="9" />
         <Setter Property="Foreground" Value="#FFE8E8E8" />
         <Setter Property="Margin" Value="0,0,10,0" />
+        <Setter Property="MinHeight" Value="22" />
+        <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
     <Style Selector="Button.action-button">
         <Setter Property="FontSize" Value="8.5" />

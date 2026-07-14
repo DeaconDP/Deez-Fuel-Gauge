@@ -8,6 +8,8 @@ public sealed class CodexSnapshot
     public double WeeklyPercentRemaining { get; init; }
     public double SessionPercentUsed => Math.Clamp(100 - SessionPercentRemaining, 0, 100);
     public double WeeklyPercentUsed => Math.Clamp(100 - WeeklyPercentRemaining, 0, 100);
+    public bool HasSessionWindow { get; init; }
+    public bool HasWeeklyWindow { get; init; }
     public DateTimeOffset? SessionResetsAt { get; init; }
     public DateTimeOffset? WeeklyResetsAt { get; init; }
     public string? PlanLabel { get; init; }
@@ -58,6 +60,8 @@ public sealed class CodexSnapshot
         {
             IsAvailable = true,
             PlanLabel = planLabel,
+            HasSessionWindow = sessionUsedPercent is not null,
+            HasWeeklyWindow = weeklyUsedPercent is not null,
             SessionPercentRemaining = sessionRemaining,
             WeeklyPercentRemaining = weeklyRemaining,
             SessionResetsAt = sessionResetsAt,

@@ -55,7 +55,7 @@ public static class QuotaAlertEvaluator
             alerts,
             "openai-platform",
             "openai",
-            "OpenAI Platform");
+            "OpenAI API");
 
         TryAdd(
             results,
@@ -81,7 +81,7 @@ public static class QuotaAlertEvaluator
             alerts,
             "claude-api",
             "claude",
-            "Claude API Console");
+            "Claude API");
 
         TryAdd(
             results,

@@ -27,24 +27,39 @@ public static class ProviderDashboardPresenter
 
     public static double ComputeCursorHeadline(UsageSnapshot snapshot, WidgetSettings settings)
     {
-        // Aggregate plan usage — do not Max with Auto/API/per-model (that misleads the collapsed bar).
+        // Cursor plan usage has separate Auto and API pools. When breakdown is on, surface the
+        // hotter pool on the collapsed bar so Auto exhaustion is not hidden behind a low total %.
         if (settings.Cursor.ShowCursorSource)
-            return snapshot.PercentUsed;
+        {
+            var values = new List<double> { snapshot.PercentUsed };
+            if (settings.ShowBreakdown && snapshot.HasBreakdown)
+            {
+                if (snapshot.AutoPercentUsed is { } auto)
+                    values.Add(auto);
+                if (snapshot.ApiPercentUsed is { } api)
+                    values.Add(api);
+            }
+
+            return values.Max();
+        }
 
         // Fallback when only per-model Cursor sources are enabled.
-        var values = new List<double>();
+        var valuesFallback = new List<double>();
         if (settings.OpenAi.ShowCursorSource && snapshot.OpenAi.IsAvailable)
-            values.Add(snapshot.OpenAi.PercentUsed);
+            valuesFallback.Add(snapshot.OpenAi.PercentUsed);
         if (settings.Claude.ShowCursorSource && snapshot.Claude.IsAvailable)
-            values.Add(snapshot.Claude.PercentUsed);
+            valuesFallback.Add(snapshot.Claude.PercentUsed);
         if (settings.Gemini.ShowCursorSource && snapshot.Gemini.IsAvailable)
-            values.Add(snapshot.Gemini.PercentUsed);
+            valuesFallback.Add(snapshot.Gemini.PercentUsed);
 
-        return values.Count > 0 ? values.Max() : 0;
+        return valuesFallback.Count > 0 ? valuesFallback.Max() : 0;
     }
 
     public static double ComputeOpenAiHeadline(UsageSnapshot snapshot, ProviderBillingSettings settings)
     {
+        if (HasFailedEnabledApiSource(settings.ShowDirectSource, snapshot.OpenAiDirect.IsAvailable))
+            return 0;
+
         var values = new List<double>();
 
         if (settings.ShowDirectSource && snapshot.OpenAiDirect.IsAvailable)
@@ -58,6 +73,9 @@ public static class ProviderDashboardPresenter
 
     public static double ComputeClaudeHeadline(UsageSnapshot snapshot, ProviderBillingSettings settings)
     {
+        if (HasFailedEnabledApiSource(settings.ShowApiConsoleBilling, snapshot.ClaudeDirect.IsAvailable))
+            return 0;
+
         var values = new List<double>();
 
         if (settings.ShowProLimits && snapshot.ClaudePro.IsAvailable)
@@ -121,13 +139,23 @@ public static class ProviderDashboardPresenter
         || (settings.Claude.ShowCursorSource && snapshot.Claude.IsAvailable)
         || (settings.Gemini.ShowCursorSource && snapshot.Gemini.IsAvailable);
 
-    public static bool IsOpenAiHeadlineConnected(UsageSnapshot snapshot, ProviderBillingSettings settings) =>
-        (settings.ShowDirectSource && snapshot.OpenAiDirect.IsAvailable)
-        || (settings.ShowProLimits && snapshot.Codex.IsAvailable);
+    public static bool IsOpenAiHeadlineConnected(UsageSnapshot snapshot, ProviderBillingSettings settings)
+    {
+        if (HasFailedEnabledApiSource(settings.ShowDirectSource, snapshot.OpenAiDirect.IsAvailable))
+            return false;
 
-    public static bool IsClaudeHeadlineConnected(UsageSnapshot snapshot, ProviderBillingSettings settings) =>
-        (settings.ShowProLimits && snapshot.ClaudePro.IsAvailable)
-        || (settings.ShowApiConsoleBilling && snapshot.ClaudeDirect.IsAvailable);
+        return (settings.ShowDirectSource && snapshot.OpenAiDirect.IsAvailable)
+               || (settings.ShowProLimits && snapshot.Codex.IsAvailable);
+    }
+
+    public static bool IsClaudeHeadlineConnected(UsageSnapshot snapshot, ProviderBillingSettings settings)
+    {
+        if (HasFailedEnabledApiSource(settings.ShowApiConsoleBilling, snapshot.ClaudeDirect.IsAvailable))
+            return false;
+
+        return (settings.ShowProLimits && snapshot.ClaudePro.IsAvailable)
+               || (settings.ShowApiConsoleBilling && snapshot.ClaudeDirect.IsAvailable);
+    }
 
     public static bool IsGeminiHeadlineConnected(UsageSnapshot snapshot, ProviderBillingSettings settings) =>
         settings.ShowProLimits && snapshot.Antigravity.IsAvailable;
@@ -138,4 +166,7 @@ public static class ProviderDashboardPresenter
     public static bool IsOpenCodeHeadlineConnected(UsageSnapshot snapshot, ProviderBillingSettings settings) =>
         (settings.ShowDirectSource && snapshot.OpenCode.ZenIsAvailable)
         || (settings.ShowProLimits && snapshot.OpenCode.HasGoSubscription);
+
+    private static bool HasFailedEnabledApiSource(bool enabled, bool available) =>
+        enabled && !available;
 }
