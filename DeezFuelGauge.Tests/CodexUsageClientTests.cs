@@ -150,6 +150,8 @@ public sealed class CodexUsageClientTests
         Assert.Equal(15, snapshot.WeeklyPercentRemaining, 1);
         Assert.Equal(85, snapshot.WeeklyPercentUsed, 1);
         Assert.Equal(0, snapshot.SessionPercentUsed, 1);
+        Assert.False(snapshot.HasSessionWindow);
+        Assert.True(snapshot.HasWeeklyWindow);
         Assert.Contains("wk 85%", snapshot.DetailLabel);
         Assert.DoesNotContain("5h", snapshot.DetailLabel);
         Assert.Equal(DateTimeOffset.FromUnixTimeSeconds(1773507681), snapshot.WeeklyResetsAt);

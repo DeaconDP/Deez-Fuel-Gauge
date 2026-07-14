@@ -34,11 +34,34 @@ public static class ProviderLimitsPresenter
         return values.Count > 0 ? values.Max() : 0;
     }
 
-    public static string FormatSessionWeeklySummary(double sessionPercentUsed, double weeklyPercentUsed)
+    public static string FormatSessionWeeklySummary(double sessionPercentUsed, double weeklyPercentUsed) =>
+        FormatSessionWeeklySummary(sessionPercentUsed, weeklyPercentUsed, hasSessionWindow: true, hasWeeklyWindow: true);
+
+    public static string FormatSessionWeeklySummary(
+        double sessionPercentUsed,
+        double weeklyPercentUsed,
+        bool hasSessionWindow,
+        bool hasWeeklyWindow)
     {
-        var session = Math.Round(sessionPercentUsed);
-        var weekly = Math.Round(weeklyPercentUsed);
-        return $"{session.ToString(CultureInfo.InvariantCulture)}% 5-hour and {weekly.ToString(CultureInfo.InvariantCulture)}% weekly used";
+        var parts = new List<string>();
+        if (hasSessionWindow)
+        {
+            var session = Math.Round(sessionPercentUsed);
+            parts.Add($"{session.ToString(CultureInfo.InvariantCulture)}% 5-hour");
+        }
+
+        if (hasWeeklyWindow)
+        {
+            var weekly = Math.Round(weeklyPercentUsed);
+            parts.Add($"{weekly.ToString(CultureInfo.InvariantCulture)}% weekly");
+        }
+
+        if (parts.Count == 0)
+            return "No rate-limit windows";
+
+        return parts.Count == 1
+            ? $"{parts[0]} used"
+            : $"{parts[0]} and {parts[1]} used";
     }
 
     public static string FormatThreeWindowSummary(double rollingPercentUsed, double weeklyPercentUsed, double monthlyPercentUsed)
@@ -100,7 +123,7 @@ public static class ProviderLimitsPresenter
             parts.Add(codex.PlanLabel);
 
         if (codex.CreditsBalanceUsd is { } balance)
-            parts.Add($"${balance.ToString("F0", CultureInfo.InvariantCulture)} credits");
+            parts.Add($"${balance.ToString("F0", CultureInfo.InvariantCulture)} ChatGPT credits");
 
         var resets = FormatResetTimes(codex.SessionResetsAt, codex.WeeklyResetsAt);
         if (!string.IsNullOrEmpty(resets))

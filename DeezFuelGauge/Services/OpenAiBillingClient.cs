@@ -23,13 +23,31 @@ public sealed class OpenAiBillingClient : IDisposable
     {
         var apiKey = CredentialStore.Retrieve(settings.CredentialId);
         if (string.IsNullOrWhiteSpace(apiKey))
-            return DirectProviderSnapshot.Unavailable("Admin API key not set");
+            return DirectProviderSnapshot.Unavailable("API key not set");
 
         var budget = settings.MonthlyBudgetUsd is > 0
             ? (double)settings.MonthlyBudgetUsd.Value
             : (double?)null;
 
         var (startUnix, endUnix) = ResolvePeriod(billingCycleStartMs, billingCycleEndMs);
+
+        OpenAiBillingException? grantsError = null;
+        try
+        {
+            var grants = await FetchCreditGrantsAsync(apiKey, settings.OrganizationId, cancellationToken);
+            if (grants is { } creditGrants)
+            {
+                settings.LastConnectionStatus = "Connected";
+                return DirectProviderSnapshot.FromCreditGrants(
+                    creditGrants.GrantedUsd,
+                    creditGrants.UsedUsd,
+                    creditGrants.RemainingUsd);
+            }
+        }
+        catch (OpenAiBillingException ex)
+        {
+            grantsError = ex;
+        }
 
         try
         {
@@ -42,13 +60,15 @@ public sealed class OpenAiBillingClient : IDisposable
         }
         catch (OpenAiBillingException ex)
         {
-            settings.LastConnectionStatus = ex.Message;
-            return DirectProviderSnapshot.Unavailable(ex.Message);
+            var message = ResolveFailureMessage(grantsError, ex);
+            settings.LastConnectionStatus = message;
+            return DirectProviderSnapshot.Unavailable(message);
         }
         catch (Exception)
         {
-            settings.LastConnectionStatus = "Request failed";
-            return DirectProviderSnapshot.Unavailable("Request failed");
+            var message = ResolveFailureMessage(grantsError, null);
+            settings.LastConnectionStatus = message;
+            return DirectProviderSnapshot.Unavailable(message);
         }
     }
 
@@ -59,6 +79,17 @@ public sealed class OpenAiBillingClient : IDisposable
     {
         if (string.IsNullOrWhiteSpace(apiKey))
             return "API key required";
+
+        try
+        {
+            var grants = await FetchCreditGrantsAsync(apiKey, organizationId, cancellationToken);
+            if (grants is not null)
+                return "Connected";
+        }
+        catch (OpenAiBillingException)
+        {
+            // Fall through to Admin costs.
+        }
 
         var (startUnix, _) = BillingPeriodHelper.CurrentCalendarMonthUtc();
         try
@@ -121,6 +152,43 @@ public sealed class OpenAiBillingClient : IDisposable
         }
 
         return (input, output);
+    }
+
+    internal static (double GrantedUsd, double UsedUsd, double RemainingUsd)? ParseCreditGrantsResponse(JsonElement root)
+    {
+        var hasGranted = TryReadUsd(root, "total_granted", out var granted);
+        var hasUsed = TryReadUsd(root, "total_used", out var used);
+        var hasRemaining = TryReadUsd(root, "total_available", out var remaining)
+                           || TryReadUsd(root, "total_paid_available", out remaining);
+
+        if (!hasGranted && !hasUsed && !hasRemaining)
+            return null;
+
+        if (!hasGranted)
+            granted = 0;
+        if (!hasUsed)
+            used = hasGranted && hasRemaining ? Math.Max(0, granted - remaining) : 0;
+        if (!hasRemaining)
+            remaining = hasGranted ? Math.Max(0, granted - used) : 0;
+
+        return (granted, used, remaining);
+    }
+
+    private async Task<(double GrantedUsd, double UsedUsd, double RemainingUsd)?> FetchCreditGrantsAsync(
+        string apiKey,
+        string? organizationId,
+        CancellationToken cancellationToken)
+    {
+        const string url = "https://api.openai.com/v1/dashboard/billing/credit_grants";
+        using var request = CreateRequest(HttpMethod.Get, url, apiKey, organizationId);
+        using var response = await _http.SendAsync(request, cancellationToken);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+            throw OpenAiBillingException.FromResponse(response.StatusCode, body);
+
+        using var document = JsonDocument.Parse(body);
+        return ParseCreditGrantsResponse(document.RootElement);
     }
 
     private async Task<double> FetchCostsAsync(
@@ -201,6 +269,46 @@ public sealed class OpenAiBillingClient : IDisposable
         return 0;
     }
 
+    private static bool TryReadUsd(JsonElement root, string propertyName, out double value)
+    {
+        value = 0;
+        if (!root.TryGetProperty(propertyName, out var el))
+            return false;
+
+        if (el.ValueKind == JsonValueKind.Number)
+        {
+            value = el.GetDouble();
+            return true;
+        }
+
+        if (el.ValueKind == JsonValueKind.String
+            && double.TryParse(el.GetString(), System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var parsed))
+        {
+            value = parsed;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static string ResolveFailureMessage(OpenAiBillingException? grantsError, OpenAiBillingException? costsError)
+    {
+        if (costsError is not null && !IsCreditGrantsSessionOnly(costsError.Message))
+            return costsError.Message;
+
+        if (grantsError is not null && !IsCreditGrantsSessionOnly(grantsError.Message))
+            return grantsError.Message;
+
+        return costsError?.Message
+               ?? grantsError?.Message
+               ?? "Unable to read OpenAI API billing";
+    }
+
+    private static bool IsCreditGrantsSessionOnly(string message) =>
+        message.Contains("session key", StringComparison.OrdinalIgnoreCase)
+        || message.Contains("credit balance unavailable", StringComparison.OrdinalIgnoreCase);
+
     public void Dispose()
     {
         if (_ownsHttp)
@@ -217,15 +325,32 @@ internal sealed class OpenAiBillingException : Exception
         try
         {
             using var doc = JsonDocument.Parse(body);
-            if (doc.RootElement.TryGetProperty("error", out var error)
-                && error.TryGetProperty("message", out var messageEl))
+            if (doc.RootElement.TryGetProperty("error", out var error))
             {
-                var msg = messageEl.GetString() ?? status.ToString();
-                if (msg.Contains("api.usage.read", StringComparison.OrdinalIgnoreCase)
-                    || msg.Contains("insufficient permissions", StringComparison.OrdinalIgnoreCase))
-                    return new OpenAiBillingException("Admin key with api.usage.read required");
+                string? msg = null;
+                if (error.ValueKind == JsonValueKind.Object
+                    && error.TryGetProperty("message", out var messageEl))
+                    msg = messageEl.GetString();
+                else if (error.ValueKind == JsonValueKind.String)
+                    msg = error.GetString();
 
-                return new OpenAiBillingException(msg);
+                if (!string.IsNullOrWhiteSpace(msg))
+                {
+                    if (msg.Contains("session key", StringComparison.OrdinalIgnoreCase)
+                        && msg.Contains("credit_grants", StringComparison.OrdinalIgnoreCase))
+                        return new OpenAiBillingException("Credit balance unavailable for this key type");
+
+                    if (msg.Contains("api.usage.read", StringComparison.OrdinalIgnoreCase)
+                        || msg.Contains("insufficient permissions", StringComparison.OrdinalIgnoreCase))
+                        return new OpenAiBillingException("Admin key with api.usage.read required");
+
+                    if (msg.Contains("project", StringComparison.OrdinalIgnoreCase)
+                        && (msg.Contains("billing", StringComparison.OrdinalIgnoreCase)
+                            || msg.Contains("organization", StringComparison.OrdinalIgnoreCase)))
+                        return new OpenAiBillingException("Project keys cannot read org billing — use a user or admin key");
+
+                    return new OpenAiBillingException(msg);
+                }
             }
         }
         catch

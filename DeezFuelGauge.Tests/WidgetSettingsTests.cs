@@ -172,6 +172,17 @@ public sealed class WidgetSettingsTests
     }
 
     [Fact]
+    public void Deserialize_defaults_codex_and_claude_limits_expanded_when_missing()
+    {
+        var json = """{"Left":10,"Top":20}""";
+
+        var settings = JsonSerializer.Deserialize<WidgetSettings>(json)!;
+
+        Assert.True(settings.IsCodexLimitsExpanded);
+        Assert.True(settings.IsClaudeProLimitsExpanded);
+    }
+
+    [Fact]
     public void RoundTrip_preserves_show_pro_breakdown()
     {
         var settings = new WidgetSettings
@@ -185,6 +196,21 @@ public sealed class WidgetSettingsTests
 
         Assert.False(restored.OpenAi.ShowProBreakdown);
         Assert.False(restored.Gemini.ShowProBreakdown);
+    }
+
+    [Fact]
+    public void RoundTrip_preserves_disabled_disk_drives()
+    {
+        var settings = new WidgetSettings
+        {
+            ShowDiskDrives = true,
+            DisabledDiskDrives = [@"D:\", @"E:\"]
+        };
+
+        var json = JsonSerializer.Serialize(settings);
+        var restored = JsonSerializer.Deserialize<WidgetSettings>(json)!;
+
+        Assert.Equal([@"D:\", @"E:\"], restored.DisabledDiskDrives);
     }
 
     [Fact]

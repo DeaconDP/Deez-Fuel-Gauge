@@ -21,6 +21,8 @@ public sealed class ProviderSourceViewModel : ViewModelBase
 
     public string Name { get; set; } = "";
 
+    public string? DrivePath { get; set; }
+
     public bool HasEnableToggle { get; set; } = true;
 
     public bool HasDetailsToggle { get; set; } = true;

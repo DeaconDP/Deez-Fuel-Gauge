@@ -15,6 +15,7 @@ public enum ProviderSourceKind
     OpenCodeZen,
     OpenCodeGo,
     DiskDrives,
+    DiskDrive,
     HardwareCpuUsage,
     HardwareGpuUsage,
     HardwareRamUsage,

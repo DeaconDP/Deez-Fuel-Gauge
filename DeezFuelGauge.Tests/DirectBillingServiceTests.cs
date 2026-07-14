@@ -71,9 +71,10 @@ public sealed class DirectBillingServiceTests
 
             Assert.Equal(10, enriched.PercentUsed);
             Assert.True(handler.TotalRequests >= 3, $"expected HTTP calls from OpenAI and Codex, saw {handler.TotalRequests}");
+            Assert.True(handler.MaxConcurrent >= 2, $"expected overlapping OpenAI/Codex fetches, max concurrent was {handler.MaxConcurrent}");
             Assert.True(
-                sw.ElapsedMilliseconds < 250,
-                $"expected parallel fetches (~150ms), took {sw.ElapsedMilliseconds}ms (sequential would be ~225ms+)");
+                sw.ElapsedMilliseconds < 500,
+                $"expected parallel fetches (OpenAI grants+costs sequential ~150ms overlapping Codex), took {sw.ElapsedMilliseconds}ms");
         }
         finally
         {

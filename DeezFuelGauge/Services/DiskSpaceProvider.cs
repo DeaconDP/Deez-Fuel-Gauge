@@ -12,7 +12,29 @@ public static class DiskSpaceProvider
     private static IReadOnlyList<DiskVolumeSnapshot>? _cachedVolumes;
     private static DateTimeOffset _cachedAt;
 
-    public static IReadOnlyList<DiskVolumeSnapshot> GetVolumes()
+    public static IReadOnlyList<DiskVolumeSnapshot> GetVolumes(WidgetSettings? settings = null)
+    {
+        var volumes = GetCachedVolumes();
+        if (settings is null)
+            return volumes;
+
+        var disabled = settings.DisabledDiskDrives ?? [];
+        return volumes
+            .Where(v => !IsDriveDisabled(disabled, v.Name))
+            .ToList();
+    }
+
+    public static IReadOnlyList<DiskDriveDescriptor> GetDriveDescriptors() =>
+        GetCachedVolumes()
+            .Select(v => new DiskDriveDescriptor(v.Name, v.DisplayLabel))
+            .ToList();
+
+    public static void InvalidateCache() => _cachedVolumes = null;
+
+    internal static bool IsDriveDisabled(IEnumerable<string> disabledDrives, string driveName) =>
+        disabledDrives.Any(d => string.Equals(d, driveName, StringComparison.OrdinalIgnoreCase));
+
+    private static IReadOnlyList<DiskVolumeSnapshot> GetCachedVolumes()
     {
         if (_cachedVolumes is not null && DateTimeOffset.UtcNow - _cachedAt < CacheTtl)
             return _cachedVolumes;
@@ -22,8 +44,6 @@ public static class DiskSpaceProvider
         _cachedAt = DateTimeOffset.UtcNow;
         return volumes;
     }
-
-    public static void InvalidateCache() => _cachedVolumes = null;
 
     private static IReadOnlyList<DiskVolumeSnapshot> QueryVolumes()
     {

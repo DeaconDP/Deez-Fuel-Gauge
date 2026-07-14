@@ -897,11 +897,23 @@ public sealed class SettingsPanelViewModel : ViewModelBase
     {
         section.MasterEnable = enabled;
         foreach (var source in section.Sources.Where(s => s.HasEnableToggle))
-            source.IsEnabled = enabled;
+        {
+            // Preserve per-drive picks when toggling the Disk section master.
+            if (section.ProviderId == SettingsExpandedProvider.Disk
+                && source.Kind == ProviderSourceKind.DiskDrive)
+                continue;
 
-        if (section.ProviderId == SettingsExpandedProvider.Disk
-            || section.ProviderId == SettingsExpandedProvider.Hardware)
+            source.IsEnabled = enabled;
+        }
+
+        if (section.ProviderId == SettingsExpandedProvider.Disk)
+        {
+            SettingsSectionMapper.ApplyDiskSummary(section, enabled);
+        }
+        else if (section.ProviderId == SettingsExpandedProvider.Hardware)
+        {
             section.SummaryStatus = enabled ? "Enabled" : "Off";
+        }
 
         NotifyChanged();
     }

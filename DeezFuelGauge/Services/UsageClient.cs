@@ -9,7 +9,6 @@ namespace DeezFuelGauge.Services;
 public sealed class UsageClient : IDisposable
 {
     private const string ApiBase = "https://api2.cursor.sh";
-    private const string DashboardBase = "https://cursor.com";
     private const string OAuthClientId = "KbZUR41cY7W6zRSdpSUJ7I7mLYBKOCmB";
     private const string IncludedModelKey = "gpt-4";
 
@@ -120,10 +119,6 @@ public sealed class UsageClient : IDisposable
         long endMs,
         CancellationToken cancellationToken)
     {
-        var userId = JwtHelper.GetSessionUserId(_accessToken!);
-        if (string.IsNullOrWhiteSpace(userId))
-            return null;
-
         var body = JsonSerializer.Serialize(new
         {
             teamId = -1,
@@ -131,17 +126,11 @@ public sealed class UsageClient : IDisposable
             endDate = endMs.ToString()
         });
 
-        using var request = new HttpRequestMessage(
+        using var request = CreateAuthorizedRequest(
             HttpMethod.Post,
-            $"{DashboardBase}/api/dashboard/get-aggregated-usage-events")
-        {
-            Content = new StringContent(body, Encoding.UTF8, "application/json")
-        };
-
-        request.Headers.Add("Origin", DashboardBase);
-        request.Headers.Add(
-            "Cookie",
-            $"WorkosCursorSessionToken={Uri.EscapeDataString(userId)}%3A%3A{Uri.EscapeDataString(_accessToken!)}");
+            $"{ApiBase}/aiserver.v1.DashboardService/GetAggregatedUsageEvents",
+            body);
+        request.Headers.Add("Connect-Protocol-Version", "1");
 
         using var response = await _http.SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode)
@@ -164,17 +153,35 @@ public sealed class UsageClient : IDisposable
             if (string.IsNullOrWhiteSpace(modelName))
                 continue;
 
-            if (!item.TryGetProperty("totalCents", out var centsEl) || centsEl.ValueKind == JsonValueKind.Null)
-                continue;
-
-            var cents = centsEl.GetDouble();
-            if (!double.IsFinite(cents) || cents <= 0)
+            if (!item.TryGetProperty("totalCents", out var centsEl)
+                || !TryReadFiniteDouble(centsEl, out var cents)
+                || cents <= 0)
                 continue;
 
             results.Add((modelName, cents));
         }
 
         return results;
+    }
+
+    private static bool TryReadFiniteDouble(JsonElement element, out double value)
+    {
+        value = 0;
+        if (element.ValueKind == JsonValueKind.Number)
+        {
+            value = element.GetDouble();
+            return double.IsFinite(value);
+        }
+
+        if (element.ValueKind == JsonValueKind.String
+            && double.TryParse(
+                element.GetString(),
+                System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out value))
+            return double.IsFinite(value);
+
+        return false;
     }
 
     private async Task<UsageSnapshot?> TryGetCurrentPeriodUsageAsync(CancellationToken cancellationToken)

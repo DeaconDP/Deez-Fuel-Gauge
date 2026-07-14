@@ -6,8 +6,8 @@ public sealed class WidgetSettings
     public double Top { get; set; } = 100;
     public bool IsPositionPinned { get; set; }
     public bool IsBreakdownExpanded { get; set; }
-    public bool IsCodexLimitsExpanded { get; set; }
-    public bool IsClaudeProLimitsExpanded { get; set; }
+    public bool IsCodexLimitsExpanded { get; set; } = true;
+    public bool IsClaudeProLimitsExpanded { get; set; } = true;
     public bool IsAntigravityLimitsExpanded { get; set; }
     public bool IsOpenCodeGoLimitsExpanded { get; set; }
     public bool IsSettingsExpanded { get; set; }
@@ -27,6 +27,7 @@ public sealed class WidgetSettings
     public bool ShowBreakdown { get; set; } = true;
     public bool ShowDiskDrives { get; set; } = true;
     public bool ShowDiskDetails { get; set; } = true;
+    public List<string> DisabledDiskDrives { get; set; } = [];
     public bool ShowCpuUsage { get; set; }
     public bool ShowGpuUsage { get; set; }
     public bool ShowRamUsage { get; set; }

@@ -85,6 +85,33 @@ public sealed class DiskSpaceProviderTests
     }
 
     [Fact]
+    public void GetVolumes_excludes_disabled_drives()
+    {
+        var all = DiskSpaceProvider.GetVolumes();
+        if (all.Count == 0)
+            return;
+
+        var settings = new WidgetSettings { DisabledDiskDrives = [all[0].Name] };
+        var filtered = DiskSpaceProvider.GetVolumes(settings);
+
+        Assert.DoesNotContain(filtered, v =>
+            string.Equals(v.Name, all[0].Name, StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(all.Count - 1, filtered.Count);
+    }
+
+    [Fact]
+    public void GetDriveDescriptors_matches_available_volumes()
+    {
+        var volumes = DiskSpaceProvider.GetVolumes();
+        var descriptors = DiskSpaceProvider.GetDriveDescriptors();
+
+        Assert.Equal(volumes.Count, descriptors.Count);
+        Assert.Equal(
+            volumes.Select(v => v.Name).ToList(),
+            descriptors.Select(d => d.Name).ToList());
+    }
+
+    [Fact]
     public void SelectMacOsPrimaryDriveName_prefers_data_volume()
     {
         var driveNames = new[]

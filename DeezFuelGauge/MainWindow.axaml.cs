@@ -91,6 +91,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
     {
         public required string Name { get; init; }
         public required StackPanel Container { get; init; }
+        public required TextBlock Label { get; init; }
         public required Grid Track { get; init; }
         public required Border Fill { get; init; }
         public required TextBlock Detail { get; init; }
@@ -101,7 +102,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
     {
         public required string Key { get; init; }
         public required StackPanel Container { get; init; }
-        public required Grid BarGrid { get; init; }
+        public required StackPanel BarGrid { get; init; }
         public required Grid Track { get; init; }
         public required Border Fill { get; init; }
         public required TextBlock Detail { get; init; }
@@ -385,7 +386,10 @@ public partial class MainWindow : Window, ISettingsPanelHost
             BreakdownPanel.IsVisible = false;
 
         OpenAiDetailText.IsVisible = cursorExpanded && _settings.OpenAi.ShowCursorSource && _settings.OpenAi.ShowDetails;
-        OpenAiDirectDetailText.IsVisible = openAiExpanded && _settings.OpenAi.ShowDirectSource && _settings.OpenAi.EffectiveShowDirectDetails;
+        OpenAiDirectDetailText.IsVisible = openAiExpanded
+            && _settings.OpenAi.ShowDirectSource
+            && (_settings.OpenAi.EffectiveShowDirectDetails
+                || (_lastSnapshot is { OpenAiDirect.IsAvailable: false }));
         CodexRemainingText.IsVisible = openAiExpanded && _settings.OpenAi.ShowProLimits && _settings.OpenAi.EffectiveShowProDetails;
         if (!openAiExpanded)
         {
@@ -398,7 +402,10 @@ public partial class MainWindow : Window, ISettingsPanelHost
         }
 
         ClaudeDetailText.IsVisible = cursorExpanded && _settings.Claude.ShowCursorSource && _settings.Claude.ShowDetails;
-        ClaudeDirectDetailText.IsVisible = claudeExpanded && _settings.Claude.ShowApiConsoleBilling && _settings.Claude.EffectiveShowDirectDetails;
+        ClaudeDirectDetailText.IsVisible = claudeExpanded
+            && _settings.Claude.ShowApiConsoleBilling
+            && (_settings.Claude.EffectiveShowDirectDetails
+                || (_lastSnapshot is { ClaudeDirect.IsAvailable: false }));
         ClaudeProRemainingText.IsVisible = claudeExpanded && _settings.Claude.ShowProLimits && _settings.Claude.EffectiveShowProDetails;
         if (!claudeExpanded)
         {
@@ -731,7 +738,11 @@ public partial class MainWindow : Window, ISettingsPanelHost
             return;
 
         var summary = codex.IsAvailable
-            ? ProviderLimitsPresenter.FormatSessionWeeklySummary(codex.SessionPercentUsed, codex.WeeklyPercentUsed)
+            ? ProviderLimitsPresenter.FormatSessionWeeklySummary(
+                codex.SessionPercentUsed,
+                codex.WeeklyPercentUsed,
+                codex.HasSessionWindow,
+                codex.HasWeeklyWindow)
             : codex.StatusMessage ?? codex.DetailLabel;
 
         ProviderLimitsPresenter.ApplyBreakdownLayout(
@@ -859,7 +870,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
     {
         try
         {
-            ApplyDiskVolumes(DiskSpaceProvider.GetVolumes());
+            ApplyDiskVolumes(DiskSpaceProvider.GetVolumes(_settings));
         }
         catch
         {
@@ -1047,12 +1058,10 @@ public partial class MainWindow : Window, ISettingsPanelHost
         {
             row.BarGrid.IsVisible = true;
             row.Track.IsVisible = _settings.ShowCpuUsage;
-            row.Fill.IsVisible = _settings.ShowCpuUsage;
 
             if (!_settings.ShowCpuUsage)
             {
                 row.LastPercent = 0;
-                row.Fill.Width = 0;
                 row.Detail.Text = ShouldShowCpuTempDetail()
                     ? HardwareMetricsSnapshot.FormatCpuTemp(snapshot?.CpuTempCelsius)
                     : "";
@@ -1065,7 +1074,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
             var percent = cpuPercent ?? 0;
             var detail = BuildCpuDetail(snapshot);
             var lastPercent = row.LastPercent;
-            ProviderBarPresenter.ApplyUsageBar(
+            HardwareBarPresenter.Apply(
                 row.Track,
                 row.Fill,
                 ref lastPercent,
@@ -1085,7 +1094,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
             var isAvailable = gpuPercent is not null;
             var percent = gpuPercent ?? 0;
             var lastPercent = row.LastPercent;
-            ProviderBarPresenter.ApplyUsageBar(
+            HardwareBarPresenter.Apply(
                 row.Track,
                 row.Fill,
                 ref lastPercent,
@@ -1104,7 +1113,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
             ? HardwareMetricsSnapshot.FormatRamDetail(snapshot.RamUsedBytes, snapshot.RamTotalBytes)
             : "";
         var ramLastPercent = row.LastPercent;
-        ProviderBarPresenter.ApplyUsageBar(
+        HardwareBarPresenter.Apply(
             row.Track,
             row.Fill,
             ref ramLastPercent,
@@ -1131,46 +1140,20 @@ public partial class MainWindow : Window, ISettingsPanelHost
         var labelBlock = new TextBlock
         {
             Text = label,
-            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-            Margin = new Thickness(0, 0, 8, 0),
             FontFamily = new FontFamily("Segoe UI Semibold, Segoe UI, sans-serif"),
             FontSize = 11,
             FontWeight = FontWeight.SemiBold,
             Foreground = new SolidColorBrush(Color.FromRgb(0xB0, 0xB0, 0xB0)),
-            MaxWidth = 52,
             TextTrimming = TextTrimming.CharacterEllipsis
         };
 
-        var fill = new Border
-        {
-            CornerRadius = new CornerRadius(3),
-            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left,
-            Width = 0,
-            Background = new SolidColorBrush(Color.FromRgb(0x4C, 0xAF, 0x50))
-        };
+        var (track, fill) = HardwareBarPresenter.CreateTrack();
 
-        var track = new Grid
+        var barPanel = new StackPanel
         {
-            Height = 6,
-            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-            Children =
-            {
-                new Border { CornerRadius = new CornerRadius(3), Background = new SolidColorBrush(Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF)) },
-                fill
-            }
-        };
-
-        var barGrid = new Grid
-        {
-            ColumnDefinitions =
-            {
-                new ColumnDefinition(GridLength.Auto),
-                new ColumnDefinition(GridLength.Star)
-            },
+            Spacing = 2,
             Children = { labelBlock, track }
         };
-        Grid.SetColumn(labelBlock, 0);
-        Grid.SetColumn(track, 1);
 
         var detail = new TextBlock
         {
@@ -1184,14 +1167,14 @@ public partial class MainWindow : Window, ISettingsPanelHost
         var container = new StackPanel
         {
             Spacing = 0,
-            Children = { barGrid, detail }
+            Children = { barPanel, detail }
         };
 
         return new HardwareBarRow
         {
             Key = key,
             Container = container,
-            BarGrid = barGrid,
+            BarGrid = barPanel,
             Track = track,
             Fill = fill,
             Detail = detail
@@ -1224,7 +1207,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
             PercentText.Foreground = UsageBarBrushes.GetBrush(Color.FromRgb(0xFF, 0x98, 0x00));
             BreakdownPanel.IsVisible = false;
             ResetProviderBars();
-            ApplyHeadlineBar(CursorHeadlineTrack, CursorHeadlineFill, ref _lastCursorHeadlinePercent, 0, showReadySliver: false);
+            ApplyHeadlineBar(CursorHeadlineTrack, CursorHeadlineFill, ref _lastCursorHeadlinePercent, 0, connected: false);
             CursorHeadlineFill.Background = UsageBarBrushes.GetBrush(Color.FromRgb(0xFF, 0x98, 0x00));
             ProviderBarPresenter.ApplyReadyGlow(CursorHeadlineFill, active: false);
             CursorHeadlineTrack.Opacity = 0.45;
@@ -1281,60 +1264,78 @@ public partial class MainWindow : Window, ISettingsPanelHost
 
     private void ApplyProviderHeadlines(UsageSnapshot snapshot)
     {
+        var cursorConnected = ProviderDashboardPresenter.IsCursorHeadlineConnected(snapshot, _settings);
         var cursorPercent = ProviderDashboardPresenter.ComputeCursorHeadline(snapshot, _settings);
         ApplyHeadlineBar(
             CursorHeadlineTrack,
             CursorHeadlineFill,
             ref _lastCursorHeadlinePercent,
             cursorPercent,
-            ProviderDashboardPresenter.IsCursorHeadlineConnected(snapshot, _settings) && cursorPercent <= 0);
+            cursorConnected);
 
+        var openAiConnected = ProviderDashboardPresenter.IsOpenAiHeadlineConnected(snapshot, _settings.OpenAi);
         var openAiPercent = ProviderDashboardPresenter.ComputeOpenAiHeadline(snapshot, _settings.OpenAi);
         ApplyHeadlineBar(
             OpenAiHeadlineTrack,
             OpenAiHeadlineFill,
             ref _lastOpenAiHeadlinePercent,
             openAiPercent,
-            ProviderDashboardPresenter.IsOpenAiHeadlineConnected(snapshot, _settings.OpenAi) && openAiPercent <= 0);
+            openAiConnected);
 
+        var claudeConnected = ProviderDashboardPresenter.IsClaudeHeadlineConnected(snapshot, _settings.Claude);
         var claudePercent = ProviderDashboardPresenter.ComputeClaudeHeadline(snapshot, _settings.Claude);
         ApplyHeadlineBar(
             ClaudeHeadlineTrack,
             ClaudeHeadlineFill,
             ref _lastClaudeHeadlinePercent,
             claudePercent,
-            ProviderDashboardPresenter.IsClaudeHeadlineConnected(snapshot, _settings.Claude) && claudePercent <= 0);
+            claudeConnected);
 
+        var geminiConnected = ProviderDashboardPresenter.IsGeminiHeadlineConnected(snapshot, _settings.Gemini);
         var geminiPercent = ProviderDashboardPresenter.ComputeGeminiHeadline(snapshot, _settings.Gemini);
         ApplyHeadlineBar(
             GeminiHeadlineTrack,
             GeminiHeadlineFill,
             ref _lastGeminiHeadlinePercent,
             geminiPercent,
-            ProviderDashboardPresenter.IsGeminiHeadlineConnected(snapshot, _settings.Gemini) && geminiPercent <= 0);
+            geminiConnected);
 
+        var openRouterConnected = ProviderDashboardPresenter.IsOpenRouterHeadlineConnected(snapshot, _settings.OpenRouter);
         var openRouterPercent = ProviderDashboardPresenter.ComputeOpenRouterHeadline(snapshot, _settings.OpenRouter);
         ApplyHeadlineBar(
             OpenRouterHeadlineTrack,
             OpenRouterHeadlineFill,
             ref _lastOpenRouterHeadlinePercent,
             openRouterPercent,
-            ProviderDashboardPresenter.IsOpenRouterHeadlineConnected(snapshot, _settings.OpenRouter) && openRouterPercent <= 0);
+            openRouterConnected);
 
+        var openCodeConnected = ProviderDashboardPresenter.IsOpenCodeHeadlineConnected(snapshot, _settings.OpenCode);
         var openCodePercent = ProviderDashboardPresenter.ComputeOpenCodeHeadline(snapshot, _settings.OpenCode);
         ApplyHeadlineBar(
             OpenCodeHeadlineTrack,
             OpenCodeHeadlineFill,
             ref _lastOpenCodeHeadlinePercent,
             openCodePercent,
-            ProviderDashboardPresenter.IsOpenCodeHeadlineConnected(snapshot, _settings.OpenCode) && openCodePercent <= 0);
+            openCodeConnected);
     }
 
-    private static void ApplyHeadlineBar(Grid track, Border fill, ref double lastPercent, double percent, bool showReadySliver)
+    private static void ApplyHeadlineBar(Grid track, Border fill, ref double lastPercent, double percent, bool connected)
     {
+        if (!connected)
+        {
+            lastPercent = 0;
+            fill.Width = 0;
+            fill.Background = UsageBarBrushes.GetBrush(Color.FromRgb(0x55, 0x55, 0x55));
+            track.Opacity = 0.45;
+            ProviderBarPresenter.SetReadySliverState(fill, false);
+            ProviderBarPresenter.ApplyReadyGlow(fill, active: false);
+            return;
+        }
+
         lastPercent = percent;
         track.Opacity = 1;
         fill.Background = UsageBarBrushes.GetBrushForPercent(percent);
+        var showReadySliver = percent <= 0;
         ProviderBarPresenter.SetReadySliverState(fill, showReadySliver);
         ProviderBarPresenter.UpdateProgressWidth(track, fill, percent);
     }
@@ -1370,7 +1371,9 @@ public partial class MainWindow : Window, ISettingsPanelHost
         if (!options.ShowProLimits)
             return;
 
-        var headline = ProviderLimitsPresenter.HeadlinePercent(codex.SessionPercentUsed, codex.WeeklyPercentUsed);
+        var headline = ProviderLimitsPresenter.HeadlinePercent(
+            codex.HasSessionWindow ? codex.SessionPercentUsed : 0,
+            codex.HasWeeklyWindow ? codex.WeeklyPercentUsed : 0);
         ProviderLimitsPresenter.ApplyHeadline(
             headline,
             codex.IsAvailable,
@@ -1380,20 +1383,30 @@ public partial class MainWindow : Window, ISettingsPanelHost
             CodexProgressFill,
             ref _lastCodexPercent);
 
-        ProviderLimitsPresenter.ApplyBreakdownSubBar(
-            CodexSessionProgressTrack,
-            CodexSessionProgressFill,
-            CodexSessionPercentText,
-            ref _lastCodexSessionPercent,
-            codex.SessionPercentUsed,
-            codex.IsAvailable);
-        ProviderLimitsPresenter.ApplyBreakdownSubBar(
-            CodexWeeklyProgressTrack,
-            CodexWeeklyProgressFill,
-            CodexWeeklyPercentText,
-            ref _lastCodexWeeklyPercent,
-            codex.WeeklyPercentUsed,
-            codex.IsAvailable);
+        CodexSessionWindowSection.IsVisible = codex.IsAvailable && codex.HasSessionWindow;
+        CodexWeeklyWindowSection.IsVisible = codex.IsAvailable && codex.HasWeeklyWindow;
+
+        if (codex.HasSessionWindow)
+        {
+            ProviderLimitsPresenter.ApplyBreakdownSubBar(
+                CodexSessionProgressTrack,
+                CodexSessionProgressFill,
+                CodexSessionPercentText,
+                ref _lastCodexSessionPercent,
+                codex.SessionPercentUsed,
+                codex.IsAvailable);
+        }
+
+        if (codex.HasWeeklyWindow)
+        {
+            ProviderLimitsPresenter.ApplyBreakdownSubBar(
+                CodexWeeklyProgressTrack,
+                CodexWeeklyProgressFill,
+                CodexWeeklyPercentText,
+                ref _lastCodexWeeklyPercent,
+                codex.WeeklyPercentUsed,
+                codex.IsAvailable);
+        }
 
         ApplyCodexLimitsBreakdownLayout(options, codex);
         UpdateCodexLimitsExpandedState();
@@ -1632,7 +1645,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
             provider.IsAvailable,
             provider.StatusMessage,
             provider.DetailLabel,
-            showDetails,
+            showDetails || !provider.IsAvailable,
             detailText);
     }
 
@@ -1874,20 +1887,14 @@ public partial class MainWindow : Window, ISettingsPanelHost
 
     private void ApplyDiskBarRow(DiskBarRow row, DiskVolumeSnapshot volume)
     {
-        if (row.Container.Children[0] is Grid barGrid &&
-            barGrid.Children[0] is TextBlock label)
-        {
-            label.Text = volume.DisplayLabel;
-        }
+        row.Label.Text = volume.DisplayLabel;
 
         var lastPercent = volume.PercentUsed;
-        ProviderBarPresenter.ApplyUsageBar(
+        DiskBarPresenter.Apply(
             row.Track,
             row.Fill,
             ref lastPercent,
             volume.PercentUsed,
-            true,
-            null,
             volume.DetailLabel,
             _settings.ShowDiskDetails,
             row.Detail);
@@ -1899,46 +1906,20 @@ public partial class MainWindow : Window, ISettingsPanelHost
         var label = new TextBlock
         {
             Text = volume.DisplayLabel,
-            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-            Margin = new Thickness(0, 0, 8, 0),
             FontFamily = new FontFamily("Segoe UI Semibold, Segoe UI, sans-serif"),
             FontSize = 11,
             FontWeight = FontWeight.SemiBold,
             Foreground = new SolidColorBrush(Color.FromRgb(0xB0, 0xB0, 0xB0)),
-            MaxWidth = 52,
             TextTrimming = TextTrimming.CharacterEllipsis
         };
 
-        var fill = new Border
-        {
-            CornerRadius = new CornerRadius(3),
-            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left,
-            Width = 0,
-            Background = new SolidColorBrush(Color.FromRgb(0x4C, 0xAF, 0x50))
-        };
+        var (track, fill) = DiskBarPresenter.CreateTrack();
 
-        var track = new Grid
+        var barPanel = new StackPanel
         {
-            Height = 6,
-            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-            Children =
-            {
-                new Border { CornerRadius = new CornerRadius(3), Background = new SolidColorBrush(Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF)) },
-                fill
-            }
-        };
-
-        var barGrid = new Grid
-        {
-            ColumnDefinitions =
-            {
-                new ColumnDefinition(GridLength.Auto),
-                new ColumnDefinition(GridLength.Star)
-            },
+            Spacing = 2,
             Children = { label, track }
         };
-        Grid.SetColumn(label, 0);
-        Grid.SetColumn(track, 1);
 
         var detail = new TextBlock
         {
@@ -1952,13 +1933,14 @@ public partial class MainWindow : Window, ISettingsPanelHost
         var container = new StackPanel
         {
             Spacing = 0,
-            Children = { barGrid, detail }
+            Children = { barPanel, detail }
         };
 
         return new DiskBarRow
         {
             Name = volume.Name,
             Container = container,
+            Label = label,
             Track = track,
             Fill = fill,
             Detail = detail

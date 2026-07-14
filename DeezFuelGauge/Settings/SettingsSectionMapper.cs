@@ -142,7 +142,7 @@ internal static class SettingsSectionMapper
     {
         var pro = CreateSource(
             ProviderSourceKind.ClaudePro,
-            "Plan usage",
+            "Claude.ai",
             settings.Claude.ShowProLimits,
             settings.Claude.EffectiveShowProDetails,
             settings.Claude.ProLastConnectionStatus ?? "",
@@ -171,7 +171,7 @@ internal static class SettingsSectionMapper
 
         var apiConsole = CreateSource(
             ProviderSourceKind.ClaudeApiConsole,
-            "API Console",
+            "Claude API",
             settings.Claude.ShowApiConsoleBilling,
             settings.Claude.EffectiveShowDirectDetails,
             settings.Claude.LastConnectionStatus ?? "",
@@ -183,7 +183,7 @@ internal static class SettingsSectionMapper
         apiConsole.Budget = FormatBudget(settings.Claude.MonthlyBudgetUsd);
         apiConsole.ApiKeyWatermark = host.ClaudeApiKeyWatermark;
         apiConsole.HasApiKeySaved = host.HasClaudeApiKeySaved;
-        apiConsole.AdvancedHint = "Admin API key with api.usage.read scope.";
+        apiConsole.AdvancedHint = "Anthropic Admin API key for Console spend vs monthly budget.";
         apiConsole.ShowAdvancedSection = settings.Claude.ShowApiConsoleBilling;
 
         var section = CreateSection(
@@ -203,7 +203,7 @@ internal static class SettingsSectionMapper
     {
         var direct = CreateSource(
             ProviderSourceKind.OpenAiDirect,
-            "Direct API",
+            "OpenAI API",
             settings.OpenAi.ShowDirectSource,
             settings.OpenAi.EffectiveShowDirectDetails,
             settings.OpenAi.LastConnectionStatus ?? "",
@@ -217,7 +217,8 @@ internal static class SettingsSectionMapper
         direct.Budget = FormatBudget(settings.OpenAi.MonthlyBudgetUsd);
         direct.ApiKeyWatermark = host.OpenAiApiKeyWatermark;
         direct.HasApiKeySaved = host.HasOpenAiApiKeySaved;
-        direct.AdvancedHint = "Platform Admin API key with api.usage.read scope.";
+        direct.AdvancedHint =
+            "API key for prepaid credit balance when available; Admin key with api.usage.read for spend vs monthly budget. Separate from ChatGPT/Codex.";
         direct.ShowAdvancedSection = settings.OpenAi.ShowDirectSource;
 
         var codex = CreateSource(
@@ -256,7 +257,7 @@ internal static class SettingsSectionMapper
     {
         var antigravity = CreateSource(
             ProviderSourceKind.AntigravityLimits,
-            "Gemini limits",
+            "Gemini App",
             settings.Gemini.ShowProLimits,
             settings.Gemini.EffectiveShowProDetails,
             settings.Gemini.ProLastConnectionStatus ?? "",
@@ -267,7 +268,8 @@ internal static class SettingsSectionMapper
         antigravity.SupportsAdvanced = true;
         antigravity.HasAutoAuth = host.HasGeminiAutoAuth;
         antigravity.AutoAuthSummary = host.GeminiAutoAuthSummary;
-        antigravity.AdvancedHint = "Sign in to Antigravity IDE or run gemini login (Gemini CLI) on this machine.";
+        antigravity.AdvancedHint =
+            "Gemini App / IDE quotas via Antigravity IDE or gemini login (Gemini CLI). Gemini API billing is not metered yet.";
         antigravity.ShowAdvancedSection = settings.Gemini.ShowProLimits && !host.HasGeminiAutoAuth;
 
         var section = CreateSection(
@@ -385,9 +387,26 @@ internal static class SettingsSectionMapper
             ProviderId = SettingsExpandedProvider.Disk,
             Title = "Disk",
             MasterEnable = settings.ShowDiskDrives,
-            SummaryStatus = settings.ShowDiskDrives ? "Enabled" : "Off"
+            SummaryStatus = BuildDiskSummaryStatus(settings)
         };
         section.Sources.Add(drives);
+
+        var disabled = settings.DisabledDiskDrives ?? [];
+        foreach (var drive in DiskSpaceProvider.GetDriveDescriptors())
+        {
+            var source = CreateSource(
+                ProviderSourceKind.DiskDrive,
+                drive.DisplayLabel,
+                !DiskSpaceProvider.IsDriveDisabled(disabled, drive.Name),
+                details: false,
+                "",
+                showConnect: false,
+                showTest: false);
+            source.DrivePath = drive.Name;
+            source.HasDetailsToggle = false;
+            section.Sources.Add(source);
+        }
+
         return section;
     }
 
@@ -521,11 +540,43 @@ internal static class SettingsSectionMapper
 
     private static void ApplyDisk(ProviderSettingsSectionViewModel section, WidgetSettings settings)
     {
-        var drives = section.Sources.Single();
+        var drives = section.Sources.First(s => s.Kind == ProviderSourceKind.DiskDrives);
         settings.ShowDiskDrives = drives.IsEnabled;
         settings.ShowDiskDetails = drives.ShowDetails;
+        settings.DisabledDiskDrives = section.Sources
+            .Where(s => s.Kind == ProviderSourceKind.DiskDrive
+                        && !string.IsNullOrWhiteSpace(s.DrivePath)
+                        && !s.IsEnabled)
+            .Select(s => s.DrivePath!)
+            .ToList();
         section.MasterEnable = drives.IsEnabled;
-        section.SummaryStatus = drives.IsEnabled ? "Enabled" : "Off";
+        section.SummaryStatus = BuildDiskSummaryStatus(settings, section);
+    }
+
+    internal static void ApplyDiskSummary(ProviderSettingsSectionViewModel section, bool enabled) =>
+        section.SummaryStatus = BuildDiskSummaryStatus(
+            new WidgetSettings { ShowDiskDrives = enabled },
+            section);
+
+    private static string BuildDiskSummaryStatus(
+        WidgetSettings settings,
+        ProviderSettingsSectionViewModel? section = null)
+    {
+        if (!settings.ShowDiskDrives)
+            return "Off";
+
+        var enabledCount = section?.Sources.Count(s =>
+                               s.Kind == ProviderSourceKind.DiskDrive && s.IsEnabled)
+                           ?? DiskSpaceProvider.GetDriveDescriptors()
+                               .Count(d => !DiskSpaceProvider.IsDriveDisabled(
+                                   settings.DisabledDiskDrives ?? [], d.Name));
+
+        return enabledCount switch
+        {
+            0 => "No drives",
+            1 => "1 drive",
+            _ => $"{enabledCount} drives"
+        };
     }
 
     private static ProviderSettingsSectionViewModel BuildHardwareSection(

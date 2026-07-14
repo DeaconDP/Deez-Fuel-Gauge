@@ -22,11 +22,20 @@ public sealed class ProviderLimitsPresenterTests
     }
 
     [Fact]
+    public void FormatSessionWeeklySummary_omits_missing_windows()
+    {
+        var weeklyOnly = ProviderLimitsPresenter.FormatSessionWeeklySummary(
+            0, 1, hasSessionWindow: false, hasWeeklyWindow: true);
+
+        Assert.Equal("1% weekly used", weeklyOnly);
+    }
+
+    [Fact]
     public void FormatCodexFooter_includes_plan_and_credits()
     {
         var snapshot = CodexSnapshot.FromUsage("plus", 12, 34, null, null, 50m, false);
 
-        Assert.Equal("Plus · $50 credits", ProviderLimitsPresenter.FormatCodexFooter(snapshot));
+        Assert.Equal("Plus · $50 ChatGPT credits", ProviderLimitsPresenter.FormatCodexFooter(snapshot));
     }
 
     [Fact]

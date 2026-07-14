@@ -76,7 +76,7 @@ public sealed class ProviderDashboardPresenterTests
     }
 
     [Fact]
-    public void ComputeCursorHeadline_uses_aggregate_percent_even_when_auto_is_higher()
+    public void ComputeCursorHeadline_uses_hottest_pool_when_auto_is_higher()
     {
         var snapshot = new UsageSnapshot
         {
@@ -86,7 +86,21 @@ public sealed class ProviderDashboardPresenterTests
         };
         var settings = new WidgetSettings { ShowBreakdown = true };
 
-        Assert.Equal(40, ProviderDashboardPresenter.ComputeCursorHeadline(snapshot, settings));
+        Assert.Equal(90, ProviderDashboardPresenter.ComputeCursorHeadline(snapshot, settings));
+    }
+
+    [Fact]
+    public void ComputeCursorHeadline_uses_hottest_pool_when_api_is_higher()
+    {
+        var snapshot = new UsageSnapshot
+        {
+            PercentUsed = 40,
+            AutoPercentUsed = 10,
+            ApiPercentUsed = 85
+        };
+        var settings = new WidgetSettings { ShowBreakdown = true };
+
+        Assert.Equal(85, ProviderDashboardPresenter.ComputeCursorHeadline(snapshot, settings));
     }
 
     [Fact]
@@ -245,6 +259,24 @@ public sealed class ProviderDashboardPresenterTests
     }
 
     [Fact]
+    public void IsOpenAiHeadlineConnected_false_when_api_enabled_but_unavailable_even_if_codex_ok()
+    {
+        var snapshot = new UsageSnapshot
+        {
+            OpenAiDirect = DirectProviderSnapshot.Unavailable("Admin key with api.usage.read required"),
+            Codex = CodexSnapshot.FromUsage("plus", 99, 1, null, null, 0m, false)
+        };
+        var settings = new ProviderBillingSettings
+        {
+            ShowDirectSource = true,
+            ShowProLimits = true
+        };
+
+        Assert.False(ProviderDashboardPresenter.IsOpenAiHeadlineConnected(snapshot, settings));
+        Assert.Equal(0, ProviderDashboardPresenter.ComputeOpenAiHeadline(snapshot, settings));
+    }
+
+    [Fact]
     public void IsOpenAiHeadlineConnected_false_when_no_enabled_source_is_available()
     {
         var snapshot = new UsageSnapshot
@@ -261,6 +293,24 @@ public sealed class ProviderDashboardPresenterTests
         };
 
         Assert.False(ProviderDashboardPresenter.IsOpenAiHeadlineConnected(snapshot, settings));
+    }
+
+    [Fact]
+    public void IsClaudeHeadlineConnected_false_when_api_enabled_but_unavailable_even_if_pro_ok()
+    {
+        var snapshot = new UsageSnapshot
+        {
+            ClaudeDirect = DirectProviderSnapshot.Unavailable("Admin API key not set"),
+            ClaudePro = ClaudeProSnapshot.FromUsage(90, 10, null, null)
+        };
+        var settings = new ProviderBillingSettings
+        {
+            ShowProLimits = true,
+            ShowApiConsoleBilling = true
+        };
+
+        Assert.False(ProviderDashboardPresenter.IsClaudeHeadlineConnected(snapshot, settings));
+        Assert.Equal(0, ProviderDashboardPresenter.ComputeClaudeHeadline(snapshot, settings));
     }
 
     [Fact]
