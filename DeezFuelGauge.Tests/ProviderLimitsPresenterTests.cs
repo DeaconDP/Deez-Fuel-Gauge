@@ -1,3 +1,4 @@
+using Avalonia.Controls;
 using DeezFuelGauge.Models;
 using DeezFuelGauge.Services;
 using Xunit;
@@ -140,5 +141,78 @@ public sealed class ProviderLimitsPresenterTests
         Assert.Contains("10% 5h", summary);
         Assert.Contains("20% wk", summary);
         Assert.Contains("30% mo", summary);
+    }
+
+    [Fact]
+    public void ApplyBreakdownLayout_shows_nested_panel_and_hides_source_bar()
+    {
+        var section = new StackPanel();
+        var panel = new Border();
+        var barBorder = new Border { IsVisible = true };
+        var remainingText = new TextBlock();
+
+        ProviderLimitsPresenter.ApplyBreakdownLayout(
+            showProBreakdown: true,
+            isAvailable: true,
+            footerText: "Plus",
+            showFooter: true,
+            section,
+            panel,
+            barBorder,
+            remainingText);
+
+        Assert.True(section.IsVisible);
+        Assert.True(panel.IsVisible);
+        Assert.False(barBorder.IsVisible);
+        Assert.Equal("Plus", remainingText.Text);
+        Assert.True(remainingText.IsVisible);
+    }
+
+    [Fact]
+    public void ApplyBreakdownLayout_hides_breakdown_and_shows_source_bar_when_unavailable()
+    {
+        var section = new StackPanel { IsVisible = true };
+        var panel = new Border { IsVisible = true };
+        var barBorder = new Border { IsVisible = false };
+        var remainingText = new TextBlock { Text = "old", IsVisible = true };
+
+        ProviderLimitsPresenter.ApplyBreakdownLayout(
+            showProBreakdown: true,
+            isAvailable: false,
+            footerText: "Plus",
+            showFooter: true,
+            section,
+            panel,
+            barBorder,
+            remainingText);
+
+        Assert.False(section.IsVisible);
+        Assert.False(panel.IsVisible);
+        Assert.True(barBorder.IsVisible);
+        Assert.Equal("Plus", remainingText.Text);
+        Assert.True(remainingText.IsVisible);
+    }
+
+    [Fact]
+    public void ApplyBreakdownLayout_hides_breakdown_when_showProBreakdown_disabled()
+    {
+        var section = new StackPanel { IsVisible = true };
+        var panel = new Border { IsVisible = true };
+        var barBorder = new Border { IsVisible = false };
+        var remainingText = new TextBlock();
+
+        ProviderLimitsPresenter.ApplyBreakdownLayout(
+            showProBreakdown: false,
+            isAvailable: true,
+            footerText: "",
+            showFooter: false,
+            section,
+            panel,
+            barBorder,
+            remainingText);
+
+        Assert.False(section.IsVisible);
+        Assert.False(panel.IsVisible);
+        Assert.True(barBorder.IsVisible);
     }
 }

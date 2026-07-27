@@ -1,6 +1,5 @@
 using System.Globalization;
 using Avalonia.Controls;
-using Avalonia.Input;
 using Avalonia.Media;
 using DeezFuelGauge.Models;
 
@@ -244,32 +243,27 @@ public static class ProviderLimitsPresenter
     public static void ApplyBreakdownLayout(
         bool showProBreakdown,
         bool isAvailable,
-        bool isExpanded,
-        string summaryText,
         string footerText,
         bool showFooter,
-        TextBlock summary,
         StackPanel breakdownSection,
         Border breakdownPanel,
-        TextBlock breakdownChevron,
         Border barBorder,
         TextBlock remainingText)
     {
         remainingText.Text = showFooter ? footerText : "";
         remainingText.IsVisible = showFooter && !string.IsNullOrEmpty(footerText);
 
-        if (!showProBreakdown || !isAvailable)
+        var showBreakdown = showProBreakdown && isAvailable;
+        if (!showBreakdown)
         {
             breakdownSection.IsVisible = false;
             breakdownPanel.IsVisible = false;
-            barBorder.Cursor = new Cursor(StandardCursorType.Arrow);
+            barBorder.IsVisible = true;
             return;
         }
 
-        summary.Text = summaryText;
         breakdownSection.IsVisible = true;
-        breakdownPanel.IsVisible = isExpanded;
-        breakdownChevron.Text = isExpanded ? "\u25B4" : "\u25BE";
-        barBorder.Cursor = new Cursor(StandardCursorType.Hand);
+        breakdownPanel.IsVisible = true;
+        barBorder.IsVisible = false;
     }
 }
