@@ -290,6 +290,9 @@ public partial class MainWindow : Window, ISettingsPanelHost
         Dispatcher.UIThread.Post(() =>
         {
             CompensateAnchorIfNeeded();
+            // Breakdown/limits tracks often have Bounds.Width == 0 until after expand layout.
+            UpdateBreakdownProgressWidths();
+            UpdateLimitsProgressWidths();
             UpdateDynamicProgressWidths();
         }, DispatcherPriority.Loaded);
     }
@@ -1260,6 +1263,12 @@ public partial class MainWindow : Window, ISettingsPanelHost
         ApplyOpenCodeBars(snapshot.OpenCode, _settings.OpenCode);
         ApplyProviderHeadlines(snapshot);
         SyncSettingsAndVisibility();
+        // Sub-bars inside collapsed/unmeasured panels skip width updates; refresh after layout.
+        Dispatcher.UIThread.Post(() =>
+        {
+            UpdateBreakdownProgressWidths();
+            UpdateLimitsProgressWidths();
+        }, DispatcherPriority.Loaded);
     }
 
     private void ApplyProviderHeadlines(UsageSnapshot snapshot)
@@ -1386,6 +1395,9 @@ public partial class MainWindow : Window, ISettingsPanelHost
         CodexSessionWindowSection.IsVisible = codex.IsAvailable && codex.HasSessionWindow;
         CodexWeeklyWindowSection.IsVisible = codex.IsAvailable && codex.HasWeeklyWindow;
 
+        ApplyCodexLimitsBreakdownLayout(options, codex);
+        UpdateCodexLimitsExpandedState();
+
         if (codex.HasSessionWindow)
         {
             ProviderLimitsPresenter.ApplyBreakdownSubBar(
@@ -1407,9 +1419,6 @@ public partial class MainWindow : Window, ISettingsPanelHost
                 codex.WeeklyPercentUsed,
                 codex.IsAvailable);
         }
-
-        ApplyCodexLimitsBreakdownLayout(options, codex);
-        UpdateCodexLimitsExpandedState();
     }
 
     private void ApplyClaudeProBars(ClaudeProSnapshot pro, ProviderBillingSettings options)
@@ -1427,6 +1436,9 @@ public partial class MainWindow : Window, ISettingsPanelHost
             ClaudeProProgressFill,
             ref _lastClaudeProPercent);
 
+        ApplyClaudeProLimitsBreakdownLayout(options, pro);
+        UpdateClaudeProLimitsExpandedState();
+
         ProviderLimitsPresenter.ApplyBreakdownSubBar(
             ClaudeProSessionProgressTrack,
             ClaudeProSessionProgressFill,
@@ -1441,9 +1453,6 @@ public partial class MainWindow : Window, ISettingsPanelHost
             ref _lastClaudeProWeeklyPercent,
             pro.WeeklyPercentUsed,
             pro.IsAvailable);
-
-        ApplyClaudeProLimitsBreakdownLayout(options, pro);
-        UpdateClaudeProLimitsExpandedState();
     }
 
     private void ApplyAntigravityBars(AntigravitySnapshot antigravity, ProviderBillingSettings options)
@@ -1460,6 +1469,9 @@ public partial class MainWindow : Window, ISettingsPanelHost
             AntigravityProgressTrack,
             AntigravityProgressFill,
             ref _lastAntigravityPercent);
+
+        ApplyAntigravityLimitsBreakdownLayout(options, antigravity);
+        UpdateAntigravityLimitsExpandedState();
 
         ApplyAntigravityGroupBar(
             antigravity.Gemini,
@@ -1482,9 +1494,6 @@ public partial class MainWindow : Window, ISettingsPanelHost
             AntigravityThirdPartyWeeklyProgressTrack,
             AntigravityThirdPartyWeeklyProgressFill,
             AntigravityThirdPartyWeeklyPercentText);
-
-        ApplyAntigravityLimitsBreakdownLayout(options, antigravity);
-        UpdateAntigravityLimitsExpandedState();
     }
 
     private void ApplyOpenRouterBars(OpenRouterSnapshot openRouter, ProviderBillingSettings options)
@@ -1543,6 +1552,9 @@ public partial class MainWindow : Window, ISettingsPanelHost
             OpenCodeGoProgressFill,
             ref _lastOpenCodeGoPercent);
 
+        ApplyOpenCodeGoLimitsBreakdownLayout(options, openCode);
+        UpdateOpenCodeGoLimitsExpandedState();
+
         ProviderLimitsPresenter.ApplyBreakdownSubBar(
             OpenCodeGoRollingProgressTrack,
             OpenCodeGoRollingProgressFill,
@@ -1564,9 +1576,6 @@ public partial class MainWindow : Window, ISettingsPanelHost
             ref _lastOpenCodeGoMonthlyPercent,
             openCode.GoMonthly.PercentUsed,
             openCode.GoMonthly.IsAvailable);
-
-        ApplyOpenCodeGoLimitsBreakdownLayout(options, openCode);
-        UpdateOpenCodeGoLimitsExpandedState();
     }
 
     private void ApplyOpenCodeGoLimitsBreakdownLayout(ProviderBillingSettings options, OpenCodeSnapshot openCode)
@@ -1747,8 +1756,6 @@ public partial class MainWindow : Window, ISettingsPanelHost
         {
             _lastProgressLayoutWidth = width;
             UpdateProgressWidth(_lastPercentUsed);
-            UpdateBreakdownProgressWidths();
-            UpdateLimitsProgressWidths();
             UpdateCodexLimitsExpandedState();
             UpdateClaudeProLimitsExpandedState();
             UpdateAntigravityLimitsExpandedState();
@@ -1767,6 +1774,9 @@ public partial class MainWindow : Window, ISettingsPanelHost
             ProviderBarPresenter.UpdateProgressWidth(OpenCodeZenProgressTrack, OpenCodeZenProgressFill, _lastOpenCodeZenPercent);
         }
 
+        // Height-only SizeChanged (e.g. expanding 5h/Weekly) must still remeasure these fills.
+        UpdateBreakdownProgressWidths();
+        UpdateLimitsProgressWidths();
         UpdateDynamicProgressWidths();
     }
 
