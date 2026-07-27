@@ -28,6 +28,7 @@ public sealed class ProviderBarPresenterTests
     [Theory]
     [InlineData(100, 50, 50)]
     [InlineData(200, 25, 50)]
+    [InlineData(280, 37, 103.6)]
     public void ComputeFillWidth_uses_actual_width_when_percent_above_zero(
         double trackWidth,
         double percentUsed,

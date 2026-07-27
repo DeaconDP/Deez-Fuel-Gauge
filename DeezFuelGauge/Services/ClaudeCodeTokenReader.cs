@@ -67,6 +67,17 @@ public static class ClaudeCodeTokenReader
         return $"{KeychainServicePrefix}-{prefix}";
     }
 
+    /// <summary>
+    /// Claude Code has used both a config-dir-hashed service name and the bare
+    /// "Claude Code-credentials" service. Prefer the hashed entry when present,
+    /// then fall back to the bare name used by current macOS installs.
+    /// </summary>
+    internal static IEnumerable<string> EnumerateKeychainServiceNames(string configDir)
+    {
+        yield return BuildKeychainServiceName(configDir);
+        yield return KeychainServicePrefix;
+    }
+
     private static ClaudeCodeOAuthCredential? ReadFromCredentialsFile(string path)
     {
         if (!File.Exists(path))
@@ -85,9 +96,27 @@ public static class ClaudeCodeTokenReader
 
     private static ClaudeCodeOAuthCredential? ReadFromMacKeychain()
     {
+        ClaudeCodeOAuthCredential? expiredFallback = null;
+
+        foreach (var service in EnumerateKeychainServiceNames(PlatformPaths.ClaudeConfigDirectory))
+        {
+            var credential = TryReadKeychainService(service);
+            if (credential is null)
+                continue;
+
+            if (!credential.IsExpired)
+                return credential;
+
+            expiredFallback ??= credential;
+        }
+
+        return expiredFallback;
+    }
+
+    private static ClaudeCodeOAuthCredential? TryReadKeychainService(string service)
+    {
         try
         {
-            var service = BuildKeychainServiceName(PlatformPaths.ClaudeConfigDirectory);
             var startInfo = new ProcessStartInfo("/usr/bin/security", $"find-generic-password -s \"{service}\" -w")
             {
                 RedirectStandardOutput = true,

@@ -12,25 +12,22 @@ Runs on **Windows 10/11** and **macOS**.
 - [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
 - Cursor IDE logged in on the same user profile
 
-## One-click setup & run
+## One-click run
 
 Double-click the launcher for your platform:
 
 | Platform | File |
 |----------|------|
-| Windows | **`setup-and-run.bat`** |
-| macOS | **`setup-and-run.app`** |
+| Windows | **`run.bat`** |
+| macOS | **`run.command`** |
 
-On first run it builds the widget and launches it. Later runs rebuild and start the widget.
-
-After the first successful setup, you can open **`DeezFuelGauge.app`** directly.
+Each run rebuilds the widget from this folder and launches it.
 
 - **Windows:** if .NET 8 is missing, the launcher can install it via winget.
 - **macOS:** if .NET 8 is missing, the launcher opens the official download page in your browser.
-- **macOS:** if macOS blocks the launcher the first time, right-click **`setup-and-run.app`** and choose **Open**.
-- **macOS:** if **`DeezFuelGauge.app`** is blocked after setup, right-click it and choose **Open** as well.
+- **macOS:** if **`Deez Fuel Gauge.app`** is blocked after the first build, right-click it and choose **Open**.
 
-If setup fails on macOS, details are saved to `~/Library/Logs/DeezFuelGauge/setup.log`.
+If the run fails on macOS, details are saved to `~/Library/Logs/DeezFuelGauge/setup.log`.
 
 ## Usage
 
@@ -77,15 +74,15 @@ Encrypted API keys: `credentials/` in the same folder.
 
 **Windows**
 
-1. Build the widget once using **`setup-and-run.bat`**.
+1. Build the widget once using **`run.bat`**.
 2. Press `Win+R`, type `shell:startup`, press Enter.
 3. Create a shortcut to `DeezFuelGauge\bin\Release\net8.0\DeezFuelGauge.exe` in that folder.
 
 **macOS**
 
-1. Build the widget once using **`setup-and-run.app`**.
+1. Build the widget once using **`run.command`**.
 2. Open **System Settings → General → Login Items**.
-3. Add **`DeezFuelGauge.app`** from this folder.
+3. Add **`Deez Fuel Gauge.app`** from this folder.
 
 ## How it works
 

@@ -32,9 +32,6 @@ public partial class MainWindow : Window, ISettingsPanelHost
     private readonly DispatcherTimer _pollTimer;
     private readonly WidgetSettings _settings;
     private bool _isRefreshing;
-    private bool _isCodexLimitsExpanded;
-    private bool _isClaudeProLimitsExpanded;
-    private bool _isAntigravityLimitsExpanded;
     private bool _isSettingsExpanded;
     private bool _isCursorProviderExpanded;
     private bool _isOpenAiProviderExpanded;
@@ -42,7 +39,6 @@ public partial class MainWindow : Window, ISettingsPanelHost
     private bool _isGeminiProviderExpanded;
     private bool _isOpenRouterProviderExpanded;
     private bool _isOpenCodeProviderExpanded;
-    private bool _isOpenCodeGoLimitsExpanded;
     private double _lastPercentUsed;
     private double _lastAutoPercent;
     private double _lastApiPercent;
@@ -143,9 +139,6 @@ public partial class MainWindow : Window, ISettingsPanelHost
         _settingsViewModel.AttachHost(this);
         SettingsPanelControl.Initialize(_settingsViewModel, _settings);
         SyncSettingsAndVisibility();
-        _isCodexLimitsExpanded = _settings.IsCodexLimitsExpanded;
-        _isClaudeProLimitsExpanded = _settings.IsClaudeProLimitsExpanded;
-        _isAntigravityLimitsExpanded = _settings.IsAntigravityLimitsExpanded;
         _isSettingsExpanded = _settings.IsSettingsExpanded;
         _isCursorProviderExpanded = _settings.IsCursorProviderExpanded;
         _isOpenAiProviderExpanded = _settings.IsOpenAiProviderExpanded;
@@ -153,11 +146,6 @@ public partial class MainWindow : Window, ISettingsPanelHost
         _isGeminiProviderExpanded = _settings.IsGeminiProviderExpanded;
         _isOpenRouterProviderExpanded = _settings.IsOpenRouterProviderExpanded;
         _isOpenCodeProviderExpanded = _settings.IsOpenCodeProviderExpanded;
-        _isOpenCodeGoLimitsExpanded = _settings.IsOpenCodeGoLimitsExpanded;
-        UpdateCodexLimitsExpandedState();
-        UpdateClaudeProLimitsExpandedState();
-        UpdateAntigravityLimitsExpandedState();
-        UpdateOpenCodeGoLimitsExpandedState();
         UpdateSettingsExpandedState();
         UpdatePinIconState();
         UpdateAllProviderExpandedState();
@@ -290,6 +278,9 @@ public partial class MainWindow : Window, ISettingsPanelHost
         Dispatcher.UIThread.Post(() =>
         {
             CompensateAnchorIfNeeded();
+            // Breakdown/limits tracks often have Bounds.Width == 0 until after expand layout.
+            UpdateBreakdownProgressWidths();
+            UpdateLimitsProgressWidths();
             UpdateDynamicProgressWidths();
         }, DispatcherPriority.Loaded);
     }
@@ -398,7 +389,8 @@ public partial class MainWindow : Window, ISettingsPanelHost
         }
         else
         {
-            CodexPercentText.IsVisible = _settings.OpenAi.ShowProLimits;
+            var showCodexBreakdown = _settings.OpenAi.ShowProBreakdown && _lastSnapshot?.Codex.IsAvailable == true;
+            CodexPercentText.IsVisible = _settings.OpenAi.ShowProLimits && !showCodexBreakdown;
         }
 
         ClaudeDetailText.IsVisible = cursorExpanded && _settings.Claude.ShowCursorSource && _settings.Claude.ShowDetails;
@@ -414,7 +406,8 @@ public partial class MainWindow : Window, ISettingsPanelHost
         }
         else
         {
-            ClaudeProPercentText.IsVisible = _settings.Claude.ShowProLimits;
+            var showClaudeProBreakdown = _settings.Claude.ShowProBreakdown && _lastSnapshot?.ClaudePro.IsAvailable == true;
+            ClaudeProPercentText.IsVisible = _settings.Claude.ShowProLimits && !showClaudeProBreakdown;
         }
 
         GeminiDetailText.IsVisible = cursorExpanded && _settings.Gemini.ShowCursorSource && _settings.Gemini.ShowDetails;
@@ -426,7 +419,8 @@ public partial class MainWindow : Window, ISettingsPanelHost
         }
         else
         {
-            AntigravityPercentText.IsVisible = _settings.Gemini.ShowProLimits;
+            var showAntigravityBreakdown = _settings.Gemini.ShowProBreakdown && _lastSnapshot?.Antigravity.IsAvailable == true;
+            AntigravityPercentText.IsVisible = _settings.Gemini.ShowProLimits && !showAntigravityBreakdown;
         }
 
         OpenRouterDetailText.IsVisible = openRouterExpanded && _settings.OpenRouter.ShowProLimits && _settings.OpenRouter.ShowDetails;
@@ -444,7 +438,12 @@ public partial class MainWindow : Window, ISettingsPanelHost
         }
         else
         {
-            OpenCodeGoPercentText.IsVisible = _settings.OpenCode.ShowProLimits;
+            var openCode = _lastSnapshot?.OpenCode;
+            var showOpenCodeGoBreakdown = openCode is not null
+                && _settings.OpenCode.ShowProBreakdown
+                && openCode.HasGoSubscription
+                && (openCode.GoRolling.IsAvailable || openCode.GoWeekly.IsAvailable || openCode.GoMonthly.IsAvailable);
+            OpenCodeGoPercentText.IsVisible = _settings.OpenCode.ShowProLimits && !showOpenCodeGoBreakdown;
         }
     }
 
@@ -466,28 +465,6 @@ public partial class MainWindow : Window, ISettingsPanelHost
         ToggleProviderExpanded(ProviderSection.OpenCode);
         SaveSettings();
         e.Handled = true;
-    }
-
-    private void OpenCodeGoLimits_PointerPressed(object? sender, PointerPressedEventArgs e)
-    {
-        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
-            return;
-
-        if (!OpenCodeGoBreakdownSection.IsVisible)
-            return;
-
-        var oldHeight = Bounds.Height;
-        _isOpenCodeGoLimitsExpanded = !_isOpenCodeGoLimitsExpanded;
-        UpdateOpenCodeGoLimitsExpandedState();
-        ScheduleLayoutRefresh(oldHeight);
-        SaveSettings();
-        e.Handled = true;
-    }
-
-    private void UpdateOpenCodeGoLimitsExpandedState()
-    {
-        OpenCodeGoBreakdownPanel.IsVisible = _isOpenCodeGoLimitsExpanded;
-        OpenCodeGoBreakdownChevron.Text = _isOpenCodeGoLimitsExpanded ? "\u25B4" : "\u25BE";
     }
 
     private void CursorProvider_PointerPressed(object? sender, PointerPressedEventArgs e)
@@ -583,11 +560,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
         ApplyProviderDetailChrome();
 
         if (_isOpenAiProviderExpanded && _lastSnapshot is not null && !_lastSnapshot.IsError)
-        {
             ApplyCodexLimitsBreakdownLayout(_settings.OpenAi, _lastSnapshot.Codex);
-            UpdateCodexLimitsExpandedState();
-            CodexPercentText.IsVisible = _settings.OpenAi.ShowProLimits;
-        }
     }
 
     private void UpdateClaudeProviderExpandedState()
@@ -596,11 +569,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
         ApplyProviderDetailChrome();
 
         if (_isClaudeProviderExpanded && _lastSnapshot is not null && !_lastSnapshot.IsError)
-        {
             ApplyClaudeProLimitsBreakdownLayout(_settings.Claude, _lastSnapshot.ClaudePro);
-            UpdateClaudeProLimitsExpandedState();
-            ClaudeProPercentText.IsVisible = _settings.Claude.ShowProLimits;
-        }
     }
 
     private void UpdateGeminiProviderExpandedState()
@@ -609,11 +578,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
         ApplyProviderDetailChrome();
 
         if (_isGeminiProviderExpanded && _lastSnapshot is not null && !_lastSnapshot.IsError)
-        {
             ApplyAntigravityLimitsBreakdownLayout(_settings.Gemini, _lastSnapshot.Antigravity);
-            UpdateAntigravityLimitsExpandedState();
-            AntigravityPercentText.IsVisible = _settings.Gemini.ShowProLimits;
-        }
     }
 
     private void UpdateOpenRouterProviderExpandedState()
@@ -631,11 +596,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
         ApplyProviderDetailChrome();
 
         if (_isOpenCodeProviderExpanded && _lastSnapshot is not null && !_lastSnapshot.IsError)
-        {
             ApplyOpenCodeGoLimitsBreakdownLayout(_settings.OpenCode, _lastSnapshot.OpenCode);
-            UpdateOpenCodeGoLimitsExpandedState();
-            OpenCodeGoPercentText.IsVisible = _settings.OpenCode.ShowProLimits;
-        }
     }
 
     private void RefreshCursorBreakdownVisibility(UsageSnapshot snapshot)
@@ -666,98 +627,23 @@ public partial class MainWindow : Window, ISettingsPanelHost
         UpdateBreakdownProgressWidths();
     }
 
-    private void CodexLimits_PointerPressed(object? sender, PointerPressedEventArgs e)
-    {
-        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
-            return;
-
-        if (!CodexBreakdownSection.IsVisible)
-            return;
-
-        var oldHeight = Bounds.Height;
-        _isCodexLimitsExpanded = !_isCodexLimitsExpanded;
-        UpdateCodexLimitsExpandedState();
-        ScheduleLayoutRefresh(oldHeight);
-        SaveSettings();
-        e.Handled = true;
-    }
-
-    private void ClaudeProLimits_PointerPressed(object? sender, PointerPressedEventArgs e)
-    {
-        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
-            return;
-
-        if (!ClaudeProBreakdownSection.IsVisible)
-            return;
-
-        var oldHeight = Bounds.Height;
-        _isClaudeProLimitsExpanded = !_isClaudeProLimitsExpanded;
-        UpdateClaudeProLimitsExpandedState();
-        ScheduleLayoutRefresh(oldHeight);
-        SaveSettings();
-        e.Handled = true;
-    }
-
-    private void AntigravityLimits_PointerPressed(object? sender, PointerPressedEventArgs e)
-    {
-        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
-            return;
-
-        if (!AntigravityBreakdownSection.IsVisible)
-            return;
-
-        var oldHeight = Bounds.Height;
-        _isAntigravityLimitsExpanded = !_isAntigravityLimitsExpanded;
-        UpdateAntigravityLimitsExpandedState();
-        ScheduleLayoutRefresh(oldHeight);
-        SaveSettings();
-        e.Handled = true;
-    }
-
-    private void UpdateCodexLimitsExpandedState()
-    {
-        CodexBreakdownPanel.IsVisible = _isCodexLimitsExpanded;
-        CodexBreakdownChevron.Text = _isCodexLimitsExpanded ? "\u25B4" : "\u25BE";
-    }
-
-    private void UpdateClaudeProLimitsExpandedState()
-    {
-        ClaudeProBreakdownPanel.IsVisible = _isClaudeProLimitsExpanded;
-        ClaudeProBreakdownChevron.Text = _isClaudeProLimitsExpanded ? "\u25B4" : "\u25BE";
-    }
-
-    private void UpdateAntigravityLimitsExpandedState()
-    {
-        AntigravityBreakdownPanel.IsVisible = _isAntigravityLimitsExpanded;
-        AntigravityBreakdownChevron.Text = _isAntigravityLimitsExpanded ? "\u25B4" : "\u25BE";
-    }
-
     private void ApplyCodexLimitsBreakdownLayout(ProviderBillingSettings options, CodexSnapshot codex)
     {
         if (!options.ShowProLimits)
             return;
 
-        var summary = codex.IsAvailable
-            ? ProviderLimitsPresenter.FormatSessionWeeklySummary(
-                codex.SessionPercentUsed,
-                codex.WeeklyPercentUsed,
-                codex.HasSessionWindow,
-                codex.HasWeeklyWindow)
-            : codex.StatusMessage ?? codex.DetailLabel;
-
         ProviderLimitsPresenter.ApplyBreakdownLayout(
             options.ShowProBreakdown,
             codex.IsAvailable,
-            _isCodexLimitsExpanded,
-            summary,
             ProviderLimitsPresenter.FormatCodexFooter(codex),
             options.EffectiveShowProDetails,
-            CodexBreakdownSummary,
             CodexBreakdownSection,
             CodexBreakdownPanel,
-            CodexBreakdownChevron,
             CodexBarBorder,
             CodexRemainingText);
+
+        var showNestedBreakdown = options.ShowProBreakdown && codex.IsAvailable;
+        CodexPercentText.IsVisible = options.ShowProLimits && !showNestedBreakdown;
     }
 
     private void ApplyClaudeProLimitsBreakdownLayout(ProviderBillingSettings options, ClaudeProSnapshot pro)
@@ -765,23 +651,18 @@ public partial class MainWindow : Window, ISettingsPanelHost
         if (!options.ShowProLimits)
             return;
 
-        var summary = pro.IsAvailable
-            ? ProviderLimitsPresenter.FormatSessionWeeklySummary(pro.SessionPercentUsed, pro.WeeklyPercentUsed)
-            : pro.StatusMessage ?? pro.DetailLabel;
-
         ProviderLimitsPresenter.ApplyBreakdownLayout(
             options.ShowProBreakdown,
             pro.IsAvailable,
-            _isClaudeProLimitsExpanded,
-            summary,
             ProviderLimitsPresenter.FormatClaudeProFooter(pro),
             options.EffectiveShowProDetails,
-            ClaudeProBreakdownSummary,
             ClaudeProBreakdownSection,
             ClaudeProBreakdownPanel,
-            ClaudeProBreakdownChevron,
             ClaudeProBarBorder,
             ClaudeProRemainingText);
+
+        var showNestedBreakdown = options.ShowProBreakdown && pro.IsAvailable;
+        ClaudeProPercentText.IsVisible = options.ShowProLimits && !showNestedBreakdown;
     }
 
     private void ApplyAntigravityLimitsBreakdownLayout(ProviderBillingSettings options, AntigravitySnapshot antigravity)
@@ -789,21 +670,18 @@ public partial class MainWindow : Window, ISettingsPanelHost
         if (!options.ShowProLimits)
             return;
 
-        var summary = ProviderLimitsPresenter.FormatAntigravitySummary(antigravity);
-
         ProviderLimitsPresenter.ApplyBreakdownLayout(
             options.ShowProBreakdown,
             antigravity.IsAvailable,
-            _isAntigravityLimitsExpanded,
-            summary,
             ProviderLimitsPresenter.FormatAntigravityFooter(antigravity),
             options.EffectiveShowProDetails,
-            AntigravityBreakdownSummary,
             AntigravityBreakdownSection,
             AntigravityBreakdownPanel,
-            AntigravityBreakdownChevron,
             AntigravityBarBorder,
             AntigravityRemainingText);
+
+        var showNestedBreakdown = options.ShowProBreakdown && antigravity.IsAvailable;
+        AntigravityPercentText.IsVisible = options.ShowProLimits && !showNestedBreakdown;
     }
 
     private async void RefreshMenuItem_Click(object? sender, RoutedEventArgs e)
@@ -1260,6 +1138,12 @@ public partial class MainWindow : Window, ISettingsPanelHost
         ApplyOpenCodeBars(snapshot.OpenCode, _settings.OpenCode);
         ApplyProviderHeadlines(snapshot);
         SyncSettingsAndVisibility();
+        // Sub-bars inside collapsed/unmeasured panels skip width updates; refresh after layout.
+        Dispatcher.UIThread.Post(() =>
+        {
+            UpdateBreakdownProgressWidths();
+            UpdateLimitsProgressWidths();
+        }, DispatcherPriority.Loaded);
     }
 
     private void ApplyProviderHeadlines(UsageSnapshot snapshot)
@@ -1386,6 +1270,8 @@ public partial class MainWindow : Window, ISettingsPanelHost
         CodexSessionWindowSection.IsVisible = codex.IsAvailable && codex.HasSessionWindow;
         CodexWeeklyWindowSection.IsVisible = codex.IsAvailable && codex.HasWeeklyWindow;
 
+        ApplyCodexLimitsBreakdownLayout(options, codex);
+
         if (codex.HasSessionWindow)
         {
             ProviderLimitsPresenter.ApplyBreakdownSubBar(
@@ -1407,9 +1293,6 @@ public partial class MainWindow : Window, ISettingsPanelHost
                 codex.WeeklyPercentUsed,
                 codex.IsAvailable);
         }
-
-        ApplyCodexLimitsBreakdownLayout(options, codex);
-        UpdateCodexLimitsExpandedState();
     }
 
     private void ApplyClaudeProBars(ClaudeProSnapshot pro, ProviderBillingSettings options)
@@ -1427,6 +1310,8 @@ public partial class MainWindow : Window, ISettingsPanelHost
             ClaudeProProgressFill,
             ref _lastClaudeProPercent);
 
+        ApplyClaudeProLimitsBreakdownLayout(options, pro);
+
         ProviderLimitsPresenter.ApplyBreakdownSubBar(
             ClaudeProSessionProgressTrack,
             ClaudeProSessionProgressFill,
@@ -1441,9 +1326,6 @@ public partial class MainWindow : Window, ISettingsPanelHost
             ref _lastClaudeProWeeklyPercent,
             pro.WeeklyPercentUsed,
             pro.IsAvailable);
-
-        ApplyClaudeProLimitsBreakdownLayout(options, pro);
-        UpdateClaudeProLimitsExpandedState();
     }
 
     private void ApplyAntigravityBars(AntigravitySnapshot antigravity, ProviderBillingSettings options)
@@ -1460,6 +1342,8 @@ public partial class MainWindow : Window, ISettingsPanelHost
             AntigravityProgressTrack,
             AntigravityProgressFill,
             ref _lastAntigravityPercent);
+
+        ApplyAntigravityLimitsBreakdownLayout(options, antigravity);
 
         ApplyAntigravityGroupBar(
             antigravity.Gemini,
@@ -1482,9 +1366,6 @@ public partial class MainWindow : Window, ISettingsPanelHost
             AntigravityThirdPartyWeeklyProgressTrack,
             AntigravityThirdPartyWeeklyProgressFill,
             AntigravityThirdPartyWeeklyPercentText);
-
-        ApplyAntigravityLimitsBreakdownLayout(options, antigravity);
-        UpdateAntigravityLimitsExpandedState();
     }
 
     private void ApplyOpenRouterBars(OpenRouterSnapshot openRouter, ProviderBillingSettings options)
@@ -1543,6 +1424,8 @@ public partial class MainWindow : Window, ISettingsPanelHost
             OpenCodeGoProgressFill,
             ref _lastOpenCodeGoPercent);
 
+        ApplyOpenCodeGoLimitsBreakdownLayout(options, openCode);
+
         ProviderLimitsPresenter.ApplyBreakdownSubBar(
             OpenCodeGoRollingProgressTrack,
             OpenCodeGoRollingProgressFill,
@@ -1564,9 +1447,6 @@ public partial class MainWindow : Window, ISettingsPanelHost
             ref _lastOpenCodeGoMonthlyPercent,
             openCode.GoMonthly.PercentUsed,
             openCode.GoMonthly.IsAvailable);
-
-        ApplyOpenCodeGoLimitsBreakdownLayout(options, openCode);
-        UpdateOpenCodeGoLimitsExpandedState();
     }
 
     private void ApplyOpenCodeGoLimitsBreakdownLayout(ProviderBillingSettings options, OpenCodeSnapshot openCode)
@@ -1574,25 +1454,19 @@ public partial class MainWindow : Window, ISettingsPanelHost
         var showBreakdown = options.ShowProBreakdown &&
                             openCode.HasGoSubscription &&
                             (openCode.GoRolling.IsAvailable || openCode.GoWeekly.IsAvailable || openCode.GoMonthly.IsAvailable);
-        var summary = ProviderLimitsPresenter.FormatThreeWindowSummary(
-            openCode.GoRolling.PercentUsed,
-            openCode.GoWeekly.PercentUsed,
-            openCode.GoMonthly.PercentUsed);
         var footer = ProviderLimitsPresenter.FormatOpenCodeGoFooter(openCode);
 
         ProviderLimitsPresenter.ApplyBreakdownLayout(
             showBreakdown,
             openCode.HasGoSubscription,
-            _isOpenCodeGoLimitsExpanded,
-            summary,
             footer,
             options.EffectiveShowProDetails,
-            OpenCodeGoBreakdownSummary,
             OpenCodeGoBreakdownSection,
             OpenCodeGoBreakdownPanel,
-            OpenCodeGoBreakdownChevron,
             OpenCodeGoBarBorder,
             OpenCodeGoRemainingText);
+
+        OpenCodeGoPercentText.IsVisible = options.ShowProLimits && !showBreakdown;
     }
 
     private static void ApplyAntigravityGroupBar(
@@ -1747,12 +1621,6 @@ public partial class MainWindow : Window, ISettingsPanelHost
         {
             _lastProgressLayoutWidth = width;
             UpdateProgressWidth(_lastPercentUsed);
-            UpdateBreakdownProgressWidths();
-            UpdateLimitsProgressWidths();
-            UpdateCodexLimitsExpandedState();
-            UpdateClaudeProLimitsExpandedState();
-            UpdateAntigravityLimitsExpandedState();
-            UpdateOpenCodeGoLimitsExpandedState();
             ProviderBarPresenter.UpdateProgressWidth(CursorHeadlineTrack, CursorHeadlineFill, _lastCursorHeadlinePercent);
             ProviderBarPresenter.UpdateProgressWidth(OpenAiHeadlineTrack, OpenAiHeadlineFill, _lastOpenAiHeadlinePercent);
             ProviderBarPresenter.UpdateProgressWidth(ClaudeHeadlineTrack, ClaudeHeadlineFill, _lastClaudeHeadlinePercent);
@@ -1767,6 +1635,9 @@ public partial class MainWindow : Window, ISettingsPanelHost
             ProviderBarPresenter.UpdateProgressWidth(OpenCodeZenProgressTrack, OpenCodeZenProgressFill, _lastOpenCodeZenPercent);
         }
 
+        // Height-only SizeChanged (e.g. expanding 5h/Weekly) must still remeasure these fills.
+        UpdateBreakdownProgressWidths();
+        UpdateLimitsProgressWidths();
         UpdateDynamicProgressWidths();
     }
 
@@ -1994,10 +1865,6 @@ public partial class MainWindow : Window, ISettingsPanelHost
             _settings.Left = Position.X;
             _settings.Top = Position.Y;
         }
-        _settings.IsCodexLimitsExpanded = _isCodexLimitsExpanded;
-        _settings.IsClaudeProLimitsExpanded = _isClaudeProLimitsExpanded;
-        _settings.IsAntigravityLimitsExpanded = _isAntigravityLimitsExpanded;
-        _settings.IsOpenCodeGoLimitsExpanded = _isOpenCodeGoLimitsExpanded;
         _settings.IsSettingsExpanded = _isSettingsExpanded;
         _settings.IsCursorProviderExpanded = _isCursorProviderExpanded;
         _settings.IsOpenAiProviderExpanded = _isOpenAiProviderExpanded;
