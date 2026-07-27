@@ -18,12 +18,11 @@ public class MacOsPackagingTests
         Assert.True(File.Exists(Path.Combine(repoRoot, "scripts", "package-macos-app.sh")));
         Assert.True(File.Exists(Path.Combine(repoRoot, "scripts", "ensure-dotnet8-sdk.sh")));
         Assert.True(File.Exists(Path.Combine(repoRoot, "scripts", "package-macos-release.sh")));
-        Assert.True(File.Exists(Path.Combine(repoRoot, "scripts", "refresh-macos-setup-launcher.sh")));
         Assert.True(File.Exists(Path.Combine(repoRoot, "Releases", "assets.macos.json")));
         Assert.True(File.Exists(Path.Combine(repoRoot, "DeezFuelGauge.Setup", "DeezFuelGauge.Setup.csproj")));
-        Assert.True(Directory.Exists(Path.Combine(repoRoot, "setup-and-run.app", "Contents", "MacOS")));
-        Assert.True(File.Exists(Path.Combine(repoRoot, "setup-and-run.app", "Contents", "MacOS", "setup-and-run")));
-        Assert.True(File.Exists(Path.Combine(repoRoot, "setup-and-run.app", "Contents", "PkgInfo")));
+        Assert.True(File.Exists(Path.Combine(repoRoot, "run.bat")));
+        Assert.True(File.Exists(Path.Combine(repoRoot, "run.ps1")));
+        Assert.True(File.Exists(Path.Combine(repoRoot, "run.command")));
     }
 
     [Fact]
@@ -46,16 +45,6 @@ public class MacOsPackagingTests
 
         Assert.Contains("REPO_ROOT=\"$(cd \"$(dirname \"$0\")/..\" && pwd)\"", script);
         Assert.DoesNotContain("$(dirname \"$0\")/../..", script);
-    }
-
-    [Fact]
-    public void Setup_app_info_plist_declares_icon()
-    {
-        var plistPath = Path.Combine(FindRepoRoot(), "setup-and-run.app", "Contents", "Info.plist");
-        var plist = File.ReadAllText(plistPath);
-
-        Assert.Contains("<key>CFBundleIconFile</key>", plist);
-        Assert.Contains("<string>AppIcon</string>", plist);
     }
 
     [Fact]
@@ -133,7 +122,7 @@ public class MacOsPackagingTests
     {
         var repoRoot = MacOsAppPackager.FindRepoRoot();
         Assert.True(File.Exists(Path.Combine(repoRoot, "DeezFuelGauge.sln")));
-        Assert.True(Directory.Exists(Path.Combine(repoRoot, "setup-and-run.app")));
+        Assert.True(File.Exists(Path.Combine(repoRoot, "run.command")));
     }
 
     private static string FindRepoRoot()

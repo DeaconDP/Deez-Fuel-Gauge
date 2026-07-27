@@ -29,7 +29,7 @@ try
     if (dotnet is null)
     {
         ShowMessage(
-            "The .NET 8 SDK is required. We opened the download page in your browser. Install it, then double-click setup-and-run again.");
+            "The .NET 8 SDK is required. We opened the download page in your browser. Install it, then double-click run.command again.");
         Process.Start(new ProcessStartInfo("https://dotnet.microsoft.com/download/dotnet/8.0")
         {
             UseShellExecute = true

@@ -68,7 +68,6 @@ public static class MacOsAppPackager
 
         CopyPublishedFiles(publishDir, macOsDir);
         SignAppBundle(appPath);
-        SignAppBundle(Path.Combine(repoRoot, "setup-and-run.app"));
 
         return appPath;
     }
@@ -132,14 +131,6 @@ public static class MacOsAppPackager
 
     public static string FindRepoRoot()
     {
-        var setupBundle = FindSetupBundleDirectory();
-        if (setupBundle is not null)
-        {
-            var parent = Directory.GetParent(setupBundle);
-            if (parent is not null)
-                return parent.FullName;
-        }
-
         var current = new DirectoryInfo(AppContext.BaseDirectory);
         while (current is not null)
         {
@@ -150,20 +141,6 @@ public static class MacOsAppPackager
         }
 
         throw new InvalidOperationException("Could not locate repository root.");
-    }
-
-    private static string? FindSetupBundleDirectory()
-    {
-        var current = new DirectoryInfo(AppContext.BaseDirectory);
-        while (current is not null)
-        {
-            if (string.Equals(current.Name, "setup-and-run.app", StringComparison.Ordinal))
-                return current.FullName;
-
-            current = current.Parent;
-        }
-
-        return null;
     }
 
     public static void CopyPublishedFiles(string publishDir, string macOsDir)
