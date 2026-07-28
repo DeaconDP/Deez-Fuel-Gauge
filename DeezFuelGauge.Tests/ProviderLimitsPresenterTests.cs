@@ -32,19 +32,11 @@ public sealed class ProviderLimitsPresenterTests
     }
 
     [Fact]
-    public void FormatCodexFooter_includes_plan_and_credits()
+    public void FormatCodexFooter_hides_plan_and_credits()
     {
         var snapshot = CodexSnapshot.FromUsage("plus", 12, 34, null, null, 50m, false);
 
-        Assert.Equal("Plus · $50 ChatGPT credits", ProviderLimitsPresenter.FormatCodexFooter(snapshot));
-    }
-
-    [Fact]
-    public void FormatCodexFooter_omits_credits_when_missing()
-    {
-        var snapshot = CodexSnapshot.FromUsage("plus", 12, 34, null, null, null, false);
-
-        Assert.Equal("Plus", ProviderLimitsPresenter.FormatCodexFooter(snapshot));
+        Assert.Equal("", ProviderLimitsPresenter.FormatCodexFooter(snapshot));
     }
 
     [Fact]
@@ -112,7 +104,53 @@ public sealed class ProviderLimitsPresenterTests
 
         var footer = ProviderLimitsPresenter.FormatCodexFooter(snapshot);
 
-        Assert.StartsWith("Plus · 5h resets", footer);
+        Assert.StartsWith("5h resets", footer);
+        Assert.DoesNotContain("Plus", footer);
+        Assert.DoesNotContain("credits", footer);
+    }
+
+    [Fact]
+    public void FormatCodexFooter_omits_reset_times_when_includeResets_false()
+    {
+        var sessionReset = new DateTimeOffset(2026, 6, 24, 14, 30, 0, TimeSpan.Zero);
+        var snapshot = CodexSnapshot.FromUsage("plus", 12, 34, sessionReset, null, 50m, false);
+
+        var footer = ProviderLimitsPresenter.FormatCodexFooter(snapshot, includeResets: false);
+
+        Assert.Equal("", footer);
+    }
+
+    [Fact]
+    public void FormatResetLabel_empty_when_missing()
+    {
+        Assert.Equal("", ProviderLimitsPresenter.FormatResetLabel(null));
+    }
+
+    [Fact]
+    public void FormatResetLabel_uses_arrow_and_uniform_datetime()
+    {
+        var sessionReset = new DateTimeOffset(2026, 6, 24, 14, 30, 0, TimeSpan.Zero);
+        var expectedTime = sessionReset.ToLocalTime()
+            .ToString("ddd d MMM HH:mm", System.Globalization.CultureInfo.InvariantCulture);
+
+        var label = ProviderLimitsPresenter.FormatResetLabel(sessionReset);
+
+        Assert.Equal($"⟲ {expectedTime}", label);
+    }
+
+    [Fact]
+    public void FormatResetLabel_same_pattern_for_today_and_far_future()
+    {
+        var today = DateTimeOffset.Now.Date.AddHours(16);
+        var farFuture = new DateTimeOffset(2027, 8, 9, 16, 0, 0, TimeSpan.Zero);
+
+        var todayLabel = ProviderLimitsPresenter.FormatResetLabel(today);
+        var farLabel = ProviderLimitsPresenter.FormatResetLabel(farFuture);
+
+        Assert.StartsWith("⟲ ", todayLabel);
+        Assert.StartsWith("⟲ ", farLabel);
+        Assert.Matches(@"^⟲ \w{3} \d{1,2} \w{3} \d{2}:\d{2}$", todayLabel);
+        Assert.Matches(@"^⟲ \w{3} \d{1,2} \w{3} \d{2}:\d{2}$", farLabel);
     }
 
     [Fact]
@@ -126,6 +164,47 @@ public sealed class ProviderLimitsPresenterTests
         var footer = ProviderLimitsPresenter.FormatAntigravityFooter(snapshot);
 
         Assert.StartsWith("Pro · 5h resets", footer);
+    }
+
+    [Fact]
+    public void FormatAntigravityFooter_omits_reset_times_when_includeResets_false()
+    {
+        var sessionReset = new DateTimeOffset(2026, 6, 24, 14, 30, 0, TimeSpan.Zero);
+        var gemini = AntigravityGroupSnapshot.FromUsage(80, 60, sessionReset, null);
+        var thirdParty = AntigravityGroupSnapshot.Unavailable();
+        var snapshot = AntigravitySnapshot.FromGroups("Pro", gemini, thirdParty);
+
+        var footer = ProviderLimitsPresenter.FormatAntigravityFooter(snapshot, includeResets: false);
+
+        Assert.Equal("Pro", footer);
+    }
+
+    [Fact]
+    public void FormatClaudeProFooter_omits_reset_times_when_includeResets_false()
+    {
+        var sessionReset = new DateTimeOffset(2026, 6, 24, 14, 30, 0, TimeSpan.Zero);
+        var snapshot = ClaudeProSnapshot.FromUsage(12, 34, sessionReset, null);
+
+        Assert.Equal("", ProviderLimitsPresenter.FormatClaudeProFooter(snapshot, includeResets: false));
+    }
+
+    [Fact]
+    public void FormatOpenCodeGoFooter_is_empty_resets_live_on_bars()
+    {
+        var rolling = OpenCodeWindowSnapshot.FromUsage(10, new DateTimeOffset(2026, 6, 24, 14, 30, 0, TimeSpan.Zero));
+        var weekly = OpenCodeWindowSnapshot.FromUsage(20, null);
+        var monthly = OpenCodeWindowSnapshot.FromUsage(30, null);
+        var snapshot = OpenCodeSnapshot.FromData(
+            zenBalanceUsd: null,
+            zenMonthlyCapUsd: null,
+            zenMonthlyUsedUsd: null,
+            goRolling: rolling,
+            goWeekly: weekly,
+            goMonthly: monthly,
+            hasGoSubscription: true);
+
+        Assert.Equal("", ProviderLimitsPresenter.FormatOpenCodeGoFooter(snapshot));
+        Assert.StartsWith("5h resets", ProviderLimitsPresenter.FormatOpenCodeGoResetTimes(snapshot));
     }
 
     [Fact]
@@ -214,5 +293,27 @@ public sealed class ProviderLimitsPresenterTests
         Assert.False(section.IsVisible);
         Assert.False(panel.IsVisible);
         Assert.True(barBorder.IsVisible);
+    }
+
+    [Fact]
+    public void ApplyBreakdownLayout_hides_empty_footer_so_it_does_not_leave_a_gap()
+    {
+        var section = new StackPanel();
+        var panel = new Border();
+        var barBorder = new Border { IsVisible = true };
+        var remainingText = new TextBlock { Text = "old", IsVisible = true };
+
+        ProviderLimitsPresenter.ApplyBreakdownLayout(
+            showProBreakdown: true,
+            isAvailable: true,
+            footerText: "",
+            showFooter: true,
+            section,
+            panel,
+            barBorder,
+            remainingText);
+
+        Assert.Equal("", remainingText.Text);
+        Assert.False(remainingText.IsVisible);
     }
 }

@@ -33,12 +33,6 @@ public partial class MainWindow : Window, ISettingsPanelHost
     private readonly WidgetSettings _settings;
     private bool _isRefreshing;
     private bool _isSettingsExpanded;
-    private bool _isCursorProviderExpanded;
-    private bool _isOpenAiProviderExpanded;
-    private bool _isClaudeProviderExpanded;
-    private bool _isGeminiProviderExpanded;
-    private bool _isOpenRouterProviderExpanded;
-    private bool _isOpenCodeProviderExpanded;
     private double _lastPercentUsed;
     private double _lastAutoPercent;
     private double _lastApiPercent;
@@ -140,15 +134,9 @@ public partial class MainWindow : Window, ISettingsPanelHost
         SettingsPanelControl.Initialize(_settingsViewModel, _settings);
         SyncSettingsAndVisibility();
         _isSettingsExpanded = _settings.IsSettingsExpanded;
-        _isCursorProviderExpanded = _settings.IsCursorProviderExpanded;
-        _isOpenAiProviderExpanded = _settings.IsOpenAiProviderExpanded;
-        _isClaudeProviderExpanded = _settings.IsClaudeProviderExpanded;
-        _isGeminiProviderExpanded = _settings.IsGeminiProviderExpanded;
-        _isOpenRouterProviderExpanded = _settings.IsOpenRouterProviderExpanded;
-        _isOpenCodeProviderExpanded = _settings.IsOpenCodeProviderExpanded;
         UpdateSettingsExpandedState();
         UpdatePinIconState();
-        UpdateAllProviderExpandedState();
+        UpdateAllProviderDetailState();
 
         SettingsPanelHost.SizeChanged += (_, _) => CompensateAnchorIfNeeded();
 
@@ -356,247 +344,81 @@ public partial class MainWindow : Window, ISettingsPanelHost
 
     private void ApplyProviderDetailChrome()
     {
-        var cursorExpanded = _isCursorProviderExpanded;
-        var openAiExpanded = _isOpenAiProviderExpanded;
-        var claudeExpanded = _isClaudeProviderExpanded;
-        var geminiExpanded = _isGeminiProviderExpanded;
-        var openRouterExpanded = _isOpenRouterProviderExpanded;
-        var openCodeExpanded = _isOpenCodeProviderExpanded;
-
-        // Headline already shows aggregate plan usage — hide the duplicate nested Cursor bar.
-        // Keep PercentText only for error messages when the Cursor section is expanded.
-        var showCursorError = cursorExpanded
-            && _lastSnapshot is { IsError: true }
+        // Keep PercentText only for Cursor error messages.
+        var showCursorError = _lastSnapshot is { IsError: true }
             && ProviderDashboardPresenter.IsCursorDashboardVisible(_settings);
         PercentText.IsVisible = showCursorError;
         CursorBarBorder.IsVisible = false;
         RemainingText.IsVisible = false;
-        if (cursorExpanded && _settings.Cursor.ShowCursorSource && !showCursorError)
+        if (_settings.Cursor.ShowCursorSource && !showCursorError)
             RefreshCursorBreakdownVisibility(_lastSnapshot ?? new UsageSnapshot());
         else if (!showCursorError)
             BreakdownPanel.IsVisible = false;
 
-        OpenAiDetailText.IsVisible = cursorExpanded && _settings.OpenAi.ShowCursorSource && _settings.OpenAi.ShowDetails;
-        OpenAiDirectDetailText.IsVisible = openAiExpanded
-            && _settings.OpenAi.ShowDirectSource
+        OpenAiDetailText.IsVisible = _settings.OpenAi.ShowCursorSource && _settings.OpenAi.ShowDetails;
+        OpenAiDirectDetailText.IsVisible = _settings.OpenAi.ShowDirectSource
             && (_settings.OpenAi.EffectiveShowDirectDetails
                 || (_lastSnapshot is { OpenAiDirect.IsAvailable: false }));
-        CodexRemainingText.IsVisible = openAiExpanded && _settings.OpenAi.ShowProLimits && _settings.OpenAi.EffectiveShowProDetails;
-        if (!openAiExpanded)
-        {
-            CodexBreakdownSection.IsVisible = false;
-            CodexPercentText.IsVisible = false;
-        }
-        else
-        {
-            var showCodexBreakdown = _settings.OpenAi.ShowProBreakdown && _lastSnapshot?.Codex.IsAvailable == true;
-            CodexPercentText.IsVisible = _settings.OpenAi.ShowProLimits && !showCodexBreakdown;
-        }
+        var showCodexBreakdown = _settings.OpenAi.ShowProBreakdown && _lastSnapshot?.Codex.IsAvailable == true;
+        // Empty footers still take LineHeight if visible — only show when there is text.
+        CodexRemainingText.IsVisible = _settings.OpenAi.ShowProLimits
+            && _settings.OpenAi.EffectiveShowProDetails
+            && !showCodexBreakdown
+            && !string.IsNullOrEmpty(CodexRemainingText.Text);
+        CodexPercentText.IsVisible = _settings.OpenAi.ShowProLimits && !showCodexBreakdown;
 
-        ClaudeDetailText.IsVisible = cursorExpanded && _settings.Claude.ShowCursorSource && _settings.Claude.ShowDetails;
-        ClaudeDirectDetailText.IsVisible = claudeExpanded
-            && _settings.Claude.ShowApiConsoleBilling
+        ClaudeDetailText.IsVisible = _settings.Claude.ShowCursorSource && _settings.Claude.ShowDetails;
+        ClaudeDirectDetailText.IsVisible = _settings.Claude.ShowApiConsoleBilling
             && (_settings.Claude.EffectiveShowDirectDetails
                 || (_lastSnapshot is { ClaudeDirect.IsAvailable: false }));
-        ClaudeProRemainingText.IsVisible = claudeExpanded && _settings.Claude.ShowProLimits && _settings.Claude.EffectiveShowProDetails;
-        if (!claudeExpanded)
-        {
-            ClaudeProBreakdownSection.IsVisible = false;
-            ClaudeProPercentText.IsVisible = false;
-        }
-        else
-        {
-            var showClaudeProBreakdown = _settings.Claude.ShowProBreakdown && _lastSnapshot?.ClaudePro.IsAvailable == true;
-            ClaudeProPercentText.IsVisible = _settings.Claude.ShowProLimits && !showClaudeProBreakdown;
-        }
+        var showClaudeProBreakdown = _settings.Claude.ShowProBreakdown && _lastSnapshot?.ClaudePro.IsAvailable == true;
+        ClaudeProRemainingText.IsVisible = _settings.Claude.ShowProLimits
+            && _settings.Claude.EffectiveShowProDetails
+            && !showClaudeProBreakdown
+            && !string.IsNullOrEmpty(ClaudeProRemainingText.Text);
+        ClaudeProPercentText.IsVisible = _settings.Claude.ShowProLimits && !showClaudeProBreakdown;
 
-        GeminiDetailText.IsVisible = cursorExpanded && _settings.Gemini.ShowCursorSource && _settings.Gemini.ShowDetails;
-        AntigravityRemainingText.IsVisible = geminiExpanded && _settings.Gemini.ShowProLimits && _settings.Gemini.EffectiveShowProDetails;
-        if (!geminiExpanded)
-        {
-            AntigravityBreakdownSection.IsVisible = false;
-            AntigravityPercentText.IsVisible = false;
-        }
-        else
-        {
-            var showAntigravityBreakdown = _settings.Gemini.ShowProBreakdown && _lastSnapshot?.Antigravity.IsAvailable == true;
-            AntigravityPercentText.IsVisible = _settings.Gemini.ShowProLimits && !showAntigravityBreakdown;
-        }
+        GeminiDetailText.IsVisible = _settings.Gemini.ShowCursorSource && _settings.Gemini.ShowDetails;
+        var showAntigravityBreakdown = _settings.Gemini.ShowProBreakdown && _lastSnapshot?.Antigravity.IsAvailable == true;
+        AntigravityRemainingText.IsVisible = _settings.Gemini.ShowProLimits
+            && _settings.Gemini.EffectiveShowProDetails
+            && !string.IsNullOrEmpty(AntigravityRemainingText.Text);
+        AntigravityPercentText.IsVisible = _settings.Gemini.ShowProLimits && !showAntigravityBreakdown;
 
-        OpenRouterDetailText.IsVisible = openRouterExpanded && _settings.OpenRouter.ShowProLimits && _settings.OpenRouter.ShowDetails;
-        if (!openRouterExpanded)
-            OpenRouterPercentText.IsVisible = false;
-        else
-            OpenRouterPercentText.IsVisible = _settings.OpenRouter.ShowProLimits;
+        OpenRouterDetailText.IsVisible = _settings.OpenRouter.ShowProLimits && _settings.OpenRouter.ShowDetails;
+        OpenRouterPercentText.IsVisible = _settings.OpenRouter.ShowProLimits;
 
-        OpenCodeZenDetailText.IsVisible = openCodeExpanded && _settings.OpenCode.ShowDirectSource && _settings.OpenCode.ShowDetails;
-        OpenCodeGoRemainingText.IsVisible = openCodeExpanded && _settings.OpenCode.ShowProLimits && _settings.OpenCode.EffectiveShowProDetails;
-        if (!openCodeExpanded)
-        {
-            OpenCodeGoBreakdownSection.IsVisible = false;
-            OpenCodeGoPercentText.IsVisible = false;
-        }
-        else
-        {
-            var openCode = _lastSnapshot?.OpenCode;
-            var showOpenCodeGoBreakdown = openCode is not null
-                && _settings.OpenCode.ShowProBreakdown
-                && openCode.HasGoSubscription
-                && (openCode.GoRolling.IsAvailable || openCode.GoWeekly.IsAvailable || openCode.GoMonthly.IsAvailable);
-            OpenCodeGoPercentText.IsVisible = _settings.OpenCode.ShowProLimits && !showOpenCodeGoBreakdown;
-        }
+        OpenCodeZenDetailText.IsVisible = _settings.OpenCode.ShowDirectSource && _settings.OpenCode.ShowDetails;
+        var openCode = _lastSnapshot?.OpenCode;
+        var showOpenCodeGoBreakdown = openCode is not null
+            && _settings.OpenCode.ShowProBreakdown
+            && openCode.HasGoSubscription
+            && (openCode.GoRolling.IsAvailable || openCode.GoWeekly.IsAvailable || openCode.GoMonthly.IsAvailable);
+        OpenCodeGoRemainingText.IsVisible = _settings.OpenCode.ShowProLimits
+            && _settings.OpenCode.EffectiveShowProDetails
+            && !showOpenCodeGoBreakdown
+            && !string.IsNullOrEmpty(OpenCodeGoRemainingText.Text);
+        OpenCodeGoPercentText.IsVisible = _settings.OpenCode.ShowProLimits && !showOpenCodeGoBreakdown;
     }
 
-    private void OpenRouterProvider_PointerPressed(object? sender, PointerPressedEventArgs e)
+    private void UpdateAllProviderDetailState()
     {
-        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
-            return;
-
-        ToggleProviderExpanded(ProviderSection.OpenRouter);
-        SaveSettings();
-        e.Handled = true;
-    }
-
-    private void OpenCodeProvider_PointerPressed(object? sender, PointerPressedEventArgs e)
-    {
-        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
-            return;
-
-        ToggleProviderExpanded(ProviderSection.OpenCode);
-        SaveSettings();
-        e.Handled = true;
-    }
-
-    private void CursorProvider_PointerPressed(object? sender, PointerPressedEventArgs e)
-    {
-        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
-            return;
-
-        ToggleProviderExpanded(ProviderSection.Cursor);
-        SaveSettings();
-        e.Handled = true;
-    }
-
-    private void OpenAiProvider_PointerPressed(object? sender, PointerPressedEventArgs e)
-    {
-        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
-            return;
-
-        ToggleProviderExpanded(ProviderSection.OpenAi);
-        SaveSettings();
-        e.Handled = true;
-    }
-
-    private void ClaudeProvider_PointerPressed(object? sender, PointerPressedEventArgs e)
-    {
-        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
-            return;
-
-        ToggleProviderExpanded(ProviderSection.Claude);
-        SaveSettings();
-        e.Handled = true;
-    }
-
-    private void GeminiProvider_PointerPressed(object? sender, PointerPressedEventArgs e)
-    {
-        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
-            return;
-
-        ToggleProviderExpanded(ProviderSection.Gemini);
-        SaveSettings();
-        e.Handled = true;
-    }
-
-    private void ToggleProviderExpanded(ProviderSection section)
-    {
-        var oldHeight = Bounds.Height;
-        var state = ReadProviderExpandState();
-        state = ProviderExpandPresenter.Toggle(section, state);
-        WriteProviderExpandState(state);
-        UpdateAllProviderExpandedState();
-        ScheduleLayoutRefresh(oldHeight);
-    }
-
-    private ProviderExpandState ReadProviderExpandState() => new(
-        _isCursorProviderExpanded,
-        _isOpenAiProviderExpanded,
-        _isClaudeProviderExpanded,
-        _isGeminiProviderExpanded,
-        _isOpenRouterProviderExpanded,
-        _isOpenCodeProviderExpanded);
-
-    private void WriteProviderExpandState(ProviderExpandState state)
-    {
-        _isCursorProviderExpanded = state.Cursor;
-        _isOpenAiProviderExpanded = state.OpenAi;
-        _isClaudeProviderExpanded = state.Claude;
-        _isGeminiProviderExpanded = state.Gemini;
-        _isOpenRouterProviderExpanded = state.OpenRouter;
-        _isOpenCodeProviderExpanded = state.OpenCode;
-    }
-
-    private void UpdateAllProviderExpandedState()
-    {
-        UpdateCursorProviderExpandedState();
-        UpdateOpenAiProviderExpandedState();
-        UpdateClaudeProviderExpandedState();
-        UpdateGeminiProviderExpandedState();
-        UpdateOpenRouterProviderExpandedState();
-        UpdateOpenCodeProviderExpandedState();
-    }
-
-    private void UpdateCursorProviderExpandedState()
-    {
-        CursorDetailsPanel.IsVisible = _isCursorProviderExpanded;
+        CursorDetailsPanel.IsVisible = true;
+        OpenAiDetailsPanel.IsVisible = true;
+        ClaudeDetailsPanel.IsVisible = true;
+        GeminiDetailsPanel.IsVisible = true;
+        OpenRouterDetailsPanel.IsVisible = true;
+        OpenCodeDetailsPanel.IsVisible = true;
         ApplyProviderDetailChrome();
 
-        if (_isCursorProviderExpanded && _lastSnapshot is not null && !_lastSnapshot.IsError)
-            RefreshCursorBreakdownVisibility(_lastSnapshot);
-    }
+        if (_lastSnapshot is null || _lastSnapshot.IsError)
+            return;
 
-    private void UpdateOpenAiProviderExpandedState()
-    {
-        OpenAiDetailsPanel.IsVisible = _isOpenAiProviderExpanded;
-        ApplyProviderDetailChrome();
-
-        if (_isOpenAiProviderExpanded && _lastSnapshot is not null && !_lastSnapshot.IsError)
-            ApplyCodexLimitsBreakdownLayout(_settings.OpenAi, _lastSnapshot.Codex);
-    }
-
-    private void UpdateClaudeProviderExpandedState()
-    {
-        ClaudeDetailsPanel.IsVisible = _isClaudeProviderExpanded;
-        ApplyProviderDetailChrome();
-
-        if (_isClaudeProviderExpanded && _lastSnapshot is not null && !_lastSnapshot.IsError)
-            ApplyClaudeProLimitsBreakdownLayout(_settings.Claude, _lastSnapshot.ClaudePro);
-    }
-
-    private void UpdateGeminiProviderExpandedState()
-    {
-        GeminiDetailsPanel.IsVisible = _isGeminiProviderExpanded;
-        ApplyProviderDetailChrome();
-
-        if (_isGeminiProviderExpanded && _lastSnapshot is not null && !_lastSnapshot.IsError)
-            ApplyAntigravityLimitsBreakdownLayout(_settings.Gemini, _lastSnapshot.Antigravity);
-    }
-
-    private void UpdateOpenRouterProviderExpandedState()
-    {
-        OpenRouterDetailsPanel.IsVisible = _isOpenRouterProviderExpanded;
-        ApplyProviderDetailChrome();
-
-        if (_isOpenRouterProviderExpanded && _lastSnapshot is not null && !_lastSnapshot.IsError)
-            OpenRouterPercentText.IsVisible = _settings.OpenRouter.ShowProLimits;
-    }
-
-    private void UpdateOpenCodeProviderExpandedState()
-    {
-        OpenCodeDetailsPanel.IsVisible = _isOpenCodeProviderExpanded;
-        ApplyProviderDetailChrome();
-
-        if (_isOpenCodeProviderExpanded && _lastSnapshot is not null && !_lastSnapshot.IsError)
-            ApplyOpenCodeGoLimitsBreakdownLayout(_settings.OpenCode, _lastSnapshot.OpenCode);
+        RefreshCursorBreakdownVisibility(_lastSnapshot);
+        ApplyCodexLimitsBreakdownLayout(_settings.OpenAi, _lastSnapshot.Codex);
+        ApplyClaudeProLimitsBreakdownLayout(_settings.Claude, _lastSnapshot.ClaudePro);
+        ApplyAntigravityLimitsBreakdownLayout(_settings.Gemini, _lastSnapshot.Antigravity);
+        ApplyOpenCodeGoLimitsBreakdownLayout(_settings.OpenCode, _lastSnapshot.OpenCode);
     }
 
     private void RefreshCursorBreakdownVisibility(UsageSnapshot snapshot)
@@ -621,6 +443,13 @@ public partial class MainWindow : Window, ISettingsPanelHost
         var apiRounded = Math.Round(_lastApiPercent);
         AutoPercentText.Text = $"{autoRounded}%";
         ApiPercentText.Text = $"{apiRounded}%";
+        DateTimeOffset? cycleResetAt = snapshot.BillingCycleEndMs is > 0
+            ? DateTimeOffset.FromUnixTimeMilliseconds(snapshot.BillingCycleEndMs.Value)
+            : null;
+        // Breakdown is already visible here; show cycle reset with the bars (not gated on ShowDetails,
+        // which only controls the remaining-dollars footer).
+        ProviderLimitsPresenter.ApplyResetLabel(AutoResetText, cycleResetAt, showDetails: true);
+        ProviderLimitsPresenter.ApplyResetLabel(ApiResetText, cycleResetAt, showDetails: true);
         var apiPlanNote = CursorBreakdownPresenter.FormatApiPlanNote(snapshot.PlanLimitCents);
         ToolTip.SetTip(AutoBreakdownRow, "Additional usage beyond limits consumes API quota or on-demand spend.");
         ToolTip.SetTip(ApiBreakdownRow, apiPlanNote);
@@ -632,18 +461,22 @@ public partial class MainWindow : Window, ISettingsPanelHost
         if (!options.ShowProLimits)
             return;
 
+        var showNestedBreakdown = options.ShowProBreakdown && codex.IsAvailable;
         ProviderLimitsPresenter.ApplyBreakdownLayout(
             options.ShowProBreakdown,
             codex.IsAvailable,
-            ProviderLimitsPresenter.FormatCodexFooter(codex),
+            ProviderLimitsPresenter.FormatCodexFooter(codex, includeResets: !showNestedBreakdown),
             options.EffectiveShowProDetails,
             CodexBreakdownSection,
             CodexBreakdownPanel,
             CodexBarBorder,
             CodexRemainingText);
 
-        var showNestedBreakdown = options.ShowProBreakdown && codex.IsAvailable;
         CodexPercentText.IsVisible = options.ShowProLimits && !showNestedBreakdown;
+
+        var showResetLabels = showNestedBreakdown && options.EffectiveShowProDetails;
+        ProviderLimitsPresenter.ApplyResetLabel(CodexSessionResetText, codex.SessionResetsAt, showResetLabels);
+        ProviderLimitsPresenter.ApplyResetLabel(CodexWeeklyResetText, codex.WeeklyResetsAt, showResetLabels);
     }
 
     private void ApplyClaudeProLimitsBreakdownLayout(ProviderBillingSettings options, ClaudeProSnapshot pro)
@@ -651,18 +484,22 @@ public partial class MainWindow : Window, ISettingsPanelHost
         if (!options.ShowProLimits)
             return;
 
+        var showNestedBreakdown = options.ShowProBreakdown && pro.IsAvailable;
         ProviderLimitsPresenter.ApplyBreakdownLayout(
             options.ShowProBreakdown,
             pro.IsAvailable,
-            ProviderLimitsPresenter.FormatClaudeProFooter(pro),
+            ProviderLimitsPresenter.FormatClaudeProFooter(pro, includeResets: !showNestedBreakdown),
             options.EffectiveShowProDetails,
             ClaudeProBreakdownSection,
             ClaudeProBreakdownPanel,
             ClaudeProBarBorder,
             ClaudeProRemainingText);
 
-        var showNestedBreakdown = options.ShowProBreakdown && pro.IsAvailable;
         ClaudeProPercentText.IsVisible = options.ShowProLimits && !showNestedBreakdown;
+
+        var showResetLabels = showNestedBreakdown && options.EffectiveShowProDetails;
+        ProviderLimitsPresenter.ApplyResetLabel(ClaudeProSessionResetText, pro.SessionResetsAt, showResetLabels);
+        ProviderLimitsPresenter.ApplyResetLabel(ClaudeProWeeklyResetText, pro.WeeklyResetsAt, showResetLabels);
     }
 
     private void ApplyAntigravityLimitsBreakdownLayout(ProviderBillingSettings options, AntigravitySnapshot antigravity)
@@ -670,18 +507,28 @@ public partial class MainWindow : Window, ISettingsPanelHost
         if (!options.ShowProLimits)
             return;
 
+        var showNestedBreakdown = options.ShowProBreakdown && antigravity.IsAvailable;
         ProviderLimitsPresenter.ApplyBreakdownLayout(
             options.ShowProBreakdown,
             antigravity.IsAvailable,
-            ProviderLimitsPresenter.FormatAntigravityFooter(antigravity),
+            ProviderLimitsPresenter.FormatAntigravityFooter(antigravity, includeResets: !showNestedBreakdown),
             options.EffectiveShowProDetails,
             AntigravityBreakdownSection,
             AntigravityBreakdownPanel,
             AntigravityBarBorder,
             AntigravityRemainingText);
 
-        var showNestedBreakdown = options.ShowProBreakdown && antigravity.IsAvailable;
         AntigravityPercentText.IsVisible = options.ShowProLimits && !showNestedBreakdown;
+
+        var showResetLabels = showNestedBreakdown && options.EffectiveShowProDetails;
+        ProviderLimitsPresenter.ApplyResetLabel(
+            AntigravityGeminiSessionResetText, antigravity.Gemini.SessionResetsAt, showResetLabels);
+        ProviderLimitsPresenter.ApplyResetLabel(
+            AntigravityGeminiWeeklyResetText, antigravity.Gemini.WeeklyResetsAt, showResetLabels);
+        ProviderLimitsPresenter.ApplyResetLabel(
+            AntigravityThirdPartySessionResetText, antigravity.ThirdParty.SessionResetsAt, showResetLabels);
+        ProviderLimitsPresenter.ApplyResetLabel(
+            AntigravityThirdPartyWeeklyResetText, antigravity.ThirdParty.WeeklyResetsAt, showResetLabels);
     }
 
     private async void RefreshMenuItem_Click(object? sender, RoutedEventArgs e)
@@ -1089,11 +936,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
             CursorHeadlineFill.Background = UsageBarBrushes.GetBrush(Color.FromRgb(0xFF, 0x98, 0x00));
             ProviderBarPresenter.ApplyReadyGlow(CursorHeadlineFill, active: false);
             CursorHeadlineTrack.Opacity = 0.45;
-            if (ProviderDashboardPresenter.IsCursorDashboardVisible(_settings))
-            {
-                WriteProviderExpandState(ProviderExpandState.ExpandOnly(ProviderSection.Cursor));
-                UpdateAllProviderExpandedState();
-            }
+            UpdateAllProviderDetailState();
             OpenAiProviderSection.IsVisible = false;
             ClaudeProviderSection.IsVisible = false;
             GeminiProviderSection.IsVisible = false;
@@ -1114,7 +957,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
         ProgressFill.Background = UsageBarBrushes.GetBrush(accent);
         PercentText.Foreground = UsageBarBrushes.GetBrush(accent);
 
-        var showBreakdown = _settings.ShowBreakdown && snapshot.HasBreakdown && _isCursorProviderExpanded;
+        var showBreakdown = _settings.ShowBreakdown && snapshot.HasBreakdown;
         if (showBreakdown)
         {
             BreakdownPanel.IsVisible = true;
@@ -1454,7 +1297,9 @@ public partial class MainWindow : Window, ISettingsPanelHost
         var showBreakdown = options.ShowProBreakdown &&
                             openCode.HasGoSubscription &&
                             (openCode.GoRolling.IsAvailable || openCode.GoWeekly.IsAvailable || openCode.GoMonthly.IsAvailable);
-        var footer = ProviderLimitsPresenter.FormatOpenCodeGoFooter(openCode);
+        var footer = showBreakdown
+            ? ""
+            : ProviderLimitsPresenter.FormatOpenCodeGoResetTimes(openCode);
 
         ProviderLimitsPresenter.ApplyBreakdownLayout(
             showBreakdown,
@@ -1467,6 +1312,14 @@ public partial class MainWindow : Window, ISettingsPanelHost
             OpenCodeGoRemainingText);
 
         OpenCodeGoPercentText.IsVisible = options.ShowProLimits && !showBreakdown;
+
+        var showResetLabels = showBreakdown && options.EffectiveShowProDetails;
+        ProviderLimitsPresenter.ApplyResetLabel(
+            OpenCodeGoRollingResetText, openCode.GoRolling.ResetsAt, showResetLabels);
+        ProviderLimitsPresenter.ApplyResetLabel(
+            OpenCodeGoWeeklyResetText, openCode.GoWeekly.ResetsAt, showResetLabels);
+        ProviderLimitsPresenter.ApplyResetLabel(
+            OpenCodeGoMonthlyResetText, openCode.GoMonthly.ResetsAt, showResetLabels);
     }
 
     private static void ApplyAntigravityGroupBar(
@@ -1851,10 +1704,10 @@ public partial class MainWindow : Window, ISettingsPanelHost
 
     private void ApplyDegradedTooltips()
     {
-        ToolTip.SetTip(OpenAiProviderHeader, _widgetViewModel.OpenAi.DegradedMessage);
-        ToolTip.SetTip(GeminiProviderHeader, _widgetViewModel.Gemini.DegradedMessage);
-        ToolTip.SetTip(OpenRouterProviderHeader, _widgetViewModel.OpenRouter.DegradedMessage);
-        ToolTip.SetTip(OpenCodeProviderHeader, _widgetViewModel.OpenCode.DegradedMessage);
+        ToolTip.SetTip(OpenAiDetailsPanel, _widgetViewModel.OpenAi.DegradedMessage);
+        ToolTip.SetTip(GeminiDetailsPanel, _widgetViewModel.Gemini.DegradedMessage);
+        ToolTip.SetTip(OpenRouterDetailsPanel, _widgetViewModel.OpenRouter.DegradedMessage);
+        ToolTip.SetTip(OpenCodeDetailsPanel, _widgetViewModel.OpenCode.DegradedMessage);
     }
 
     private void SaveSettings()
@@ -1866,12 +1719,13 @@ public partial class MainWindow : Window, ISettingsPanelHost
             _settings.Top = Position.Y;
         }
         _settings.IsSettingsExpanded = _isSettingsExpanded;
-        _settings.IsCursorProviderExpanded = _isCursorProviderExpanded;
-        _settings.IsOpenAiProviderExpanded = _isOpenAiProviderExpanded;
-        _settings.IsClaudeProviderExpanded = _isClaudeProviderExpanded;
-        _settings.IsGeminiProviderExpanded = _isGeminiProviderExpanded;
-        _settings.IsOpenRouterProviderExpanded = _isOpenRouterProviderExpanded;
-        _settings.IsOpenCodeProviderExpanded = _isOpenCodeProviderExpanded;
+        // Provider accordion removed — persist always-expanded so older builds stay open.
+        _settings.IsCursorProviderExpanded = true;
+        _settings.IsOpenAiProviderExpanded = true;
+        _settings.IsClaudeProviderExpanded = true;
+        _settings.IsGeminiProviderExpanded = true;
+        _settings.IsOpenRouterProviderExpanded = true;
+        _settings.IsOpenCodeProviderExpanded = true;
         _settings.SettingsExpandedProvider = _settingsViewModel.ExpandedProvider;
         SettingsStore.Save(_settings);
     }

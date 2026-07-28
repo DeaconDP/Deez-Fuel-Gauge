@@ -115,9 +115,8 @@
             <StackPanel x:Name="CursorProviderSection">
                 <Border x:Name="CursorProviderHeader"
                         Background="Transparent"
-                        Cursor="Hand"
                         Margin="0,0,0,4"
-                        PointerPressed="CursorProvider_PointerPressed">
+                        IsVisible="False">
                     <StackPanel Spacing="2">
                         <TextBlock Text="Cursor"
                                    FontFamily="Segoe UI Semibold, Segoe UI, sans-serif"
@@ -135,7 +134,7 @@
                         </Grid>
                     </StackPanel>
                 </Border>
-                <StackPanel x:Name="CursorDetailsPanel" IsVisible="False">
+                <StackPanel x:Name="CursorDetailsPanel" IsVisible="True">
             <StackPanel x:Name="CursorSection">
                 <TextBlock x:Name="PercentText"
                            Text="..."
@@ -173,20 +172,30 @@
                                 Classes="breakdown-row"
                                 Background="Transparent">
                             <StackPanel>
-                                <Grid Margin="0,0,0,2">
-                                    <TextBlock Text="Auto + Composer"
+                                <Grid Margin="0,0,0,2" ColumnDefinitions="Auto,*,Auto">
+                                    <TextBlock Text="Cursor Auto + Composer"
                                                FontSize="11"
                                                FontWeight="SemiBold"
                                                LineHeight="15"
                                                Foreground="#FFE8E8E8"
-                                               HorizontalAlignment="Left" />
+                                               VerticalAlignment="Center" />
+                                    <TextBlock x:Name="AutoResetText"
+                                               Grid.Column="1"
+                                               Margin="6,0,6,0"
+                                               FontSize="9"
+                                               LineHeight="12"
+                                               Foreground="#FF777777"
+                                               TextTrimming="CharacterEllipsis"
+                                               HorizontalAlignment="Right"
+                                               VerticalAlignment="Center" />
                                     <TextBlock x:Name="AutoPercentText"
+                                               Grid.Column="2"
                                                Text=""
                                                FontSize="11"
                                                FontWeight="SemiBold"
                                                LineHeight="15"
                                                Foreground="#FFE8E8E8"
-                                               HorizontalAlignment="Right" />
+                                               VerticalAlignment="Center" />
                                 </Grid>
                                 <Grid x:Name="AutoProgressTrack" Height="6">
                                     <Border CornerRadius="3" Background="#33FFFFFF" />
@@ -202,20 +211,30 @@
                                 Classes="breakdown-row"
                                 Background="Transparent">
                             <StackPanel>
-                                <Grid Margin="0,0,0,2">
-                                    <TextBlock Text="API"
+                                <Grid Margin="0,0,0,2" ColumnDefinitions="Auto,*,Auto">
+                                    <TextBlock Text="Cursor API"
                                                FontSize="11"
                                                FontWeight="SemiBold"
                                                LineHeight="15"
                                                Foreground="#FFE8E8E8"
-                                               HorizontalAlignment="Left" />
+                                               VerticalAlignment="Center" />
+                                    <TextBlock x:Name="ApiResetText"
+                                               Grid.Column="1"
+                                               Margin="6,0,6,0"
+                                               FontSize="9"
+                                               LineHeight="12"
+                                               Foreground="#FF777777"
+                                               TextTrimming="CharacterEllipsis"
+                                               HorizontalAlignment="Right"
+                                               VerticalAlignment="Center" />
                                     <TextBlock x:Name="ApiPercentText"
+                                               Grid.Column="2"
                                                Text=""
                                                FontSize="11"
                                                FontWeight="SemiBold"
                                                LineHeight="15"
                                                Foreground="#FFE8E8E8"
-                                               HorizontalAlignment="Right" />
+                                               VerticalAlignment="Center" />
                                 </Grid>
                                 <Grid x:Name="ApiProgressTrack" Height="6">
                                     <Border CornerRadius="3" Background="#33FFFFFF" />
@@ -236,7 +255,7 @@
                            Foreground="#FFB0B0B0" />
             </StackPanel>
             <StackPanel x:Name="OpenAiSection" Margin="0,8,0,4" Spacing="2">
-                <TextBlock Text="OpenAI"
+                <TextBlock Text="Cursor OpenAI"
                            FontFamily="Segoe UI Semibold, Segoe UI, sans-serif"
                            FontSize="11"
                            FontWeight="SemiBold"
@@ -258,7 +277,7 @@
                        Foreground="#FF777777"
                        IsVisible="False" />
             <StackPanel x:Name="ClaudeSection" Margin="0,0,0,4" Spacing="2">
-                <TextBlock Text="Claude"
+                <TextBlock Text="Cursor Claude"
                            FontFamily="Segoe UI Semibold, Segoe UI, sans-serif"
                            FontSize="11"
                            FontWeight="SemiBold"
@@ -280,7 +299,7 @@
                        Foreground="#FF777777"
                        IsVisible="False" />
             <StackPanel x:Name="GeminiSection" Margin="0,0,0,4" Spacing="2">
-                <TextBlock Text="Gemini"
+                <TextBlock Text="Cursor Gemini"
                            FontFamily="Segoe UI Semibold, Segoe UI, sans-serif"
                            FontSize="11"
                            FontWeight="SemiBold"
@@ -306,9 +325,8 @@
             <StackPanel x:Name="OpenAiProviderSection">
                 <Border x:Name="OpenAiProviderHeader"
                         Background="Transparent"
-                        Cursor="Hand"
                         Margin="0,0,0,4"
-                        PointerPressed="OpenAiProvider_PointerPressed">
+                        IsVisible="False">
                     <StackPanel Spacing="2">
                         <TextBlock Text="OpenAI"
                                    FontFamily="Segoe UI Semibold, Segoe UI, sans-serif"
@@ -326,7 +344,7 @@
                         </Grid>
                     </StackPanel>
                 </Border>
-                <StackPanel x:Name="OpenAiDetailsPanel" IsVisible="False">
+                <StackPanel x:Name="OpenAiDetailsPanel" IsVisible="True">
             <StackPanel x:Name="OpenAiDirectSection" Margin="0,0,0,4" Spacing="2">
                 <TextBlock Text="OpenAI API"
                            FontFamily="Segoe UI Semibold, Segoe UI, sans-serif"
@@ -359,7 +377,7 @@
                 <Border x:Name="CodexBarBorder"
                         Background="Transparent">
                     <StackPanel Margin="0,5,0,5" Spacing="2">
-                        <TextBlock Text="Codex"
+                        <TextBlock Text="OpenAI Codex"
                                    FontFamily="Segoe UI Semibold, Segoe UI, sans-serif"
                                    FontSize="11"
                                    FontWeight="SemiBold"
@@ -384,20 +402,30 @@
                             Background="#FF252525">
                         <StackPanel Spacing="5">
                             <StackPanel x:Name="CodexSessionWindowSection">
-                                <Grid Margin="0,0,0,2">
-                                    <TextBlock Text="5h"
+                                <Grid Margin="0,0,0,2" ColumnDefinitions="Auto,*,Auto">
+                                    <TextBlock Text="OpenAI 5h"
                                                FontSize="11"
                                                FontWeight="SemiBold"
                                                LineHeight="15"
                                                Foreground="#FFE8E8E8"
-                                               HorizontalAlignment="Left" />
+                                               VerticalAlignment="Center" />
+                                    <TextBlock x:Name="CodexSessionResetText"
+                                               Grid.Column="1"
+                                               Margin="6,0,6,0"
+                                               FontSize="9"
+                                               LineHeight="12"
+                                               Foreground="#FF777777"
+                                               TextTrimming="CharacterEllipsis"
+                                               HorizontalAlignment="Right"
+                                               VerticalAlignment="Center" />
                                     <TextBlock x:Name="CodexSessionPercentText"
+                                               Grid.Column="2"
                                                Text=""
                                                FontSize="11"
                                                FontWeight="SemiBold"
                                                LineHeight="15"
                                                Foreground="#FFE8E8E8"
-                                               HorizontalAlignment="Right" />
+                                               VerticalAlignment="Center" />
                                 </Grid>
                                 <Grid x:Name="CodexSessionProgressTrack" Height="6">
                                     <Border CornerRadius="3" Background="#33FFFFFF" />
@@ -407,28 +435,32 @@
                                             Width="0"
                                             Background="#FF4CAF50" />
                                 </Grid>
-                                <TextBlock Text="Rolling 5-hour usage window."
-                                           FontSize="8"
-                                           LineHeight="11"
-                                           Foreground="#FF666666"
-                                           TextWrapping="Wrap"
-                                           Margin="0,4,0,0" />
                             </StackPanel>
                             <StackPanel x:Name="CodexWeeklyWindowSection">
-                                <Grid Margin="0,0,0,2">
-                                    <TextBlock Text="Weekly"
+                                <Grid Margin="0,0,0,2" ColumnDefinitions="Auto,*,Auto">
+                                    <TextBlock Text="OpenAI Weekly"
                                                FontSize="11"
                                                FontWeight="SemiBold"
                                                LineHeight="15"
                                                Foreground="#FFE8E8E8"
-                                               HorizontalAlignment="Left" />
+                                               VerticalAlignment="Center" />
+                                    <TextBlock x:Name="CodexWeeklyResetText"
+                                               Grid.Column="1"
+                                               Margin="6,0,6,0"
+                                               FontSize="9"
+                                               LineHeight="12"
+                                               Foreground="#FF777777"
+                                               TextTrimming="CharacterEllipsis"
+                                               HorizontalAlignment="Right"
+                                               VerticalAlignment="Center" />
                                     <TextBlock x:Name="CodexWeeklyPercentText"
+                                               Grid.Column="2"
                                                Text=""
                                                FontSize="11"
                                                FontWeight="SemiBold"
                                                LineHeight="15"
                                                Foreground="#FFE8E8E8"
-                                               HorizontalAlignment="Right" />
+                                               VerticalAlignment="Center" />
                                 </Grid>
                                 <Grid x:Name="CodexWeeklyProgressTrack" Height="6">
                                     <Border CornerRadius="3" Background="#33FFFFFF" />
@@ -438,12 +470,6 @@
                                             Width="0"
                                             Background="#FF4CAF50" />
                                 </Grid>
-                                <TextBlock Text="Rolling 7-day usage window."
-                                           FontSize="8"
-                                           LineHeight="11"
-                                           Foreground="#FF666666"
-                                           TextWrapping="Wrap"
-                                           Margin="0,4,0,0" />
                             </StackPanel>
                         </StackPanel>
                     </Border>
@@ -459,9 +485,8 @@
             <StackPanel x:Name="ClaudeProviderSection">
                 <Border x:Name="ClaudeProviderHeader"
                         Background="Transparent"
-                        Cursor="Hand"
                         Margin="0,0,0,4"
-                        PointerPressed="ClaudeProvider_PointerPressed">
+                        IsVisible="False">
                     <StackPanel Spacing="2">
                         <TextBlock Text="Claude"
                                    FontFamily="Segoe UI Semibold, Segoe UI, sans-serif"
@@ -479,7 +504,7 @@
                         </Grid>
                     </StackPanel>
                 </Border>
-                <StackPanel x:Name="ClaudeDetailsPanel" IsVisible="False">
+                <StackPanel x:Name="ClaudeDetailsPanel" IsVisible="True">
             <StackPanel x:Name="ClaudeDirectSection" Margin="0,0,0,4" Spacing="2">
                 <TextBlock Text="Claude API"
                            FontFamily="Segoe UI Semibold, Segoe UI, sans-serif"
@@ -537,20 +562,30 @@
                             Background="#FF252525">
                         <StackPanel Spacing="5">
                             <StackPanel>
-                                <Grid Margin="0,0,0,2">
-                                    <TextBlock Text="5h"
+                                <Grid Margin="0,0,0,2" ColumnDefinitions="Auto,*,Auto">
+                                    <TextBlock Text="Claude 5h"
                                                FontSize="11"
                                                FontWeight="SemiBold"
                                                LineHeight="15"
                                                Foreground="#FFE8E8E8"
-                                               HorizontalAlignment="Left" />
+                                               VerticalAlignment="Center" />
+                                    <TextBlock x:Name="ClaudeProSessionResetText"
+                                               Grid.Column="1"
+                                               Margin="6,0,6,0"
+                                               FontSize="9"
+                                               LineHeight="12"
+                                               Foreground="#FF777777"
+                                               TextTrimming="CharacterEllipsis"
+                                               HorizontalAlignment="Right"
+                                               VerticalAlignment="Center" />
                                     <TextBlock x:Name="ClaudeProSessionPercentText"
+                                               Grid.Column="2"
                                                Text=""
                                                FontSize="11"
                                                FontWeight="SemiBold"
                                                LineHeight="15"
                                                Foreground="#FFE8E8E8"
-                                               HorizontalAlignment="Right" />
+                                               VerticalAlignment="Center" />
                                 </Grid>
                                 <Grid x:Name="ClaudeProSessionProgressTrack" Height="6">
                                     <Border CornerRadius="3" Background="#33FFFFFF" />
@@ -560,28 +595,32 @@
                                             Width="0"
                                             Background="#FF4CAF50" />
                                 </Grid>
-                                <TextBlock Text="Rolling 5-hour usage window."
-                                           FontSize="8"
-                                           LineHeight="11"
-                                           Foreground="#FF666666"
-                                           TextWrapping="Wrap"
-                                           Margin="0,4,0,0" />
                             </StackPanel>
                             <StackPanel>
-                                <Grid Margin="0,0,0,2">
-                                    <TextBlock Text="Weekly"
+                                <Grid Margin="0,0,0,2" ColumnDefinitions="Auto,*,Auto">
+                                    <TextBlock Text="Claude Weekly"
                                                FontSize="11"
                                                FontWeight="SemiBold"
                                                LineHeight="15"
                                                Foreground="#FFE8E8E8"
-                                               HorizontalAlignment="Left" />
+                                               VerticalAlignment="Center" />
+                                    <TextBlock x:Name="ClaudeProWeeklyResetText"
+                                               Grid.Column="1"
+                                               Margin="6,0,6,0"
+                                               FontSize="9"
+                                               LineHeight="12"
+                                               Foreground="#FF777777"
+                                               TextTrimming="CharacterEllipsis"
+                                               HorizontalAlignment="Right"
+                                               VerticalAlignment="Center" />
                                     <TextBlock x:Name="ClaudeProWeeklyPercentText"
+                                               Grid.Column="2"
                                                Text=""
                                                FontSize="11"
                                                FontWeight="SemiBold"
                                                LineHeight="15"
                                                Foreground="#FFE8E8E8"
-                                               HorizontalAlignment="Right" />
+                                               VerticalAlignment="Center" />
                                 </Grid>
                                 <Grid x:Name="ClaudeProWeeklyProgressTrack" Height="6">
                                     <Border CornerRadius="3" Background="#33FFFFFF" />
@@ -591,12 +630,6 @@
                                             Width="0"
                                             Background="#FF4CAF50" />
                                 </Grid>
-                                <TextBlock Text="Rolling 7-day usage window."
-                                           FontSize="8"
-                                           LineHeight="11"
-                                           Foreground="#FF666666"
-                                           TextWrapping="Wrap"
-                                           Margin="0,4,0,0" />
                             </StackPanel>
                         </StackPanel>
                     </Border>
@@ -612,9 +645,8 @@
             <StackPanel x:Name="GeminiProviderSection">
                 <Border x:Name="GeminiProviderHeader"
                         Background="Transparent"
-                        Cursor="Hand"
                         Margin="0,0,0,4"
-                        PointerPressed="GeminiProvider_PointerPressed">
+                        IsVisible="False">
                     <StackPanel Spacing="2">
                         <TextBlock Text="Gemini"
                                    FontFamily="Segoe UI Semibold, Segoe UI, sans-serif"
@@ -632,7 +664,7 @@
                         </Grid>
                     </StackPanel>
                 </Border>
-                <StackPanel x:Name="GeminiDetailsPanel" IsVisible="False">
+                <StackPanel x:Name="GeminiDetailsPanel" IsVisible="True">
             <StackPanel x:Name="AntigravityLimitsSection" IsVisible="False">
                 <TextBlock x:Name="AntigravityPercentText"
                            Text="..."
@@ -668,20 +700,30 @@
                             Background="#FF252525">
                         <StackPanel Spacing="5">
                             <StackPanel>
-                                <Grid Margin="0,0,0,2">
+                                <Grid Margin="0,0,0,2" ColumnDefinitions="Auto,*,Auto">
                                     <TextBlock Text="Gemini 5h"
                                                FontSize="11"
                                                FontWeight="SemiBold"
                                                LineHeight="15"
                                                Foreground="#FFE8E8E8"
-                                               HorizontalAlignment="Left" />
+                                               VerticalAlignment="Center" />
+                                    <TextBlock x:Name="AntigravityGeminiSessionResetText"
+                                               Grid.Column="1"
+                                               Margin="6,0,6,0"
+                                               FontSize="9"
+                                               LineHeight="12"
+                                               Foreground="#FF777777"
+                                               TextTrimming="CharacterEllipsis"
+                                               HorizontalAlignment="Right"
+                                               VerticalAlignment="Center" />
                                     <TextBlock x:Name="AntigravityGeminiSessionPercentText"
+                                               Grid.Column="2"
                                                Text=""
                                                FontSize="11"
                                                FontWeight="SemiBold"
                                                LineHeight="15"
                                                Foreground="#FFE8E8E8"
-                                               HorizontalAlignment="Right" />
+                                               VerticalAlignment="Center" />
                                 </Grid>
                                 <Grid x:Name="AntigravityGeminiSessionProgressTrack" Height="6">
                                     <Border CornerRadius="3" Background="#33FFFFFF" />
@@ -693,20 +735,30 @@
                                 </Grid>
                             </StackPanel>
                             <StackPanel>
-                                <Grid Margin="0,0,0,2">
+                                <Grid Margin="0,0,0,2" ColumnDefinitions="Auto,*,Auto">
                                     <TextBlock Text="Gemini weekly"
                                                FontSize="11"
                                                FontWeight="SemiBold"
                                                LineHeight="15"
                                                Foreground="#FFE8E8E8"
-                                               HorizontalAlignment="Left" />
+                                               VerticalAlignment="Center" />
+                                    <TextBlock x:Name="AntigravityGeminiWeeklyResetText"
+                                               Grid.Column="1"
+                                               Margin="6,0,6,0"
+                                               FontSize="9"
+                                               LineHeight="12"
+                                               Foreground="#FF777777"
+                                               TextTrimming="CharacterEllipsis"
+                                               HorizontalAlignment="Right"
+                                               VerticalAlignment="Center" />
                                     <TextBlock x:Name="AntigravityGeminiWeeklyPercentText"
+                                               Grid.Column="2"
                                                Text=""
                                                FontSize="11"
                                                FontWeight="SemiBold"
                                                LineHeight="15"
                                                Foreground="#FFE8E8E8"
-                                               HorizontalAlignment="Right" />
+                                               VerticalAlignment="Center" />
                                 </Grid>
                                 <Grid x:Name="AntigravityGeminiWeeklyProgressTrack" Height="6">
                                     <Border CornerRadius="3" Background="#33FFFFFF" />
@@ -718,20 +770,30 @@
                                 </Grid>
                             </StackPanel>
                             <StackPanel>
-                                <Grid Margin="0,0,0,2">
-                                    <TextBlock Text="3P 5h"
+                                <Grid Margin="0,0,0,2" ColumnDefinitions="Auto,*,Auto">
+                                    <TextBlock Text="Gemini 3P 5h"
                                                FontSize="11"
                                                FontWeight="SemiBold"
                                                LineHeight="15"
                                                Foreground="#FFE8E8E8"
-                                               HorizontalAlignment="Left" />
+                                               VerticalAlignment="Center" />
+                                    <TextBlock x:Name="AntigravityThirdPartySessionResetText"
+                                               Grid.Column="1"
+                                               Margin="6,0,6,0"
+                                               FontSize="9"
+                                               LineHeight="12"
+                                               Foreground="#FF777777"
+                                               TextTrimming="CharacterEllipsis"
+                                               HorizontalAlignment="Right"
+                                               VerticalAlignment="Center" />
                                     <TextBlock x:Name="AntigravityThirdPartySessionPercentText"
+                                               Grid.Column="2"
                                                Text=""
                                                FontSize="11"
                                                FontWeight="SemiBold"
                                                LineHeight="15"
                                                Foreground="#FFE8E8E8"
-                                               HorizontalAlignment="Right" />
+                                               VerticalAlignment="Center" />
                                 </Grid>
                                 <Grid x:Name="AntigravityThirdPartySessionProgressTrack" Height="6">
                                     <Border CornerRadius="3" Background="#33FFFFFF" />
@@ -743,20 +805,30 @@
                                 </Grid>
                             </StackPanel>
                             <StackPanel>
-                                <Grid Margin="0,0,0,2">
-                                    <TextBlock Text="3P weekly"
+                                <Grid Margin="0,0,0,2" ColumnDefinitions="Auto,*,Auto">
+                                    <TextBlock Text="Gemini 3P weekly"
                                                FontSize="11"
                                                FontWeight="SemiBold"
                                                LineHeight="15"
                                                Foreground="#FFE8E8E8"
-                                               HorizontalAlignment="Left" />
+                                               VerticalAlignment="Center" />
+                                    <TextBlock x:Name="AntigravityThirdPartyWeeklyResetText"
+                                               Grid.Column="1"
+                                               Margin="6,0,6,0"
+                                               FontSize="9"
+                                               LineHeight="12"
+                                               Foreground="#FF777777"
+                                               TextTrimming="CharacterEllipsis"
+                                               HorizontalAlignment="Right"
+                                               VerticalAlignment="Center" />
                                     <TextBlock x:Name="AntigravityThirdPartyWeeklyPercentText"
+                                               Grid.Column="2"
                                                Text=""
                                                FontSize="11"
                                                FontWeight="SemiBold"
                                                LineHeight="15"
                                                Foreground="#FFE8E8E8"
-                                               HorizontalAlignment="Right" />
+                                               VerticalAlignment="Center" />
                                 </Grid>
                                 <Grid x:Name="AntigravityThirdPartyWeeklyProgressTrack" Height="6">
                                     <Border CornerRadius="3" Background="#33FFFFFF" />
@@ -781,9 +853,8 @@
             <StackPanel x:Name="OpenRouterProviderSection">
                 <Border x:Name="OpenRouterProviderHeader"
                         Background="Transparent"
-                        Cursor="Hand"
                         Margin="0,0,0,4"
-                        PointerPressed="OpenRouterProvider_PointerPressed">
+                        IsVisible="False">
                     <StackPanel Spacing="2">
                         <TextBlock Text="OpenRouter"
                                    FontFamily="Segoe UI Semibold, Segoe UI, sans-serif"
@@ -801,7 +872,7 @@
                         </Grid>
                     </StackPanel>
                 </Border>
-                <StackPanel x:Name="OpenRouterDetailsPanel" IsVisible="False">
+                <StackPanel x:Name="OpenRouterDetailsPanel" IsVisible="True">
                     <StackPanel x:Name="OpenRouterLimitsSection" IsVisible="False">
                         <TextBlock x:Name="OpenRouterPercentText"
                                    Text="..."
@@ -810,7 +881,7 @@
                                    LineHeight="15"
                                    Foreground="#FFE8E8E8" />
                         <StackPanel Margin="0,5,0,5" Spacing="2">
-                            <TextBlock Text="Credits"
+                            <TextBlock Text="OpenRouter Credits"
                                        FontFamily="Segoe UI Semibold, Segoe UI, sans-serif"
                                        FontSize="11"
                                        FontWeight="SemiBold"
@@ -837,9 +908,8 @@
             <StackPanel x:Name="OpenCodeProviderSection">
                 <Border x:Name="OpenCodeProviderHeader"
                         Background="Transparent"
-                        Cursor="Hand"
                         Margin="0,0,0,4"
-                        PointerPressed="OpenCodeProvider_PointerPressed">
+                        IsVisible="False">
                     <StackPanel Spacing="2">
                         <TextBlock Text="OpenCode"
                                    FontFamily="Segoe UI Semibold, Segoe UI, sans-serif"
@@ -857,9 +927,9 @@
                         </Grid>
                     </StackPanel>
                 </Border>
-                <StackPanel x:Name="OpenCodeDetailsPanel" IsVisible="False">
+                <StackPanel x:Name="OpenCodeDetailsPanel" IsVisible="True">
                     <StackPanel x:Name="OpenCodeZenSection" Margin="0,0,0,4" IsVisible="False" Spacing="2">
-                        <TextBlock Text="Zen"
+                        <TextBlock Text="OpenCode Zen"
                                    FontFamily="Segoe UI Semibold, Segoe UI, sans-serif"
                                    FontSize="11"
                                    FontWeight="SemiBold"
@@ -890,7 +960,7 @@
                         <Border x:Name="OpenCodeGoBarBorder"
                                 Background="Transparent">
                             <StackPanel Margin="0,5,0,5" Spacing="2">
-                                <TextBlock Text="Go"
+                                <TextBlock Text="OpenCode Go"
                                            FontFamily="Segoe UI Semibold, Segoe UI, sans-serif"
                                            FontSize="11"
                                            FontWeight="SemiBold"
@@ -915,20 +985,30 @@
                                     Background="#FF252525">
                                 <StackPanel Spacing="5">
                                     <StackPanel>
-                                        <Grid Margin="0,0,0,2">
-                                            <TextBlock Text="5h"
+                                        <Grid Margin="0,0,0,2" ColumnDefinitions="Auto,*,Auto">
+                                            <TextBlock Text="OpenCode 5h"
                                                        FontSize="11"
                                                        FontWeight="SemiBold"
                                                        LineHeight="15"
                                                        Foreground="#FFE8E8E8"
-                                                       HorizontalAlignment="Left" />
+                                                       VerticalAlignment="Center" />
+                                            <TextBlock x:Name="OpenCodeGoRollingResetText"
+                                                       Grid.Column="1"
+                                                       Margin="6,0,6,0"
+                                                       FontSize="9"
+                                                       LineHeight="12"
+                                                       Foreground="#FF777777"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       HorizontalAlignment="Right"
+                                                       VerticalAlignment="Center" />
                                             <TextBlock x:Name="OpenCodeGoRollingPercentText"
+                                                       Grid.Column="2"
                                                        Text=""
                                                        FontSize="11"
                                                        FontWeight="SemiBold"
                                                        LineHeight="15"
                                                        Foreground="#FFE8E8E8"
-                                                       HorizontalAlignment="Right" />
+                                                       VerticalAlignment="Center" />
                                         </Grid>
                                         <Grid x:Name="OpenCodeGoRollingProgressTrack" Height="6">
                                             <Border CornerRadius="3" Background="#33FFFFFF" />
@@ -940,20 +1020,30 @@
                                         </Grid>
                                     </StackPanel>
                                     <StackPanel>
-                                        <Grid Margin="0,0,0,2">
-                                            <TextBlock Text="Week"
+                                        <Grid Margin="0,0,0,2" ColumnDefinitions="Auto,*,Auto">
+                                            <TextBlock Text="OpenCode Week"
                                                        FontSize="11"
                                                        FontWeight="SemiBold"
                                                        LineHeight="15"
                                                        Foreground="#FFE8E8E8"
-                                                       HorizontalAlignment="Left" />
+                                                       VerticalAlignment="Center" />
+                                            <TextBlock x:Name="OpenCodeGoWeeklyResetText"
+                                                       Grid.Column="1"
+                                                       Margin="6,0,6,0"
+                                                       FontSize="9"
+                                                       LineHeight="12"
+                                                       Foreground="#FF777777"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       HorizontalAlignment="Right"
+                                                       VerticalAlignment="Center" />
                                             <TextBlock x:Name="OpenCodeGoWeeklyPercentText"
+                                                       Grid.Column="2"
                                                        Text=""
                                                        FontSize="11"
                                                        FontWeight="SemiBold"
                                                        LineHeight="15"
                                                        Foreground="#FFE8E8E8"
-                                                       HorizontalAlignment="Right" />
+                                                       VerticalAlignment="Center" />
                                         </Grid>
                                         <Grid x:Name="OpenCodeGoWeeklyProgressTrack" Height="6">
                                             <Border CornerRadius="3" Background="#33FFFFFF" />
@@ -965,20 +1055,30 @@
                                         </Grid>
                                     </StackPanel>
                                     <StackPanel>
-                                        <Grid Margin="0,0,0,2">
-                                            <TextBlock Text="Month"
+                                        <Grid Margin="0,0,0,2" ColumnDefinitions="Auto,*,Auto">
+                                            <TextBlock Text="OpenCode Month"
                                                        FontSize="11"
                                                        FontWeight="SemiBold"
                                                        LineHeight="15"
                                                        Foreground="#FFE8E8E8"
-                                                       HorizontalAlignment="Left" />
+                                                       VerticalAlignment="Center" />
+                                            <TextBlock x:Name="OpenCodeGoMonthlyResetText"
+                                                       Grid.Column="1"
+                                                       Margin="6,0,6,0"
+                                                       FontSize="9"
+                                                       LineHeight="12"
+                                                       Foreground="#FF777777"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       HorizontalAlignment="Right"
+                                                       VerticalAlignment="Center" />
                                             <TextBlock x:Name="OpenCodeGoMonthlyPercentText"
+                                                       Grid.Column="2"
                                                        Text=""
                                                        FontSize="11"
                                                        FontWeight="SemiBold"
                                                        LineHeight="15"
                                                        Foreground="#FFE8E8E8"
-                                                       HorizontalAlignment="Right" />
+                                                       VerticalAlignment="Center" />
                                         </Grid>
                                         <Grid x:Name="OpenCodeGoMonthlyProgressTrack" Height="6">
                                             <Border CornerRadius="3" Background="#33FFFFFF" />
@@ -1001,11 +1101,11 @@
                 </StackPanel>
             </StackPanel>
             <StackPanel x:Name="HardwareSection"
-                        Margin="0,6,0,0"
+                        Margin="0,3,0,0"
                         Spacing="4"
                         IsVisible="False" />
             <StackPanel x:Name="DiskSection"
-                        Margin="0,6,0,0"
+                        Margin="0,3,0,0"
                         Spacing="4"
                         IsVisible="False" />
             <Grid Margin="0,9,0,0">
