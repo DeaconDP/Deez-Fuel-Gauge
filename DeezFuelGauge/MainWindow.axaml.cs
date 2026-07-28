@@ -171,9 +171,28 @@ public partial class MainWindow : Window, ISettingsPanelHost
 
     private void ApplyInitialPosition()
     {
+        var width = (int)Math.Max(1, Bounds.Width);
+        var height = (int)Math.Max(1, Bounds.Height);
+        var workingAreas = Screens.All
+            .Select(s => (s.WorkingArea.X, s.WorkingArea.Y, s.WorkingArea.Width, s.WorkingArea.Height))
+            .ToList();
+
         if (_settings.IsPositionPinned)
         {
-            Position = new PixelPoint((int)_settings.Left, (int)_settings.Top);
+            var (x, y) = WindowAnchorHelper.ClampToWorkingAreas(
+                (int)_settings.Left,
+                (int)_settings.Top,
+                width,
+                height,
+                workingAreas);
+            Position = new PixelPoint(x, y);
+            if (x != (int)_settings.Left || y != (int)_settings.Top)
+            {
+                _settings.Left = x;
+                _settings.Top = y;
+                SaveSettings();
+            }
+
             return;
         }
 
@@ -182,11 +201,9 @@ public partial class MainWindow : Window, ISettingsPanelHost
             return;
 
         var area = screen.WorkingArea;
-        var width = (int)Math.Max(1, Bounds.Width);
-        var height = (int)Math.Max(1, Bounds.Height);
-        var (x, y) = WindowAnchorHelper.ComputeCenteredPosition(
+        var (cx, cy) = WindowAnchorHelper.ComputeCenteredPosition(
             area.X, area.Y, area.Width, area.Height, width, height);
-        Position = new PixelPoint(x, y);
+        Position = new PixelPoint(cx, cy);
     }
 
     private void PinToggle_PointerPressed(object? sender, PointerPressedEventArgs e)

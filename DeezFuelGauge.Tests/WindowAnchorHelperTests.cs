@@ -58,4 +58,43 @@ public sealed class WindowAnchorHelperTests
         Assert.Equal(100, x);
         Assert.Equal(50, y);
     }
+
+    [Fact]
+    public void ClampToWorkingAreas_keeps_position_when_already_visible()
+    {
+        var areas = new[] { (0, 0, 1728, 1117) };
+
+        var (x, y) = WindowAnchorHelper.ClampToWorkingAreas(1200, 600, 300, 254, areas);
+
+        Assert.Equal(1200, x);
+        Assert.Equal(600, y);
+    }
+
+    [Fact]
+    public void ClampToWorkingAreas_pulls_offscreen_pinned_window_onto_display()
+    {
+        // Saved coords from a disconnected secondary monitor (below the laptop panel).
+        var areas = new[] { (0, 0, 1728, 1117) };
+
+        var (x, y) = WindowAnchorHelper.ClampToWorkingAreas(1428, 1353, 300, 254, areas);
+
+        Assert.Equal(1428, x);
+        Assert.Equal(1117 - 254, y);
+        Assert.True(WindowAnchorHelper.HasVisibleOverlap(x, y, 300, 254, areas[0]));
+    }
+
+    [Fact]
+    public void ClampToWorkingAreas_chooses_nearest_of_multiple_displays()
+    {
+        var areas = new[]
+        {
+            (0, 0, 1728, 1117),
+            (1728, 0, 1920, 1080)
+        };
+
+        var (x, y) = WindowAnchorHelper.ClampToWorkingAreas(4000, 40, 300, 254, areas);
+
+        Assert.Equal(1728 + 1920 - 300, x);
+        Assert.Equal(40, y);
+    }
 }
