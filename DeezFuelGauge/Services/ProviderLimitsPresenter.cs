@@ -89,15 +89,16 @@ public static class ProviderLimitsPresenter
         if (!openCode.HasGoSubscription)
             return "";
 
-        var parts = new List<string>();
-        if (openCode.GoRolling.ResetsAt is { } rollingReset)
-            parts.Add($"5h resets {FormatResetTime(rollingReset)}");
-        if (openCode.GoWeekly.ResetsAt is { } weeklyReset)
-            parts.Add($"weekly resets {FormatResetTime(weeklyReset)}");
-        if (openCode.GoMonthly.ResetsAt is { } monthlyReset)
-            parts.Add($"monthly resets {FormatResetTime(monthlyReset)}");
+        // Reset times are shown inline beside each window bar when breakdown is visible.
+        return "";
+    }
 
-        return string.Join(" · ", parts);
+    public static string FormatResetLabel(DateTimeOffset? resetsAt)
+    {
+        if (resetsAt is not { } reset)
+            return "";
+
+        return $"⟲ {FormatResetTime(reset)}";
     }
 
     public static string FormatResetTimes(DateTimeOffset? sessionResetsAt, DateTimeOffset? weeklyResetsAt)
@@ -112,34 +113,45 @@ public static class ProviderLimitsPresenter
         return string.Join(" · ", parts);
     }
 
-    public static string FormatCodexFooter(CodexSnapshot codex)
+    public static string FormatOpenCodeGoResetTimes(OpenCodeSnapshot openCode)
     {
-        if (!codex.IsAvailable)
+        if (!openCode.HasGoSubscription)
             return "";
 
         var parts = new List<string>();
-        if (!string.IsNullOrWhiteSpace(codex.PlanLabel))
-            parts.Add(codex.PlanLabel);
-
-        if (codex.CreditsBalanceUsd is { } balance)
-            parts.Add($"${balance.ToString("F0", CultureInfo.InvariantCulture)} ChatGPT credits");
-
-        var resets = FormatResetTimes(codex.SessionResetsAt, codex.WeeklyResetsAt);
-        if (!string.IsNullOrEmpty(resets))
-            parts.Add(resets);
+        if (openCode.GoRolling.ResetsAt is { } rollingReset)
+            parts.Add($"5h resets {FormatResetTime(rollingReset)}");
+        if (openCode.GoWeekly.ResetsAt is { } weeklyReset)
+            parts.Add($"weekly resets {FormatResetTime(weeklyReset)}");
+        if (openCode.GoMonthly.ResetsAt is { } monthlyReset)
+            parts.Add($"monthly resets {FormatResetTime(monthlyReset)}");
 
         return string.Join(" · ", parts);
     }
 
-    public static string FormatClaudeProFooter(ClaudeProSnapshot pro)
+    public static string FormatCodexFooter(CodexSnapshot codex, bool includeResets = true)
+    {
+        if (!codex.IsAvailable)
+            return "";
+
+        // ponytail: plan/credits footer hidden for now; resets stay inline on bars when breakdown is shown
+        if (!includeResets)
+            return "";
+
+        return FormatResetTimes(codex.SessionResetsAt, codex.WeeklyResetsAt);
+    }
+
+    public static string FormatClaudeProFooter(ClaudeProSnapshot pro, bool includeResets = true)
     {
         if (!pro.IsAvailable)
             return "";
 
-        return FormatResetTimes(pro.SessionResetsAt, pro.WeeklyResetsAt);
+        return includeResets
+            ? FormatResetTimes(pro.SessionResetsAt, pro.WeeklyResetsAt)
+            : "";
     }
 
-    public static string FormatAntigravityFooter(AntigravitySnapshot snapshot)
+    public static string FormatAntigravityFooter(AntigravitySnapshot snapshot, bool includeResets = true)
     {
         if (!snapshot.IsAvailable)
             return "";
@@ -148,9 +160,12 @@ public static class ProviderLimitsPresenter
         if (!string.IsNullOrWhiteSpace(snapshot.PlanLabel))
             parts.Add(snapshot.PlanLabel);
 
-        var resets = FormatAntigravityResetTimes(snapshot);
-        if (!string.IsNullOrEmpty(resets))
-            parts.Add(resets);
+        if (includeResets)
+        {
+            var resets = FormatAntigravityResetTimes(snapshot);
+            if (!string.IsNullOrEmpty(resets))
+                parts.Add(resets);
+        }
 
         return string.Join(" · ", parts);
     }
@@ -172,17 +187,8 @@ public static class ProviderLimitsPresenter
         return first < second ? first : second;
     }
 
-    private static string FormatResetTime(DateTimeOffset resetAt)
-    {
-        var local = resetAt.ToLocalTime();
-        if (local.Date == DateTime.Today)
-            return local.ToString("t", CultureInfo.CurrentCulture);
-
-        if (local.Date < DateTime.Today.AddDays(7))
-            return local.ToString("ddd h:mm tt", CultureInfo.CurrentCulture);
-
-        return local.ToString("MMM d h:mm tt", CultureInfo.CurrentCulture);
-    }
+    private static string FormatResetTime(DateTimeOffset resetAt) =>
+        resetAt.ToLocalTime().ToString("ddd d MMM HH:mm", CultureInfo.InvariantCulture);
 
     public static void ApplyHeadline(
         double headlinePercent,
@@ -238,6 +244,13 @@ public static class ProviderLimitsPresenter
         percentText.Text = $"{rounded.ToString(CultureInfo.InvariantCulture)}%";
         fill.Background = new SolidColorBrush(UsageBarColors.GetColorForPercent(percentUsed));
         ProviderBarPresenter.UpdateProgressWidth(track, fill, percentUsed);
+    }
+
+    public static void ApplyResetLabel(TextBlock resetText, DateTimeOffset? resetsAt, bool showDetails)
+    {
+        var label = showDetails ? FormatResetLabel(resetsAt) : "";
+        resetText.Text = label;
+        resetText.IsVisible = !string.IsNullOrEmpty(label);
     }
 
     public static void ApplyBreakdownLayout(
