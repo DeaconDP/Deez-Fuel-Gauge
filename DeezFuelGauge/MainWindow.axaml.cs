@@ -171,9 +171,28 @@ public partial class MainWindow : Window, ISettingsPanelHost
 
     private void ApplyInitialPosition()
     {
+        var width = (int)Math.Max(1, Bounds.Width);
+        var height = (int)Math.Max(1, Bounds.Height);
+        var workingAreas = Screens.All
+            .Select(s => (s.WorkingArea.X, s.WorkingArea.Y, s.WorkingArea.Width, s.WorkingArea.Height))
+            .ToList();
+
         if (_settings.IsPositionPinned)
         {
-            Position = new PixelPoint((int)_settings.Left, (int)_settings.Top);
+            var (x, y) = WindowAnchorHelper.ClampToWorkingAreas(
+                (int)_settings.Left,
+                (int)_settings.Top,
+                width,
+                height,
+                workingAreas);
+            Position = new PixelPoint(x, y);
+            if (x != (int)_settings.Left || y != (int)_settings.Top)
+            {
+                _settings.Left = x;
+                _settings.Top = y;
+                SaveSettings();
+            }
+
             return;
         }
 
@@ -182,11 +201,9 @@ public partial class MainWindow : Window, ISettingsPanelHost
             return;
 
         var area = screen.WorkingArea;
-        var width = (int)Math.Max(1, Bounds.Width);
-        var height = (int)Math.Max(1, Bounds.Height);
-        var (x, y) = WindowAnchorHelper.ComputeCenteredPosition(
+        var (cx, cy) = WindowAnchorHelper.ComputeCenteredPosition(
             area.X, area.Y, area.Width, area.Height, width, height);
-        Position = new PixelPoint(x, y);
+        Position = new PixelPoint(cx, cy);
     }
 
     private void PinToggle_PointerPressed(object? sender, PointerPressedEventArgs e)
@@ -446,10 +463,18 @@ public partial class MainWindow : Window, ISettingsPanelHost
         DateTimeOffset? cycleResetAt = snapshot.BillingCycleEndMs is > 0
             ? DateTimeOffset.FromUnixTimeMilliseconds(snapshot.BillingCycleEndMs.Value)
             : null;
+        DateTimeOffset? cycleStartAt = snapshot.BillingCycleStartMs is > 0
+            ? DateTimeOffset.FromUnixTimeMilliseconds(snapshot.BillingCycleStartMs.Value)
+            : null;
+        double? cycleProgress = cycleResetAt is { } end
+            ? cycleStartAt is { } start
+                ? UsageBarColors.GetResetProgressPercent(start, end)
+                : UsageBarColors.GetResetProgressPercent(end, UsageBarColors.MonthlyWindow)
+            : null;
         // Breakdown is already visible here; show cycle reset with the bars (not gated on ShowDetails,
         // which only controls the remaining-dollars footer).
-        ProviderLimitsPresenter.ApplyResetLabel(AutoResetText, cycleResetAt, showDetails: true);
-        ProviderLimitsPresenter.ApplyResetLabel(ApiResetText, cycleResetAt, showDetails: true);
+        ProviderLimitsPresenter.ApplyResetLabel(AutoResetText, cycleResetAt, showDetails: true, cycleProgress);
+        ProviderLimitsPresenter.ApplyResetLabel(ApiResetText, cycleResetAt, showDetails: true, cycleProgress);
         var apiPlanNote = CursorBreakdownPresenter.FormatApiPlanNote(snapshot.PlanLimitCents);
         ToolTip.SetTip(AutoBreakdownRow, "Additional usage beyond limits consumes API quota or on-demand spend.");
         ToolTip.SetTip(ApiBreakdownRow, apiPlanNote);
@@ -475,8 +500,16 @@ public partial class MainWindow : Window, ISettingsPanelHost
         CodexPercentText.IsVisible = options.ShowProLimits && !showNestedBreakdown;
 
         var showResetLabels = showNestedBreakdown && options.EffectiveShowProDetails;
-        ProviderLimitsPresenter.ApplyResetLabel(CodexSessionResetText, codex.SessionResetsAt, showResetLabels);
-        ProviderLimitsPresenter.ApplyResetLabel(CodexWeeklyResetText, codex.WeeklyResetsAt, showResetLabels);
+        ProviderLimitsPresenter.ApplyResetLabel(
+            CodexSessionResetText,
+            codex.SessionResetsAt,
+            showResetLabels,
+            ResetProgress(codex.SessionResetsAt, UsageBarColors.FiveHourWindow));
+        ProviderLimitsPresenter.ApplyResetLabel(
+            CodexWeeklyResetText,
+            codex.WeeklyResetsAt,
+            showResetLabels,
+            ResetProgress(codex.WeeklyResetsAt, UsageBarColors.WeeklyWindow));
     }
 
     private void ApplyClaudeProLimitsBreakdownLayout(ProviderBillingSettings options, ClaudeProSnapshot pro)
@@ -498,8 +531,16 @@ public partial class MainWindow : Window, ISettingsPanelHost
         ClaudeProPercentText.IsVisible = options.ShowProLimits && !showNestedBreakdown;
 
         var showResetLabels = showNestedBreakdown && options.EffectiveShowProDetails;
-        ProviderLimitsPresenter.ApplyResetLabel(ClaudeProSessionResetText, pro.SessionResetsAt, showResetLabels);
-        ProviderLimitsPresenter.ApplyResetLabel(ClaudeProWeeklyResetText, pro.WeeklyResetsAt, showResetLabels);
+        ProviderLimitsPresenter.ApplyResetLabel(
+            ClaudeProSessionResetText,
+            pro.SessionResetsAt,
+            showResetLabels,
+            ResetProgress(pro.SessionResetsAt, UsageBarColors.FiveHourWindow));
+        ProviderLimitsPresenter.ApplyResetLabel(
+            ClaudeProWeeklyResetText,
+            pro.WeeklyResetsAt,
+            showResetLabels,
+            ResetProgress(pro.WeeklyResetsAt, UsageBarColors.WeeklyWindow));
     }
 
     private void ApplyAntigravityLimitsBreakdownLayout(ProviderBillingSettings options, AntigravitySnapshot antigravity)
@@ -522,13 +563,25 @@ public partial class MainWindow : Window, ISettingsPanelHost
 
         var showResetLabels = showNestedBreakdown && options.EffectiveShowProDetails;
         ProviderLimitsPresenter.ApplyResetLabel(
-            AntigravityGeminiSessionResetText, antigravity.Gemini.SessionResetsAt, showResetLabels);
+            AntigravityGeminiSessionResetText,
+            antigravity.Gemini.SessionResetsAt,
+            showResetLabels,
+            ResetProgress(antigravity.Gemini.SessionResetsAt, UsageBarColors.FiveHourWindow));
         ProviderLimitsPresenter.ApplyResetLabel(
-            AntigravityGeminiWeeklyResetText, antigravity.Gemini.WeeklyResetsAt, showResetLabels);
+            AntigravityGeminiWeeklyResetText,
+            antigravity.Gemini.WeeklyResetsAt,
+            showResetLabels,
+            ResetProgress(antigravity.Gemini.WeeklyResetsAt, UsageBarColors.WeeklyWindow));
         ProviderLimitsPresenter.ApplyResetLabel(
-            AntigravityThirdPartySessionResetText, antigravity.ThirdParty.SessionResetsAt, showResetLabels);
+            AntigravityThirdPartySessionResetText,
+            antigravity.ThirdParty.SessionResetsAt,
+            showResetLabels,
+            ResetProgress(antigravity.ThirdParty.SessionResetsAt, UsageBarColors.FiveHourWindow));
         ProviderLimitsPresenter.ApplyResetLabel(
-            AntigravityThirdPartyWeeklyResetText, antigravity.ThirdParty.WeeklyResetsAt, showResetLabels);
+            AntigravityThirdPartyWeeklyResetText,
+            antigravity.ThirdParty.WeeklyResetsAt,
+            showResetLabels,
+            ResetProgress(antigravity.ThirdParty.WeeklyResetsAt, UsageBarColors.WeeklyWindow));
     }
 
     private async void RefreshMenuItem_Click(object? sender, RoutedEventArgs e)
@@ -1315,12 +1368,26 @@ public partial class MainWindow : Window, ISettingsPanelHost
 
         var showResetLabels = showBreakdown && options.EffectiveShowProDetails;
         ProviderLimitsPresenter.ApplyResetLabel(
-            OpenCodeGoRollingResetText, openCode.GoRolling.ResetsAt, showResetLabels);
+            OpenCodeGoRollingResetText,
+            openCode.GoRolling.ResetsAt,
+            showResetLabels,
+            ResetProgress(openCode.GoRolling.ResetsAt, UsageBarColors.FiveHourWindow));
         ProviderLimitsPresenter.ApplyResetLabel(
-            OpenCodeGoWeeklyResetText, openCode.GoWeekly.ResetsAt, showResetLabels);
+            OpenCodeGoWeeklyResetText,
+            openCode.GoWeekly.ResetsAt,
+            showResetLabels,
+            ResetProgress(openCode.GoWeekly.ResetsAt, UsageBarColors.WeeklyWindow));
         ProviderLimitsPresenter.ApplyResetLabel(
-            OpenCodeGoMonthlyResetText, openCode.GoMonthly.ResetsAt, showResetLabels);
+            OpenCodeGoMonthlyResetText,
+            openCode.GoMonthly.ResetsAt,
+            showResetLabels,
+            ResetProgress(openCode.GoMonthly.ResetsAt, UsageBarColors.MonthlyWindow));
     }
+
+    private static double? ResetProgress(DateTimeOffset? resetsAt, TimeSpan windowDuration) =>
+        resetsAt is { } reset
+            ? UsageBarColors.GetResetProgressPercent(reset, windowDuration)
+            : null;
 
     private static void ApplyAntigravityGroupBar(
         AntigravityGroupSnapshot group,

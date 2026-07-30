@@ -154,6 +154,32 @@ public sealed class ProviderLimitsPresenterTests
     }
 
     [Fact]
+    public void ApplyResetLabel_colors_text_from_reset_progress()
+    {
+        var resetText = new TextBlock();
+        var resetsAt = DateTimeOffset.UtcNow.AddHours(1);
+
+        ProviderLimitsPresenter.ApplyResetLabel(resetText, resetsAt, showDetails: true, resetProgressPercent: 80);
+
+        Assert.True(resetText.IsVisible);
+        Assert.StartsWith("⟲ ", resetText.Text);
+        var brush = Assert.IsType<Avalonia.Media.SolidColorBrush>(resetText.Foreground);
+        Assert.Equal(UsageBarColors.MutedResetYellow, brush.Color);
+    }
+
+    [Fact]
+    public void ApplyResetLabel_uses_fallback_gray_without_progress()
+    {
+        var resetText = new TextBlock();
+        var resetsAt = DateTimeOffset.UtcNow.AddHours(1);
+
+        ProviderLimitsPresenter.ApplyResetLabel(resetText, resetsAt, showDetails: true);
+
+        var brush = Assert.IsType<Avalonia.Media.SolidColorBrush>(resetText.Foreground);
+        Assert.Equal(UsageBarColors.ResetLabelFallback, brush.Color);
+    }
+
+    [Fact]
     public void FormatAntigravityFooter_includes_plan_and_reset_times()
     {
         var sessionReset = new DateTimeOffset(2026, 6, 24, 14, 30, 0, TimeSpan.Zero);
