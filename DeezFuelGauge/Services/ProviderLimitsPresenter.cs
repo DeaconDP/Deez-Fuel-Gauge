@@ -246,11 +246,22 @@ public static class ProviderLimitsPresenter
         ProviderBarPresenter.UpdateProgressWidth(track, fill, percentUsed);
     }
 
-    public static void ApplyResetLabel(TextBlock resetText, DateTimeOffset? resetsAt, bool showDetails)
+    public static void ApplyResetLabel(
+        TextBlock resetText,
+        DateTimeOffset? resetsAt,
+        bool showDetails,
+        double? resetProgressPercent = null)
     {
         var label = showDetails ? FormatResetLabel(resetsAt) : "";
         resetText.Text = label;
         resetText.IsVisible = !string.IsNullOrEmpty(label);
+        if (string.IsNullOrEmpty(label))
+            return;
+
+        var color = resetProgressPercent is { } progress
+            ? UsageBarColors.GetMutedColorForResetProgress(progress)
+            : UsageBarColors.ResetLabelFallback;
+        resetText.Foreground = UsageBarBrushes.GetBrush(color);
     }
 
     public static void ApplyBreakdownLayout(

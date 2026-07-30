@@ -173,7 +173,7 @@
                                 Background="Transparent">
                             <StackPanel>
                                 <Grid Margin="0,0,0,2" ColumnDefinitions="Auto,*,Auto">
-                                    <TextBlock Text="Cursor Auto + Composer"
+                                    <TextBlock Text="Cursor Models"
                                                FontSize="11"
                                                FontWeight="SemiBold"
                                                LineHeight="15"
