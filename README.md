@@ -1,102 +1,66 @@
-<img width="386" height="486" alt="2026-07-07 12_32_53-" src="https://github.com/user-attachments/assets/7433381f-f041-4dca-8102-34a8f412f2b8" />
+# Deez Fuel Gauge
 
-# Cursor Usage Widget
+![Deez Fuel Gauge — usage overlay](docs/screenshots/hero.png)
 
-A lightweight, draggable desktop overlay that shows how much of your Cursor included usage cap you've used.
+Lightweight desktop overlay for Cursor, Codex, Claude, and Gemini usage caps — plus optional Harddrive / CPU / GPU / RAM glance.
 
-Runs on **Windows 10/11** and **macOS**.
+![License: MIT](https://img.shields.io/badge/license-MIT-blue)
+![Platform: Windows · macOS](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-informational)
 
-## Requirements
+## Who it’s for
 
-- Windows 10/11 or macOS 12+
-- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
-- Cursor IDE logged in on the same user profile
+People who live in Cursor (and adjacent AI tools) and want a always-on glance of remaining plan limits without opening a billing page. Draggable pill overlay on **Windows 10/11** and **macOS 12+**.
 
-## One-click run
+## Quick start
 
-Double-click the launcher for your platform:
+**Requirements:** [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0), Cursor IDE logged in on the same user profile.
 
 | Platform | File |
 |----------|------|
-| Windows | **`run.bat`** |
-| macOS | **`run.command`** |
+| Windows | Double-click **`run.bat`** |
+| macOS | Double-click **`run.command`** |
 
-Each run rebuilds the widget from this folder and launches it.
+Rebuilds from this folder and launches the widget. On Windows, missing .NET can install via winget; on macOS the launcher opens the download page. If **`Deez Fuel Gauge.app`** is blocked after first build, right-click → **Open**. macOS failures log to `~/Library/Logs/DeezFuelGauge/setup.log`.
 
-- **Windows:** if .NET 8 is missing, the launcher can install it via winget.
-- **macOS:** if .NET 8 is missing, the launcher opens the official download page in your browser.
-- **macOS:** if **`Deez Fuel Gauge.app`** is blocked after the first build, right-click it and choose **Open**.
+## Features
 
-If the run fails on macOS, details are saved to `~/Library/Logs/DeezFuelGauge/setup.log`.
+- Draggable overlay; position saved locally; auto-refresh every 5 minutes
+- Right-click for Refresh or Quit; gear opens settings
+- Cursor usage from local IDE login (no API key)
+- Optional Codex / Claude.ai / Gemini App bars and Platform API spend
+- Encrypted credential storage under the settings folder
 
-## Usage
+Provider details and auth setup: **[docs/providers.md](docs/providers.md)**.
 
-- **Drag** the pill anywhere on screen.
-- **Right-click** for Refresh or Quit.
-- Position is saved locally (see paths below).
-- Usage refreshes automatically every 5 minutes.
+## Screenshots
 
-### Settings (gear icon)
+<details>
+<summary>More screenshots</summary>
 
-Click the **gear** in the widget header to configure what is shown:
+![Main overlay](docs/screenshots/01-main.png)
 
-| Provider | Cursor usage (automatic) | Subscription / app limits | Platform API (optional) |
-|----------|--------------------------|---------------------------|-------------------------|
-| **Cursor** | Sign in to Cursor IDE on this machine — no API key needed | — | — |
-| **OpenAI** | Aggregated from your Cursor plan | **Codex** (ChatGPT Plus/Pro 5h + weekly + ChatGPT credits) via `~/.codex/auth.json` or session cookie | **OpenAI API** prepaid credit balance when available; otherwise Admin key (`api.usage.read`) + monthly budget |
-| **Claude** | — | **Claude.ai** plan windows | **Claude API** Console Admin key + budget |
-| **Gemini** | Aggregated from your Cursor plan | **Gemini App** limits (5h + weekly) via Antigravity IDE or Gemini CLI (`gemini login` → `~/.gemini/oauth_creds.json`) | Not metered yet |
+</details>
 
-- Toggle **Cursor**, **Codex / Claude.ai / Gemini App**, and **API** sources independently per provider.
-- **Easy setup** (per provider section) turns on subscription-limit bars, checks local auth, runs the same connection tests as **Test**, and opens login pages or `codex login` when manual steps are still needed.
-- **Spend details** shows remaining quota (Cursor) or dollar/token breakdown (API).
-- Use **Test** buttons to verify API keys without waiting for the 5-minute refresh.
-- API keys are stored encrypted under the settings folder (`credentials/`). They are never written to `settings.json` or committed to Git.
+## Limitations
 
-**OpenAI (Codex / ChatGPT):** if you use the [Codex CLI](https://developers.openai.com/codex), run `codex login` once — the widget reads `~/.codex/auth.json` automatically and shows the same 5-hour and weekly limits as ChatGPT's Usage & billing page (including ChatGPT plan credits). If auth is stored in the OS keyring instead, paste a ChatGPT session cookie from DevTools as a fallback. This uses an undocumented ChatGPT endpoint and may change without notice. Separate from OpenAI API credits.
-
-**OpenAI API (optional):** tries prepaid credit balance via an undocumented `credit_grants` endpoint (best-effort; may require a browser/session key and can break). Falls back to an [organization admin key](https://platform.openai.com) with `api.usage.read` for org spend against a monthly budget. Empty API balance shows as 100% used. This is separate from ChatGPT/Codex subscription limits.
-
-**Claude:** **Claude.ai** plan rate limits (OAuth / Claude Code login) are separate from **Claude API** Console spend.
-
-**Gemini App (limits):** sign in to **Antigravity IDE** on this machine, or run **`gemini login`** with the [Gemini CLI](https://github.com/google-gemini/gemini-cli) (`npm i -g @google/gemini-cli`). Connect tries Gemini CLI first when installed, otherwise launches Antigravity IDE. The widget reads your local OAuth session and shows grouped **Gemini Models** and **Claude and GPT models** 5-hour and weekly limits (Antigravity), or per-model Gemini CLI quotas as a fallback. No API keys or project IDs needed. Gemini Developer API billing is not metered yet. Uses undocumented Google Cloud Code endpoints and may change without notice.
-
-### Settings location
-
-| Platform | Path |
-|----------|------|
-| Windows | `%LOCALAPPDATA%\deez-fuel-gauge\settings.json` |
-| macOS | `~/Library/Application Support/deez-fuel-gauge/settings.json` |
-
-Encrypted API keys: `credentials/` in the same folder.
+- Uses **undocumented** Cursor (and optional vendor) endpoints that may change without notice
+- Not affiliated with or endorsed by Cursor, OpenAI, Anthropic, or Google
+- Access tokens are read locally and sent only to the vendor HTTPS APIs needed for usage; they are not stored by the widget beyond encrypted optional API keys you add in settings
 
 ## Optional: run at login
 
-**Windows**
+**Windows:** build once with `run.bat`, then `Win+R` → `shell:startup` → shortcut to `DeezFuelGauge\bin\Release\net8.0\DeezFuelGauge.exe`.
 
-1. Build the widget once using **`run.bat`**.
-2. Press `Win+R`, type `shell:startup`, press Enter.
-3. Create a shortcut to `DeezFuelGauge\bin\Release\net8.0\DeezFuelGauge.exe` in that folder.
+**macOS:** build once with `run.command`, then System Settings → General → Login Items → add **`Deez Fuel Gauge.app`**.
 
-**macOS**
+## Development
 
-1. Build the widget once using **`run.command`**.
-2. Open **System Settings → General → Login Items**.
-3. Add **`Deez Fuel Gauge.app`** from this folder.
+Build and run from the repo with `run.command` / `run.bat`, or open the .NET project under `DeezFuelGauge/`. Settings paths and provider plumbing are documented in [docs/providers.md](docs/providers.md).
 
-## How it works
+## Credit
 
-1. Reads `cursorAuth/accessToken` from Cursor's local SQLite database:
-   - **Windows:** `%APPDATA%\Cursor\User\globalStorage\state.vscdb`
-   - **macOS:** `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb`
-2. Calls Cursor's unofficial `GetCurrentPeriodUsage` API (Pro/Ultra/Team plans), or falls back to `GET /auth/usage` for legacy Enterprise request-based quotas.
-3. Optionally enriches OpenAI / Gemini bars from Cursor's aggregated usage events.
-4. Optionally fetches **Codex / ChatGPT** 5-hour and weekly limits from `chatgpt.com` when Codex auth or a session cookie is available.
-5. Optionally fetches **Gemini App** grouped Gemini and third-party 5-hour and weekly limits from Google Cloud Code when Antigravity IDE or Gemini CLI is signed in locally.
-6. Optionally fetches **OpenAI API** prepaid credits (`credit_grants`, best-effort) or Admin Platform spend vs budget when configured in settings.
+Created by [deac.online](https://deac.online) @ [worldbuild.io](https://worldbuild.io)
 
-## Disclaimer
+## License
 
-- Uses **undocumented** Cursor endpoints that may change or break without notice.
-- Not affiliated with or endorsed by Cursor.
-- Your access token is read locally and sent only to `api2.cursor.sh` over HTTPS. It is never stored by this widget.
+MIT — see [LICENSE](LICENSE).
