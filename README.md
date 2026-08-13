@@ -1,6 +1,8 @@
 # Deez Fuel Gauge
 
-![Deez Fuel Gauge — usage overlay](docs/screenshots/hero.png)
+<p align="center">
+  <img src="https://cdn.jsdelivr.net/gh/DeaconDP/Deez-Fuel-Gauge@main/docs/screenshots/hero.png" alt="Deez Fuel Gauge" width="480" />
+</p>
 
 Lightweight desktop overlay for Cursor, Codex, Claude, and Gemini usage caps — plus optional Harddrive / CPU / GPU / RAM glance.
 
@@ -37,7 +39,7 @@ Provider details and auth setup: **[docs/providers.md](docs/providers.md)**.
 <details>
 <summary>More screenshots</summary>
 
-![Main overlay](docs/screenshots/01-main.png)
+<img src="https://cdn.jsdelivr.net/gh/DeaconDP/Deez-Fuel-Gauge@main/docs/screenshots/01-main.png" alt="Main overlay" width="480" />
 
 </details>
 
