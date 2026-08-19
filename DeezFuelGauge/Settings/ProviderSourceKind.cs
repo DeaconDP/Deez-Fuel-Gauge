@@ -14,6 +14,7 @@ public enum ProviderSourceKind
     OpenRouterCredits,
     OpenCodeZen,
     OpenCodeGo,
+    GrokBotLimits,
     DiskDrives,
     DiskDrive,
     HardwareCpuUsage,

@@ -17,6 +17,49 @@ public static class WindowAnchorHelper
     }
 
     /// <summary>
+    /// Repositions the window when both width and height change. Grows toward the interior of
+    /// the nearest working area (keep the right edge when closer to the right, keep the bottom
+    /// edge when closer to the bottom). Otherwise keeps the top-left origin.
+    /// </summary>
+    public static (int X, int Y) CompensateSizeChange(
+        double oldWidth,
+        double oldHeight,
+        double newWidth,
+        double newHeight,
+        int currentX,
+        int currentY,
+        IReadOnlyList<(int X, int Y, int Width, int Height)> workingAreas)
+    {
+        var keepRight = false;
+        var keepBottom = false;
+        if (workingAreas.Count > 0)
+        {
+            var oldW = Math.Max(1, (int)Math.Round(oldWidth));
+            var oldH = Math.Max(1, (int)Math.Round(oldHeight));
+            var area = FindNearestWorkingArea(currentX, currentY, oldW, oldH, workingAreas);
+            var distLeft = currentX - area.X;
+            var distRight = area.X + area.Width - (currentX + oldW);
+            keepRight = distRight < distLeft;
+
+            var distTop = currentY - area.Y;
+            var distBottom = area.Y + area.Height - (currentY + oldH);
+            keepBottom = distBottom < distTop;
+        }
+
+        var dx = (int)Math.Round(newWidth - oldWidth);
+        var dy = (int)Math.Round(newHeight - oldHeight);
+        var x = keepRight ? currentX - dx : currentX;
+        var y = keepBottom ? currentY - dy : currentY;
+
+        return ClampToWorkingAreas(
+            x,
+            y,
+            Math.Max(1, (int)Math.Round(newWidth)),
+            Math.Max(1, (int)Math.Round(newHeight)),
+            workingAreas);
+    }
+
+    /// <summary>
     /// Returns the window Y position that keeps the bottom edge at <paramref name="anchorBottom"/>.
     /// </summary>
     public static int ComputeBottomAnchoredY(double anchorBottom, double height) =>

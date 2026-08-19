@@ -71,7 +71,8 @@ public sealed class ProviderDashboardPresenterTests
             Cursor = new ProviderBillingSettings { ShowCursorSource = false },
             OpenAi = new ProviderBillingSettings { ShowCursorSource = false },
             Claude = new ProviderBillingSettings { ShowCursorSource = false },
-            Gemini = new ProviderBillingSettings { ShowCursorSource = false }
+            Gemini = new ProviderBillingSettings { ShowCursorSource = false },
+            GrokBot = new ProviderBillingSettings { ShowProLimits = false }
         }));
     }
 
@@ -340,5 +341,53 @@ public sealed class ProviderDashboardPresenterTests
         var settings = new ProviderBillingSettings { ShowProLimits = true };
 
         Assert.False(ProviderDashboardPresenter.IsOpenRouterHeadlineConnected(snapshot, settings));
+    }
+
+    [Fact]
+    public void ComputeGrokBotHeadline_uses_weekly_percent_when_available()
+    {
+        var snapshot = new UsageSnapshot
+        {
+            GrokBot = GrokBotSnapshot.FromUsage(23.5, null, null, true, true)
+        };
+        var settings = new ProviderBillingSettings { ShowProLimits = true };
+
+        Assert.True(ProviderDashboardPresenter.IsGrokBotHeadlineConnected(snapshot, settings));
+        Assert.Equal(23.5, ProviderDashboardPresenter.ComputeGrokBotHeadline(snapshot, settings));
+    }
+
+    [Fact]
+    public void IsCursorDashboardVisible_when_only_grok_bot_enabled()
+    {
+        var settings = new WidgetSettings
+        {
+            Cursor = new ProviderBillingSettings { ShowCursorSource = false },
+            OpenAi = new ProviderBillingSettings { ShowCursorSource = false },
+            Claude = new ProviderBillingSettings { ShowCursorSource = false },
+            Gemini = new ProviderBillingSettings { ShowCursorSource = false },
+            GrokBot = new ProviderBillingSettings { ShowProLimits = true }
+        };
+
+        Assert.True(ProviderDashboardPresenter.IsCursorDashboardVisible(settings));
+    }
+
+    [Fact]
+    public void ComputeCursorHeadline_includes_grok_bot_when_breakdown_enabled()
+    {
+        var snapshot = new UsageSnapshot
+        {
+            PercentUsed = 10,
+            AutoPercentUsed = 20,
+            ApiPercentUsed = 15,
+            GrokBot = GrokBotSnapshot.FromUsage(45, null, null, true, true)
+        };
+        var settings = new WidgetSettings
+        {
+            Cursor = new ProviderBillingSettings { ShowCursorSource = true },
+            ShowBreakdown = true,
+            GrokBot = new ProviderBillingSettings { ShowProLimits = true }
+        };
+
+        Assert.Equal(45, ProviderDashboardPresenter.ComputeCursorHeadline(snapshot, settings));
     }
 }

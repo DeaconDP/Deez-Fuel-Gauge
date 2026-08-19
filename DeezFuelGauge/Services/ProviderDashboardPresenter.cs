@@ -8,7 +8,8 @@ public static class ProviderDashboardPresenter
         settings.Cursor.ShowCursorSource
         || settings.OpenAi.ShowCursorSource
         || settings.Claude.ShowCursorSource
-        || settings.Gemini.ShowCursorSource;
+        || settings.Gemini.ShowCursorSource
+        || settings.GrokBot.ShowProLimits;
 
     public static bool IsOpenAiDashboardVisible(ProviderBillingSettings settings) =>
         settings.ShowDirectSource || settings.ShowProLimits;
@@ -40,11 +41,24 @@ public static class ProviderDashboardPresenter
                     values.Add(api);
             }
 
+            if (settings.ShowBreakdown
+                && settings.GrokBot.ShowProLimits
+                && snapshot.GrokBot.IsAvailable)
+            {
+                values.Add(snapshot.GrokBot.PercentUsed);
+            }
+
             return values.Max();
         }
 
-        // Fallback when only per-model Cursor sources are enabled.
+        // Fallback when only per-model Cursor sources / Grok Bot are enabled.
         var valuesFallback = new List<double>();
+        if (settings.ShowBreakdown
+            && settings.GrokBot.ShowProLimits
+            && snapshot.GrokBot.IsAvailable)
+        {
+            valuesFallback.Add(snapshot.GrokBot.PercentUsed);
+        }
         if (settings.OpenAi.ShowCursorSource && snapshot.OpenAi.IsAvailable)
             valuesFallback.Add(snapshot.OpenAi.PercentUsed);
         if (settings.Claude.ShowCursorSource && snapshot.Claude.IsAvailable)
@@ -133,11 +147,20 @@ public static class ProviderDashboardPresenter
         return values.Count > 0 ? values.Max() : 0;
     }
 
+    public static double ComputeGrokBotHeadline(UsageSnapshot snapshot, ProviderBillingSettings settings)
+    {
+        if (!settings.ShowProLimits || !snapshot.GrokBot.IsAvailable)
+            return 0;
+
+        return snapshot.GrokBot.PercentUsed;
+    }
+
     public static bool IsCursorHeadlineConnected(UsageSnapshot snapshot, WidgetSettings settings) =>
         (!snapshot.IsError && settings.Cursor.ShowCursorSource)
         || (settings.OpenAi.ShowCursorSource && snapshot.OpenAi.IsAvailable)
         || (settings.Claude.ShowCursorSource && snapshot.Claude.IsAvailable)
-        || (settings.Gemini.ShowCursorSource && snapshot.Gemini.IsAvailable);
+        || (settings.Gemini.ShowCursorSource && snapshot.Gemini.IsAvailable)
+        || (settings.GrokBot.ShowProLimits && snapshot.GrokBot.IsAvailable);
 
     public static bool IsOpenAiHeadlineConnected(UsageSnapshot snapshot, ProviderBillingSettings settings)
     {
@@ -166,6 +189,9 @@ public static class ProviderDashboardPresenter
     public static bool IsOpenCodeHeadlineConnected(UsageSnapshot snapshot, ProviderBillingSettings settings) =>
         (settings.ShowDirectSource && snapshot.OpenCode.ZenIsAvailable)
         || (settings.ShowProLimits && snapshot.OpenCode.HasGoSubscription);
+
+    public static bool IsGrokBotHeadlineConnected(UsageSnapshot snapshot, ProviderBillingSettings settings) =>
+        settings.ShowProLimits && snapshot.GrokBot.IsAvailable;
 
     private static bool HasFailedEnabledApiSource(bool enabled, bool available) =>
         enabled && !available;

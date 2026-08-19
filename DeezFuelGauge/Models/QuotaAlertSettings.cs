@@ -15,4 +15,5 @@ public sealed class QuotaAlertSettings
     public bool OpenRouterKeyLimit { get; set; } = true;
     public bool OpenCodeZenMonthly { get; set; } = true;
     public bool OpenCodeGoMonthly { get; set; } = true;
+    public bool GrokBotWeekly { get; set; } = true;
 }

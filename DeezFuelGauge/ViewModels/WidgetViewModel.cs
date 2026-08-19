@@ -21,6 +21,7 @@ public sealed class WidgetViewModel
     public ProviderSectionViewModel Gemini { get; } = new() { Title = "Gemini" };
     public ProviderSectionViewModel OpenRouter { get; } = new() { Title = "OpenRouter" };
     public ProviderSectionViewModel OpenCode { get; } = new() { Title = "OpenCode" };
+    public ProviderSectionViewModel GrokBot { get; } = new() { Title = "Grok Bot" };
 
     public DateTimeOffset? LastRefreshedAt { get; set; }
 
@@ -72,6 +73,7 @@ public sealed class WidgetViewModel
         Gemini.DegradedMessage = null;
         OpenRouter.DegradedMessage = null;
         OpenCode.DegradedMessage = null;
+        GrokBot.DegradedMessage = null;
     }
 
     private void ClearUnusedQuotaStates()
@@ -81,6 +83,7 @@ public sealed class WidgetViewModel
         Gemini.UnusedQuotaMessage = null;
         OpenRouter.UnusedQuotaMessage = null;
         OpenCode.UnusedQuotaMessage = null;
+        GrokBot.UnusedQuotaMessage = null;
     }
 
     private void AssignUnusedQuotaMessage(string providerKey, string message)
@@ -102,6 +105,9 @@ public sealed class WidgetViewModel
             case "opencode":
                 OpenCode.UnusedQuotaMessage = message;
                 break;
+            case "grokbot":
+                GrokBot.UnusedQuotaMessage = message;
+                break;
         }
     }
 
@@ -121,6 +127,9 @@ public sealed class WidgetViewModel
                 break;
             case "opencode":
                 OpenCode.DegradedMessage = message;
+                break;
+            case "grokbot":
+                GrokBot.DegradedMessage = message;
                 break;
         }
     }

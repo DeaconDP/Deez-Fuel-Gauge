@@ -16,7 +16,8 @@ public sealed class DirectBillingServiceTests
             OpenAi = new ProviderBillingSettings { ShowProLimits = false },
             Gemini = new ProviderBillingSettings { ShowProLimits = false },
             OpenRouter = new ProviderBillingSettings { ShowProLimits = false },
-            OpenCode = new ProviderBillingSettings { ShowProLimits = false, ShowDirectSource = false }
+            OpenCode = new ProviderBillingSettings { ShowProLimits = false, ShowDirectSource = false },
+            GrokBot = new ProviderBillingSettings { ShowProLimits = false }
         };
 
         var source = new UsageSnapshot { PercentUsed = 42 };
@@ -27,6 +28,7 @@ public sealed class DirectBillingServiceTests
         Assert.False(enriched.Antigravity.IsAvailable);
         Assert.False(enriched.OpenRouter.IsAvailable);
         Assert.False(enriched.OpenCode.IsAvailable);
+        Assert.False(enriched.GrokBot.IsAvailable);
         Assert.Equal(42, enriched.PercentUsed);
     }
 
@@ -45,7 +47,12 @@ public sealed class DirectBillingServiceTests
                     ShowDirectSource = true,
                     ShowProLimits = true,
                     CredentialId = openAiKey
-                }
+                },
+                Claude = new ProviderBillingSettings { ShowProLimits = false },
+                Gemini = new ProviderBillingSettings { ShowProLimits = false },
+                OpenRouter = new ProviderBillingSettings { ShowProLimits = false },
+                OpenCode = new ProviderBillingSettings { ShowProLimits = false, ShowDirectSource = false },
+                GrokBot = new ProviderBillingSettings { ShowProLimits = false }
             };
 
             var http = new HttpClient(handler);

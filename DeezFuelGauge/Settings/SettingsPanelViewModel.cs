@@ -18,6 +18,7 @@ public sealed class SettingsPanelViewModel : ViewModelBase
     private readonly AntigravityUsageClient _antigravityBilling;
     private readonly OpenRouterUsageClient _openRouterBilling;
     private readonly OpenCodeUsageClient _openCodeBilling;
+    private readonly GrokBotUsageClient _grokBotBilling;
     private readonly OpenCodeAuthResolver _openCodeAuthResolver;
     private readonly GeminiAuthResolver _geminiAuthResolver;
     private readonly Func<CursorTokens> _cursorTokenReader;
@@ -61,7 +62,8 @@ public sealed class SettingsPanelViewModel : ViewModelBase
         AnthropicBillingClient? anthropicBilling = null,
         ClaudeProUsageClient? claudeProBilling = null,
         ClaudeOAuthLoginService? claudeOAuthLogin = null,
-        ExternalSetupLauncher? launcher = null)
+        ExternalSetupLauncher? launcher = null,
+        GrokBotUsageClient? grokBotBilling = null)
     {
         _easySetup = easySetup;
         _openAiBilling = openAiBilling;
@@ -75,6 +77,7 @@ public sealed class SettingsPanelViewModel : ViewModelBase
         _antigravityBilling = antigravityBilling;
         _openRouterBilling = openRouterBilling;
         _openCodeBilling = openCodeBilling;
+        _grokBotBilling = grokBotBilling ?? new GrokBotUsageClient();
         _openCodeAuthResolver = new OpenCodeAuthResolver();
         _cursorTokenReader = cursorTokenReader ?? CursorTokenReader.Read;
         _geminiAuthResolver = geminiAuthResolver ?? new GeminiAuthResolver();
@@ -441,6 +444,24 @@ public sealed class SettingsPanelViewModel : ViewModelBase
         set => SetSourceStatus(GetSource(ProviderSourceKind.OpenCodeZen), value);
     }
 
+    public bool ShowGrokBotLimits
+    {
+        get => GetSource(ProviderSourceKind.GrokBotLimits).IsEnabled;
+        set => SetSourceEnabled(GetSource(ProviderSourceKind.GrokBotLimits), value);
+    }
+
+    public bool ShowGrokBotDetails
+    {
+        get => GetSource(ProviderSourceKind.GrokBotLimits).ShowDetails;
+        set => SetSourceDetail(GetSource(ProviderSourceKind.GrokBotLimits), value);
+    }
+
+    public string GrokBotStatus
+    {
+        get => GetSource(ProviderSourceKind.GrokBotLimits).Status;
+        set => SetSourceStatus(GetSource(ProviderSourceKind.GrokBotLimits), value);
+    }
+
     public bool ShowDiskDrives
     {
         get => GetSource(ProviderSourceKind.DiskDrives).IsEnabled;
@@ -649,6 +670,7 @@ public sealed class SettingsPanelViewModel : ViewModelBase
         if (ProviderFeatureFlags.OpenRouterEnabled)
             OpenRouterStatus = settings.OpenRouter.LastConnectionStatus ?? OpenRouterStatus;
         OpenCodeStatus = settings.OpenCode.ProLastConnectionStatus ?? OpenCodeStatus;
+        GrokBotStatus = settings.GrokBot.LastConnectionStatus ?? GrokBotStatus;
         UpdateConnectionStates();
     }
 
@@ -668,9 +690,11 @@ public sealed class SettingsPanelViewModel : ViewModelBase
         var openAiCursor = ProviderConnectionStateHelper.FromConnected(ShowOpenAi, hasCursorToken);
         var claudeCursor = ProviderConnectionStateHelper.FromConnected(ShowClaude, hasCursorToken);
         var geminiCursor = ProviderConnectionStateHelper.FromConnected(ShowGemini, hasCursorToken);
+        var grokBot = ProviderConnectionStateHelper.FromConnected(ShowGrokBotLimits, hasCursorToken);
         SetSectionColor(
             SettingsExpandedProvider.Cursor,
-            ProviderConnectionStateHelper.Aggregate(cursorNative, openAiCursor, claudeCursor, geminiCursor));
+            ProviderConnectionStateHelper.Aggregate(
+                cursorNative, openAiCursor, claudeCursor, geminiCursor, grokBot));
 
         var openAiDirect = ProviderConnectionStateHelper.FromConnected(ShowOpenAiDirect, HasOpenAiApiKeySaved);
         var openAiCodex = ProviderConnectionStateHelper.FromConnected(
@@ -748,6 +772,9 @@ public sealed class SettingsPanelViewModel : ViewModelBase
             case ProviderSourceKind.OpenCodeGo:
                 await RunEasySetupOpenCodeAsync(settings);
                 break;
+            case ProviderSourceKind.GrokBotLimits:
+                await RunEasySetupGrokBotAsync(settings);
+                break;
         }
     }
 
@@ -783,6 +810,9 @@ public sealed class SettingsPanelViewModel : ViewModelBase
             case ProviderSourceKind.OpenCodeZen:
             case ProviderSourceKind.OpenCodeGo:
                 await TestOpenCodeAsync(settings);
+                break;
+            case ProviderSourceKind.GrokBotLimits:
+                await TestGrokBotAsync(settings);
                 break;
         }
     }
@@ -983,6 +1013,13 @@ public sealed class SettingsPanelViewModel : ViewModelBase
     {
         var result = await _easySetup.SetupOpenCodeAsync(settings);
         OpenCodeStatus = settings.OpenCode.ProLastConnectionStatus ?? result.StatusMessage ?? "";
+        await CompleteEasySetupAsync(settings);
+    }
+
+    public async Task RunEasySetupGrokBotAsync(WidgetSettings settings)
+    {
+        var result = await _easySetup.SetupGrokBotAsync(settings);
+        GrokBotStatus = settings.GrokBot.LastConnectionStatus ?? result.StatusMessage ?? "";
         await CompleteEasySetupAsync(settings);
     }
 
@@ -1189,6 +1226,16 @@ public sealed class SettingsPanelViewModel : ViewModelBase
         Commit(settings);
         OpenCodeStatus = await _openCodeBilling.TestConnectionAsync(settings.OpenCode);
         settings.OpenCode.ProLastConnectionStatus = OpenCodeStatus;
+        _host?.OnSettingsChanged();
+    }
+
+    public async Task TestGrokBotAsync(WidgetSettings settings)
+    {
+        Commit(settings);
+        var tokens = _cursorTokenReader();
+        _grokBotBilling.SetTokens(tokens.AccessToken, tokens.RefreshToken);
+        GrokBotStatus = await _grokBotBilling.TestConnectionAsync(settings.GrokBot);
+        settings.GrokBot.LastConnectionStatus = GrokBotStatus;
         _host?.OnSettingsChanged();
     }
 

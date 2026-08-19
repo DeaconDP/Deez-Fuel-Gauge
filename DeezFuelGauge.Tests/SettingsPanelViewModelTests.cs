@@ -172,12 +172,18 @@ public sealed class SettingsPanelViewModelTests
         Assert.Equal(7, viewModel.Sections.Count);
         Assert.Contains(viewModel.Sections, s => s.Title == "OpenAI" && s.Sources.Count == 2);
         Assert.Contains(viewModel.Sections, s => s.Title == "Claude" && s.Sources.Count == 2);
+        Assert.Contains(
+            viewModel.Sections,
+            s => s.Title == "Cursor"
+                 && s.Sources.Any(src => src.Kind == ProviderSourceKind.GrokBotLimits
+                                         && src.Name == "Grok Bot weekly"));
         Assert.Contains(viewModel.Sections, s => s.Title == "Hardware" && s.Sources.Count == 4);
         var cursorSection = viewModel.Sections.First(s => s.Title == "Cursor");
-        Assert.Equal(5, cursorSection.Sources.Count);
+        Assert.Equal(6, cursorSection.Sources.Count);
         Assert.Contains(cursorSection.Sources, s => s.Kind == ProviderSourceKind.OpenAiViaCursor);
         Assert.Contains(cursorSection.Sources, s => s.Kind == ProviderSourceKind.ClaudeViaCursor);
         Assert.Contains(cursorSection.Sources, s => s.Kind == ProviderSourceKind.GeminiViaCursor);
+        Assert.Contains(cursorSection.Sources, s => s.Kind == ProviderSourceKind.GrokBotLimits);
     }
 
     [Fact]

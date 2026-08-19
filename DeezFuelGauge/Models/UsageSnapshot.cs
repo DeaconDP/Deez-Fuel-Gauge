@@ -20,6 +20,7 @@ public sealed class UsageSnapshot
     public AntigravitySnapshot Antigravity { get; init; } = AntigravitySnapshot.Unavailable();
     public OpenRouterSnapshot OpenRouter { get; init; } = OpenRouterSnapshot.Unavailable();
     public OpenCodeSnapshot OpenCode { get; init; } = OpenCodeSnapshot.Unavailable();
+    public GrokBotSnapshot GrokBot { get; init; } = GrokBotSnapshot.Unavailable();
     public bool HasProviderBreakdown =>
         OpenAi.IsAvailable || Claude.IsAvailable || Gemini.IsAvailable;
     public bool IsError { get; init; }

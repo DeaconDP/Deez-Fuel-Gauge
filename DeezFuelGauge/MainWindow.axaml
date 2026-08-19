@@ -12,21 +12,50 @@
         CanResize="False"
         ShowInTaskbar="False"
         Topmost="True"
-        PointerPressed="Window_PointerPressed">
+        PointerPressed="Window_PointerPressed"
+        PointerEntered="Window_PointerEntered"
+        PointerExited="Window_PointerExited"
+        GotFocus="Window_GotFocus"
+        LostFocus="Window_LostFocus"
+        PointerReleased="Window_PointerReleased">
     <Border x:Name="PillBorder"
             CornerRadius="10"
             Background="#E6181818"
             BorderBrush="#44FFFFFF"
             BorderThickness="1"
-            Padding="10,9,10,12">
+            Padding="10,9,10,12"
+            ClipToBounds="True">
         <Border.ContextMenu>
-            <ContextMenu>
+            <ContextMenu Opening="WidgetContextMenu_Opening"
+                         Closing="WidgetContextMenu_Closing">
+                <MenuItem x:Name="CompactModeMenuItem"
+                          Header="Compact mode"
+                          ToggleType="CheckBox"
+                          Click="CompactModeMenuItem_Click" />
                 <MenuItem Header="Refresh" Click="RefreshMenuItem_Click" />
                 <Separator />
                 <MenuItem Header="Quit" Click="QuitMenuItem_Click" />
             </ContextMenu>
         </Border.ContextMenu>
-        <StackPanel>
+        <Grid x:Name="ContentHost"
+              ClipToBounds="True">
+            <StackPanel x:Name="CompactRow"
+                        Orientation="Horizontal"
+                        Spacing="6"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Top"
+                        IsHitTestVisible="False"
+                        Opacity="0">
+                <TextBlock Text="&#x1F701;"
+                           FontSize="14"
+                           LineHeight="18"
+                           Foreground="#CC00E5FF"
+                           VerticalAlignment="Top"
+                           Margin="0,1,0,0" />
+                <StackPanel x:Name="CompactSourcesPanel"
+                            Spacing="2" />
+            </StackPanel>
+            <StackPanel x:Name="FullContent">
             <Grid Margin="0,0,0,6">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
@@ -39,7 +68,7 @@
                                Foreground="#CC00E5FF"
                                Margin="0,0,7,0"
                                VerticalAlignment="Center" />
-                    <TextBlock Text="Deez Fuel Guage"
+                    <TextBlock Text="Deez Fuel Gauge"
                                FontFamily="Segoe UI Semibold, Segoe UI, sans-serif"
                                FontSize="13"
                                FontWeight="SemiBold"
@@ -70,6 +99,19 @@
                             PointerPressed="RefreshButton_PointerPressed">
                         <TextBlock x:Name="RefreshIcon"
                                    Text="&#x21BB;"
+                                   FontFamily="Segoe UI Symbol, Apple Symbols, sans-serif"
+                                   FontSize="14"
+                                   LineHeight="18"
+                                   Foreground="#FF88CCFF"
+                                   VerticalAlignment="Center" />
+                    </Border>
+                    <Border x:Name="CompactModeButton"
+                            Background="Transparent"
+                            Cursor="Hand"
+                            Margin="6,0,0,0"
+                            PointerPressed="CompactModeToggle_PointerPressed">
+                        <TextBlock x:Name="CompactModeIcon"
+                                   Text="&#x25EB;"
                                    FontFamily="Segoe UI Symbol, Apple Symbols, sans-serif"
                                    FontSize="14"
                                    LineHeight="18"
@@ -239,6 +281,46 @@
                                 <Grid x:Name="ApiProgressTrack" Height="6">
                                     <Border CornerRadius="3" Background="#33FFFFFF" />
                                     <Border x:Name="ApiProgressFill"
+                                            CornerRadius="3"
+                                            HorizontalAlignment="Left"
+                                            Width="0"
+                                            Background="#FF4D9FFF" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                        <Border x:Name="GrokBotBreakdownRow"
+                                Classes="breakdown-row"
+                                Background="Transparent"
+                                IsVisible="False">
+                            <StackPanel>
+                                <Grid Margin="0,0,0,2" ColumnDefinitions="Auto,*,Auto">
+                                    <TextBlock Text="Grok Bot Weekly"
+                                               FontSize="11"
+                                               FontWeight="SemiBold"
+                                               LineHeight="15"
+                                               Foreground="#FFE8E8E8"
+                                               VerticalAlignment="Center" />
+                                    <TextBlock x:Name="GrokBotResetText"
+                                               Grid.Column="1"
+                                               Margin="6,0,6,0"
+                                               FontSize="9"
+                                               LineHeight="12"
+                                               Foreground="#FF777777"
+                                               TextTrimming="CharacterEllipsis"
+                                               HorizontalAlignment="Right"
+                                               VerticalAlignment="Center" />
+                                    <TextBlock x:Name="GrokBotPercentText"
+                                               Grid.Column="2"
+                                               Text=""
+                                               FontSize="11"
+                                               FontWeight="SemiBold"
+                                               LineHeight="15"
+                                               Foreground="#FFE8E8E8"
+                                               VerticalAlignment="Center" />
+                                </Grid>
+                                <Grid x:Name="GrokBotProgressTrack" Height="6">
+                                    <Border CornerRadius="3" Background="#33FFFFFF" />
+                                    <Border x:Name="GrokBotProgressFill"
                                             CornerRadius="3"
                                             HorizontalAlignment="Left"
                                             Width="0"
@@ -1152,6 +1234,7 @@
                                PointerPressed="WorldbuildLink_PointerPressed" />
                 </StackPanel>
             </Grid>
-        </StackPanel>
+            </StackPanel>
+        </Grid>
     </Border>
 </Window>
