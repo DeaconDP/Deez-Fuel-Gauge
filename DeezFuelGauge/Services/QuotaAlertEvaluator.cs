@@ -151,6 +151,24 @@ public static class QuotaAlertEvaluator
                 "OpenCode Go monthly");
         }
 
+        if (alerts.GrokBotWeekly
+            && settings.GrokBot.ShowProLimits
+            && snapshot.GrokBot.IsAvailable
+            && snapshot.GrokBot.ResetsAt is { } grokReset)
+        {
+            TryAdd(
+                results,
+                true,
+                true,
+                snapshot.GrokBot.PercentUsed,
+                grokReset,
+                evaluatedAt,
+                alerts,
+                "grokbot-weekly",
+                "grokbot",
+                "Grok Bot weekly");
+        }
+
         return results;
     }
 

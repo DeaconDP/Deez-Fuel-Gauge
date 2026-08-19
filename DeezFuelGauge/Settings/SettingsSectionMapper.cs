@@ -24,7 +24,13 @@ internal static class SettingsSectionMapper
         sections.Add(BuildHardwareSection(settings, host));
 
         foreach (var section in sections)
-            section.IsExpanded = settings.SettingsExpandedProvider == section.ProviderId;
+        {
+            // Legacy saves may still point at the removed Grok Bot accordion — open Cursor instead.
+            var expandedId = settings.SettingsExpandedProvider == SettingsExpandedProvider.GrokBot
+                ? SettingsExpandedProvider.Cursor
+                : settings.SettingsExpandedProvider;
+            section.IsExpanded = expandedId == section.ProviderId;
+        }
     }
 
     public static void ApplyToSettings(
@@ -121,6 +127,18 @@ internal static class SettingsSectionMapper
             showConnect: true,
             showTest: true);
 
+        var grokBot = CreateSource(
+            ProviderSourceKind.GrokBotLimits,
+            "Grok Bot weekly",
+            settings.GrokBot.ShowProLimits,
+            settings.GrokBot.ShowDetails,
+            settings.GrokBot.LastConnectionStatus ?? "",
+            showConnect: true,
+            showTest: true);
+        grokBot.AdvancedHint =
+            "Weekly Grok Bot allowance via Cursor login (Ultra / Premium). No API key needed.";
+        grokBot.ShowAdvancedSection = false;
+
         var section = new ProviderSettingsSectionViewModel
         {
             ProviderId = SettingsExpandedProvider.Cursor,
@@ -132,6 +150,7 @@ internal static class SettingsSectionMapper
         section.Sources.Add(openAiViaCursor);
         section.Sources.Add(claudeViaCursor);
         section.Sources.Add(geminiViaCursor);
+        section.Sources.Add(grokBot);
         section.Sources.Add(breakdown);
         return section;
     }
@@ -446,7 +465,8 @@ internal static class SettingsSectionMapper
         settings.Cursor.ShowCursorSource
         || settings.OpenAi.ShowCursorSource
         || settings.Claude.ShowCursorSource
-        || settings.Gemini.ShowCursorSource;
+        || settings.Gemini.ShowCursorSource
+        || settings.GrokBot.ShowProLimits;
 
     private static void ApplyCursor(ProviderSettingsSectionViewModel section, WidgetSettings settings)
     {
@@ -454,6 +474,7 @@ internal static class SettingsSectionMapper
         var openAiViaCursor = section.Sources.First(s => s.Kind == ProviderSourceKind.OpenAiViaCursor);
         var claudeViaCursor = section.Sources.First(s => s.Kind == ProviderSourceKind.ClaudeViaCursor);
         var geminiViaCursor = section.Sources.First(s => s.Kind == ProviderSourceKind.GeminiViaCursor);
+        var grokBot = section.Sources.First(s => s.Kind == ProviderSourceKind.GrokBotLimits);
         var breakdown = section.Sources.First(s => s.HasBreakdownToggle);
 
         settings.Cursor.ShowCursorSource = main.IsEnabled;
@@ -467,6 +488,9 @@ internal static class SettingsSectionMapper
         settings.Claude.LastConnectionStatus = NullIfEmpty(claudeViaCursor.Status);
         settings.Gemini.ShowCursorSource = geminiViaCursor.IsEnabled;
         settings.Gemini.ShowDetails = geminiViaCursor.ShowDetails;
+        settings.GrokBot.ShowProLimits = grokBot.IsEnabled;
+        settings.GrokBot.ShowDetails = grokBot.ShowDetails;
+        settings.GrokBot.LastConnectionStatus = NullIfEmpty(grokBot.Status);
         settings.ShowBreakdown = breakdown.ShowBreakdown;
         section.MasterEnable = HasAnyCursorDashboardSource(settings);
     }

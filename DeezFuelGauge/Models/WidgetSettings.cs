@@ -24,6 +24,7 @@ public sealed class WidgetSettings
     public ProviderBillingSettings Gemini { get; set; } = new();
     public ProviderBillingSettings OpenRouter { get; set; } = new();
     public ProviderBillingSettings OpenCode { get; set; } = new();
+    public ProviderBillingSettings GrokBot { get; set; } = new() { ShowProLimits = true };
     public bool ShowBreakdown { get; set; } = true;
     public bool ShowDiskDrives { get; set; } = true;
     public bool ShowDiskDetails { get; set; } = true;
@@ -36,6 +37,7 @@ public sealed class WidgetSettings
     public bool ShowHardwareDetails { get; set; } = true;
     public int RefreshIntervalMinutes { get; set; } = 5;
     public bool LaunchAtLogin { get; set; }
+    public bool UseCompactMode { get; set; }
     public bool HasCompletedFirstRun { get; set; }
     public QuotaAlertSettings QuotaAlerts { get; set; } = new();
 }

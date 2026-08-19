@@ -40,6 +40,16 @@ public sealed class WidgetSettingsTests
     }
 
     [Fact]
+    public void Defaults_enable_grok_bot_limits()
+    {
+        var settings = new WidgetSettings();
+
+        Assert.True(settings.GrokBot.ShowProLimits);
+        Assert.True(settings.GrokBot.ShowDetails);
+        Assert.True(settings.QuotaAlerts.GrokBotWeekly);
+    }
+
+    [Fact]
     public void RoundTrip_preserves_direct_billing_fields()
     {
         var settings = new WidgetSettings
@@ -303,5 +313,26 @@ public sealed class WidgetSettingsTests
         Assert.True(restored.ShowCpuTemp);
         Assert.False(restored.ShowCpuTempDetail);
         Assert.False(restored.ShowHardwareDetails);
+    }
+
+    [Fact]
+    public void RoundTrip_preserves_compact_mode()
+    {
+        var settings = new WidgetSettings { UseCompactMode = true };
+
+        var json = JsonSerializer.Serialize(settings);
+        var restored = JsonSerializer.Deserialize<WidgetSettings>(json)!;
+
+        Assert.True(restored.UseCompactMode);
+    }
+
+    [Fact]
+    public void Deserialize_defaults_compact_mode_off_when_missing()
+    {
+        var json = """{"Left":10,"Top":20}""";
+
+        var settings = JsonSerializer.Deserialize<WidgetSettings>(json)!;
+
+        Assert.False(settings.UseCompactMode);
     }
 }

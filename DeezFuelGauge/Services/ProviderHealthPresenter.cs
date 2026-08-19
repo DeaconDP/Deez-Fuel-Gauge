@@ -8,7 +8,8 @@ public static class ProviderHealthPresenter
         ["codex"] = "Codex",
         ["antigravity"] = "Gemini App",
         ["openrouter"] = "OpenRouter",
-        ["opencode"] = "OpenCode"
+        ["opencode"] = "OpenCode",
+        ["grokbot"] = "Grok Bot"
     };
 
     public static string FormatDegradedMessage(string providerKey, string? detail) =>

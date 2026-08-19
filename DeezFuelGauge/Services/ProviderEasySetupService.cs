@@ -8,6 +8,7 @@ public sealed class ProviderEasySetupService
     private readonly ClaudeProUsageClient _claudePro;
     private readonly AntigravityUsageClient _antigravity;
     private readonly OpenRouterUsageClient _openRouter;
+    private readonly GrokBotUsageClient? _grokBot;
     private readonly ExternalSetupLauncher _launcher;
     private readonly Func<CursorTokens> _cursorTokenReader;
     private readonly GeminiAuthResolver _geminiAuthResolver;
@@ -19,6 +20,7 @@ public sealed class ProviderEasySetupService
         ClaudeProUsageClient? claudePro = null,
         AntigravityUsageClient? antigravity = null,
         OpenRouterUsageClient? openRouter = null,
+        GrokBotUsageClient? grokBot = null,
         ExternalSetupLauncher? launcher = null,
         Func<CursorTokens>? cursorTokenReader = null,
         GeminiAuthResolver? geminiAuthResolver = null,
@@ -29,6 +31,7 @@ public sealed class ProviderEasySetupService
         _claudePro = claudePro ?? new ClaudeProUsageClient();
         _antigravity = antigravity ?? new AntigravityUsageClient();
         _openRouter = openRouter ?? new OpenRouterUsageClient();
+        _grokBot = grokBot;
         _launcher = launcher ?? new ExternalSetupLauncher();
         _cursorTokenReader = cursorTokenReader ?? CursorTokenReader.Read;
         _geminiAuthResolver = geminiAuthResolver ?? new GeminiAuthResolver();
@@ -41,12 +44,15 @@ public sealed class ProviderEasySetupService
         settings.Cursor.ShowCursorSource = true;
         settings.Cursor.ShowDetails = true;
         settings.ShowBreakdown = true;
+        settings.GrokBot.ShowProLimits = true;
+        settings.GrokBot.ShowDetails = true;
 
         var tokens = _cursorTokenReader();
         if (!string.IsNullOrWhiteSpace(tokens.AccessToken))
         {
             const string connected = "Connected via Cursor session";
             settings.Cursor.LastConnectionStatus = connected;
+            settings.GrokBot.LastConnectionStatus = connected;
             return new EasySetupResult(connected);
         }
 
@@ -186,6 +192,36 @@ public sealed class ProviderEasySetupService
             "Sign in at opencode.ai or run opencode /connect; set workspace ID in Advanced if needed";
         settings.OpenCode.ProLastConnectionStatus = message;
         return Task.FromResult(new EasySetupResult(message, OpenedExternalUrl: true));
+    }
+
+    public async Task<EasySetupResult> SetupGrokBotAsync(
+        WidgetSettings settings,
+        CancellationToken cancellationToken = default)
+    {
+        settings.GrokBot.ShowProLimits = true;
+        settings.GrokBot.ShowDetails = true;
+
+        var tokens = _cursorTokenReader();
+        if (string.IsNullOrWhiteSpace(tokens.AccessToken))
+        {
+            var launch = _launcher.LaunchCursorIde();
+            const string message = "Sign in to Cursor IDE (Ultra / Premium), then click Test";
+            settings.GrokBot.LastConnectionStatus = message;
+            return launch switch
+            {
+                AppLaunchResult.Launched => new EasySetupResult(message, OpenedExternalUrl: true),
+                AppLaunchResult.OpenedFallbackUrl => new EasySetupResult(
+                    "Open Cursor IDE and sign in, then click Test",
+                    OpenedExternalUrl: true),
+                _ => new EasySetupResult("Could not launch Cursor IDE — open it manually, then click Test")
+            };
+        }
+
+        var client = _grokBot ?? new GrokBotUsageClient(tokenReader: _cursorTokenReader);
+        client.SetTokens(tokens.AccessToken, tokens.RefreshToken);
+        var status = await client.TestConnectionAsync(settings.GrokBot, cancellationToken);
+        settings.GrokBot.LastConnectionStatus = status;
+        return new EasySetupResult(status);
     }
 
     public EasySetupResult SetupDisk(WidgetSettings settings)

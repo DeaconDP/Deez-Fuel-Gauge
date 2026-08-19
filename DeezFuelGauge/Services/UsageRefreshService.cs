@@ -75,6 +75,9 @@ public sealed class UsageRefreshService : IDisposable
         if (settings.OpenCode.ShowDirectSource || settings.OpenCode.ShowProLimits)
             statuses["opencode"] = StatusFromOpenCode(snapshot.OpenCode);
 
+        if (settings.GrokBot.ShowProLimits)
+            statuses["grokbot"] = StatusFromGrokBot(snapshot.GrokBot);
+
         return statuses;
     }
 
@@ -99,6 +102,11 @@ public sealed class UsageRefreshService : IDisposable
             : ProviderRefreshStatus.Failed(snapshot.StatusMessage ?? "Unavailable", degraded: true);
 
     private static ProviderRefreshStatus StatusFromOpenCode(OpenCodeSnapshot snapshot) =>
+        snapshot.IsAvailable
+            ? ProviderRefreshStatus.Ok()
+            : ProviderRefreshStatus.Failed(snapshot.StatusMessage ?? "Unavailable", degraded: true);
+
+    private static ProviderRefreshStatus StatusFromGrokBot(GrokBotSnapshot snapshot) =>
         snapshot.IsAvailable
             ? ProviderRefreshStatus.Ok()
             : ProviderRefreshStatus.Failed(snapshot.StatusMessage ?? "Unavailable", degraded: true);

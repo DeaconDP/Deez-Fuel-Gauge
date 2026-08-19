@@ -97,4 +97,59 @@ public sealed class WindowAnchorHelperTests
         Assert.Equal(1728 + 1920 - 300, x);
         Assert.Equal(40, y);
     }
+
+    [Fact]
+    public void CompensateSizeChange_grows_down_and_right_when_away_from_far_edges()
+    {
+        var areas = new[] { (0, 0, 1920, 1080) };
+
+        var (x, y) = WindowAnchorHelper.CompensateSizeChange(
+            oldWidth: 140,
+            oldHeight: 36,
+            newWidth: 300,
+            newHeight: 260,
+            currentX: 40,
+            currentY: 40,
+            areas);
+
+        Assert.Equal(40, x);
+        Assert.Equal(40, y);
+    }
+
+    [Fact]
+    public void CompensateSizeChange_keeps_right_and_bottom_when_near_those_edges()
+    {
+        var areas = new[] { (0, 0, 1920, 1080) };
+
+        var (x, y) = WindowAnchorHelper.CompensateSizeChange(
+            oldWidth: 140,
+            oldHeight: 36,
+            newWidth: 300,
+            newHeight: 260,
+            currentX: 1920 - 140 - 10,
+            currentY: 1080 - 36 - 10,
+            areas);
+
+        Assert.Equal(1920 - 300 - 10, x);
+        Assert.Equal(1080 - 260 - 10, y);
+    }
+
+    [Fact]
+    public void CompensateSizeChange_clamps_into_working_area_when_expanding_off_top()
+    {
+        var areas = new[] { (0, 0, 1920, 1080) };
+
+        var (x, y) = WindowAnchorHelper.CompensateSizeChange(
+            oldWidth: 140,
+            oldHeight: 36,
+            newWidth: 300,
+            newHeight: 400,
+            currentX: 10,
+            currentY: 10,
+            areas);
+
+        Assert.Equal(10, x);
+        Assert.Equal(10, y);
+        Assert.True(WindowAnchorHelper.HasVisibleOverlap(x, y, 300, 400, areas[0]));
+    }
 }

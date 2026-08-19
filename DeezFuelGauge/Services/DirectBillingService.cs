@@ -13,6 +13,7 @@ public sealed class DirectBillingService : IDisposable
     private readonly AntigravityUsageClient _antigravity;
     private readonly OpenRouterUsageClient _openRouter;
     private readonly OpenCodeUsageClient _openCode;
+    private readonly GrokBotUsageClient _grokBot;
     private readonly bool _ownsClients;
 
     public DirectBillingService(
@@ -22,10 +23,11 @@ public sealed class DirectBillingService : IDisposable
         ClaudeProUsageClient? claudePro = null,
         AntigravityUsageClient? antigravity = null,
         OpenRouterUsageClient? openRouter = null,
-        OpenCodeUsageClient? openCode = null)
+        OpenCodeUsageClient? openCode = null,
+        GrokBotUsageClient? grokBot = null)
     {
         _ownsClients = openAi is null && codex is null && anthropic is null && claudePro is null &&
-                       antigravity is null && openRouter is null && openCode is null;
+                       antigravity is null && openRouter is null && openCode is null && grokBot is null;
         _openAi = openAi ?? new OpenAiBillingClient();
         _codex = codex ?? new CodexUsageClient();
         _anthropic = anthropic ?? new AnthropicBillingClient();
@@ -33,6 +35,7 @@ public sealed class DirectBillingService : IDisposable
         _antigravity = antigravity ?? new AntigravityUsageClient();
         _openRouter = openRouter ?? new OpenRouterUsageClient();
         _openCode = openCode ?? new OpenCodeUsageClient();
+        _grokBot = grokBot ?? new GrokBotUsageClient();
     }
 
     public async Task<UsageSnapshot> EnrichAsync(
@@ -97,6 +100,13 @@ public sealed class DirectBillingService : IDisposable
                 cancellationToken)
             : Task.FromResult(OpenCodeSnapshot.Unavailable());
 
+        var grokBotTask = settings.GrokBot.ShowProLimits
+            ? FetchWithTimeout(
+                ct => _grokBot.FetchAsync(settings.GrokBot, ct),
+                GrokBotSnapshot.Unavailable(),
+                cancellationToken)
+            : Task.FromResult(GrokBotSnapshot.Unavailable());
+
         await Task.WhenAll(
             openAiDirectTask,
             codexTask,
@@ -104,7 +114,8 @@ public sealed class DirectBillingService : IDisposable
             claudeProTask,
             antigravityTask,
             openRouterTask,
-            openCodeTask);
+            openCodeTask,
+            grokBotTask);
 
         return CopyWithEnrichment(
             snapshot,
@@ -114,7 +125,8 @@ public sealed class DirectBillingService : IDisposable
             await claudeProTask,
             await antigravityTask,
             await openRouterTask,
-            await openCodeTask);
+            await openCodeTask,
+            await grokBotTask);
     }
 
     private static async Task<T> FetchWithTimeout<T>(
@@ -143,7 +155,8 @@ public sealed class DirectBillingService : IDisposable
         ClaudeProSnapshot claudePro,
         AntigravitySnapshot antigravity,
         OpenRouterSnapshot openRouter,
-        OpenCodeSnapshot openCode) =>
+        OpenCodeSnapshot openCode,
+        GrokBotSnapshot grokBot) =>
         new()
         {
             PercentUsed = source.PercentUsed,
@@ -163,6 +176,7 @@ public sealed class DirectBillingService : IDisposable
             Antigravity = antigravity,
             OpenRouter = openRouter,
             OpenCode = openCode,
+            GrokBot = grokBot,
             IsError = source.IsError,
             ErrorMessage = source.ErrorMessage
         };
@@ -179,5 +193,6 @@ public sealed class DirectBillingService : IDisposable
         _antigravity.Dispose();
         _openRouter.Dispose();
         _openCode.Dispose();
+        _grokBot.Dispose();
     }
 }
