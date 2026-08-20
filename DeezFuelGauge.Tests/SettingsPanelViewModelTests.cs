@@ -90,7 +90,7 @@ public sealed class SettingsPanelViewModelTests
                 new AntigravityUsageClient(),
                 new OpenRouterUsageClient(),
                 new OpenCodeUsageClient(),
-                () => new CursorTokens(),
+                cursorTokenReader: () => new CursorTokens(),
                 geminiAuthResolver: new GeminiAuthResolver(
                     antigravityReader: () => new AntigravityOAuthTokens(),
                     geminiCliReader: () => GeminiCliTokenReader.Read(credsPath)));
@@ -150,7 +150,7 @@ public sealed class SettingsPanelViewModelTests
                 new AntigravityUsageClient(),
                 new OpenRouterUsageClient(),
                 new OpenCodeUsageClient(),
-                () => new CursorTokens());
+                cursorTokenReader: () => new CursorTokens());
 
             viewModel.Load(new WidgetSettings());
             viewModel.ShowCodexLimits = true;
@@ -169,14 +169,15 @@ public sealed class SettingsPanelViewModelTests
         var viewModel = CreateViewModel();
         viewModel.Load(new WidgetSettings());
 
-        Assert.Equal(7, viewModel.Sections.Count);
+        Assert.Equal(8, viewModel.Sections.Count);
         Assert.Contains(viewModel.Sections, s => s.Title == "OpenAI" && s.Sources.Count == 2);
         Assert.Contains(viewModel.Sections, s => s.Title == "Claude" && s.Sources.Count == 2);
+        Assert.Contains(viewModel.Sections, s => s.Title == "fal.ai" && s.Sources.Count == 1);
         Assert.Contains(
             viewModel.Sections,
             s => s.Title == "Cursor"
                  && s.Sources.Any(src => src.Kind == ProviderSourceKind.GrokBotLimits
-                                         && src.Name == "Grok Bot weekly"));
+                                         && src.Name == "Grok Bot"));
         Assert.Contains(viewModel.Sections, s => s.Title == "Hardware" && s.Sources.Count == 4);
         var cursorSection = viewModel.Sections.First(s => s.Title == "Cursor");
         Assert.Equal(6, cursorSection.Sources.Count);
@@ -213,7 +214,7 @@ public sealed class SettingsPanelViewModelTests
     }
 
     [Fact(Skip = "OpenRouter is currently hidden.")]
-    public void OpenRouter_api_key_field_hidden_when_saved()
+    public void OpenRouter_api_key_field_stays_visible_when_saved()
     {
         var apiKeyId = CredentialStore.Store("openrouter-ui-test", "sk-or-test");
         try
@@ -233,9 +234,69 @@ public sealed class SettingsPanelViewModelTests
                 .Sources
                 .Single(s => s.Kind == ProviderSourceKind.OpenRouterCredits);
 
-            Assert.False(openRouter.ShowApiKeyField);
+            Assert.True(openRouter.ShowApiKeyField);
             Assert.True(openRouter.HasApiKeySaved);
             Assert.True(openRouter.ShowManagementApiKeyField);
+        }
+        finally
+        {
+            CredentialStore.Delete(apiKeyId);
+        }
+    }
+
+    [Fact]
+    public void Fal_api_key_field_stays_visible_when_saved()
+    {
+        var apiKeyId = CredentialStore.Store("fal-ui-test", "fal-test-key");
+        try
+        {
+            var viewModel = CreateViewModel();
+            viewModel.Load(new WidgetSettings
+            {
+                Fal = new ProviderBillingSettings
+                {
+                    ShowProLimits = true,
+                    CredentialId = apiKeyId
+                }
+            });
+
+            var fal = viewModel.Sections
+                .Single(s => s.Title == "fal.ai")
+                .Sources
+                .Single(s => s.Kind == ProviderSourceKind.FalCredits);
+
+            Assert.True(fal.ShowApiKeyField);
+            Assert.True(fal.HasApiKeySaved);
+            Assert.Contains("saved", fal.ApiKeyWatermark, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            CredentialStore.Delete(apiKeyId);
+        }
+    }
+
+    [Fact]
+    public void SaveApiKey_empty_text_does_not_clear_saved_fal_key()
+    {
+        var apiKeyId = CredentialStore.Store("fal-ui-test-empty", "fal-keep-me");
+        try
+        {
+            var viewModel = CreateViewModel();
+            viewModel.Load(new WidgetSettings
+            {
+                Fal = new ProviderBillingSettings
+                {
+                    ShowProLimits = true,
+                    CredentialId = apiKeyId
+                }
+            });
+
+            Assert.True(viewModel.HasFalApiKeySaved);
+            viewModel.SaveApiKey(ProviderSourceKind.FalCredits, "   ");
+            Assert.True(viewModel.HasFalApiKeySaved);
+
+            viewModel.ClearApiKey(ProviderSourceKind.FalCredits);
+            Assert.False(viewModel.HasFalApiKeySaved);
         }
         finally
         {
@@ -331,5 +392,5 @@ public sealed class SettingsPanelViewModelTests
             new AntigravityUsageClient(),
             new OpenRouterUsageClient(),
             new OpenCodeUsageClient(),
-            () => new CursorTokens());
+            cursorTokenReader: () => new CursorTokens());
 }

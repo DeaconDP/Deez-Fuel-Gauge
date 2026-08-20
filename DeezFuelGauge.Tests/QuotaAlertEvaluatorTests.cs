@@ -202,6 +202,47 @@ public sealed class QuotaAlertEvaluatorTests
         Assert.Empty(alerts);
     }
 
+    [Fact]
+    public void Evaluate_fal_balance_alerts_when_heuristic_at_or_above_threshold()
+    {
+        var settings = new WidgetSettings
+        {
+            Cursor = new ProviderBillingSettings { ShowCursorSource = false },
+            Fal = new ProviderBillingSettings { ShowProLimits = true },
+            QuotaAlerts = new QuotaAlertSettings { MaxPercentUsed = 75, FalBalance = true }
+        };
+        var snapshot = new UsageSnapshot
+        {
+            Fal = FalSnapshot.FromBalance(3)
+        };
+
+        var alerts = QuotaAlertEvaluator.Evaluate(snapshot, settings);
+
+        Assert.Single(alerts);
+        Assert.Equal("fal-balance", alerts[0].SourceId);
+        Assert.Equal("fal", alerts[0].ProviderKey);
+        Assert.Contains("$3.00 left", alerts[0].Message);
+    }
+
+    [Fact]
+    public void Evaluate_fal_balance_skips_when_balance_healthy()
+    {
+        var settings = new WidgetSettings
+        {
+            Cursor = new ProviderBillingSettings { ShowCursorSource = false },
+            Fal = new ProviderBillingSettings { ShowProLimits = true },
+            QuotaAlerts = new QuotaAlertSettings { MaxPercentUsed = 75, FalBalance = true }
+        };
+        var snapshot = new UsageSnapshot
+        {
+            Fal = FalSnapshot.FromBalance(50)
+        };
+
+        var alerts = QuotaAlertEvaluator.Evaluate(snapshot, settings);
+
+        Assert.Empty(alerts);
+    }
+
     [Theory]
     [InlineData(7, 3, true)]
     [InlineData(7, 8, false)]

@@ -38,4 +38,16 @@ public sealed class ProviderAdapterFixtureTests
 
         Assert.True(snapshot.IsAvailable);
     }
+
+    [Fact]
+    public void Fal_adapter_fixture_contract()
+    {
+        const string json = """{"username":"u","credits":{"current_balance":12.5,"currency":"USD"}}""";
+        using var document = JsonDocument.Parse(json);
+        var snapshot = FalUsageClient.ParseBillingResponse(document.RootElement);
+
+        Assert.True(snapshot.IsAvailable);
+        Assert.Equal(12.5, snapshot.BalanceUsd);
+        Assert.Equal(0, snapshot.HeadlinePercentUsed);
+    }
 }

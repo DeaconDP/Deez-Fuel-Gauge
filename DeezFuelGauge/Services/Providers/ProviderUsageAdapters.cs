@@ -75,3 +75,20 @@ public sealed class OpenCodeUsageAdapter : IProviderUsageAdapter<OpenCodeSnapsho
     public Task<OpenCodeSnapshot> FetchAsync(CancellationToken cancellationToken = default) =>
         _client.FetchAsync(_settings, cancellationToken);
 }
+
+public sealed class FalUsageAdapter : IProviderUsageAdapter<FalSnapshot>
+{
+    private readonly FalUsageClient _client;
+    private readonly ProviderBillingSettings _settings;
+
+    public FalUsageAdapter(FalUsageClient client, ProviderBillingSettings settings)
+    {
+        _client = client;
+        _settings = settings;
+    }
+
+    public string ProviderKey => "fal";
+
+    public Task<FalSnapshot> FetchAsync(CancellationToken cancellationToken = default) =>
+        _client.FetchAsync(_settings, cancellationToken);
+}

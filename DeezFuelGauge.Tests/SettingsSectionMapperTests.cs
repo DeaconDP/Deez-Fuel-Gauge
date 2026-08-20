@@ -84,6 +84,41 @@ public sealed class SettingsSectionMapperTests
         Assert.False(secondDrive.IsEnabled);
     }
 
+    [Fact]
+    public void PopulateSections_includes_fal_section()
+    {
+        var sections = new List<ProviderSettingsSectionViewModel>();
+        var host = CreateViewModel();
+
+        SettingsSectionMapper.PopulateSections(sections, new WidgetSettings(), host);
+
+        var fal = sections.Single(s => s.ProviderId == SettingsExpandedProvider.Fal);
+        Assert.Equal("fal.ai", fal.Title);
+        Assert.Contains(fal.Sources, s => s.Kind == ProviderSourceKind.FalCredits);
+    }
+
+    [Fact]
+    public void ApplyFal_round_trips_enable_and_details()
+    {
+        var sections = new List<ProviderSettingsSectionViewModel>();
+        var host = CreateViewModel();
+        var settings = new WidgetSettings
+        {
+            Fal = new ProviderBillingSettings { ShowProLimits = true, ShowDetails = false }
+        };
+
+        SettingsSectionMapper.PopulateSections(sections, settings, host);
+        var fal = sections.Single(s => s.ProviderId == SettingsExpandedProvider.Fal);
+        fal.Sources.Single().IsEnabled = false;
+        fal.Sources.Single().ShowDetails = true;
+
+        var applied = new WidgetSettings();
+        SettingsSectionMapper.ApplyToSettings(sections, applied, SettingsExpandedProvider.Fal);
+
+        Assert.False(applied.Fal.ShowProLimits);
+        Assert.True(applied.Fal.ShowDetails);
+    }
+
     private static SettingsPanelViewModel CreateViewModel() =>
         new(
             new ProviderEasySetupService(),
@@ -92,5 +127,5 @@ public sealed class SettingsSectionMapperTests
             new AntigravityUsageClient(),
             new OpenRouterUsageClient(),
             new OpenCodeUsageClient(),
-            () => new CursorTokens());
+            cursorTokenReader: () => new CursorTokens());
 }

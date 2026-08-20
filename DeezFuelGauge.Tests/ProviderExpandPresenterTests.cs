@@ -18,6 +18,7 @@ public sealed class ProviderExpandPresenterTests
         Assert.False(state.Gemini);
         Assert.False(state.OpenRouter);
         Assert.False(state.OpenCode);
+        Assert.False(state.Fal);
     }
 
     [Fact]
@@ -25,7 +26,7 @@ public sealed class ProviderExpandPresenterTests
     {
         var state = ProviderExpandPresenter.Toggle(
             ProviderSection.OpenAi,
-            new ProviderExpandState(false, true, false, false, false, false));
+            new ProviderExpandState(false, true, false, false, false, false, false));
 
         Assert.False(state.OpenAi);
     }
@@ -35,7 +36,7 @@ public sealed class ProviderExpandPresenterTests
     {
         var state = ProviderExpandPresenter.Toggle(
             ProviderSection.Gemini,
-            new ProviderExpandState(true, false, false, false, false, false));
+            new ProviderExpandState(true, false, false, false, false, false, false));
 
         Assert.False(state.Cursor);
         Assert.False(state.OpenAi);
@@ -47,7 +48,7 @@ public sealed class ProviderExpandPresenterTests
     {
         var state = ProviderExpandPresenter.Toggle(
             ProviderSection.Claude,
-            new ProviderExpandState(true, false, false, false, false, false));
+            new ProviderExpandState(true, false, false, false, false, false, false));
 
         Assert.False(state.Cursor);
         Assert.True(state.Claude);
@@ -65,5 +66,16 @@ public sealed class ProviderExpandPresenterTests
         Assert.True(state.Gemini);
         Assert.False(state.OpenRouter);
         Assert.False(state.OpenCode);
+        Assert.False(state.Fal);
+    }
+
+    [Fact]
+    public void ExpandOnly_fal_enables_only_fal()
+    {
+        var state = ProviderExpandState.ExpandOnly(ProviderSection.Fal);
+
+        Assert.True(state.Fal);
+        Assert.False(state.OpenCode);
+        Assert.False(state.OpenRouter);
     }
 }

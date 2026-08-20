@@ -9,6 +9,7 @@ public static class ProviderHealthPresenter
         ["antigravity"] = "Gemini App",
         ["openrouter"] = "OpenRouter",
         ["opencode"] = "OpenCode",
+        ["fal"] = "fal.ai",
         ["grokbot"] = "Grok Bot"
     };
 

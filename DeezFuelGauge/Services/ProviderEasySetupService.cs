@@ -8,6 +8,7 @@ public sealed class ProviderEasySetupService
     private readonly ClaudeProUsageClient _claudePro;
     private readonly AntigravityUsageClient _antigravity;
     private readonly OpenRouterUsageClient _openRouter;
+    private readonly FalUsageClient _fal;
     private readonly GrokBotUsageClient? _grokBot;
     private readonly ExternalSetupLauncher _launcher;
     private readonly Func<CursorTokens> _cursorTokenReader;
@@ -20,6 +21,7 @@ public sealed class ProviderEasySetupService
         ClaudeProUsageClient? claudePro = null,
         AntigravityUsageClient? antigravity = null,
         OpenRouterUsageClient? openRouter = null,
+        FalUsageClient? fal = null,
         GrokBotUsageClient? grokBot = null,
         ExternalSetupLauncher? launcher = null,
         Func<CursorTokens>? cursorTokenReader = null,
@@ -31,6 +33,7 @@ public sealed class ProviderEasySetupService
         _claudePro = claudePro ?? new ClaudeProUsageClient();
         _antigravity = antigravity ?? new AntigravityUsageClient();
         _openRouter = openRouter ?? new OpenRouterUsageClient();
+        _fal = fal ?? new FalUsageClient();
         _grokBot = grokBot;
         _launcher = launcher ?? new ExternalSetupLauncher();
         _cursorTokenReader = cursorTokenReader ?? CursorTokenReader.Read;
@@ -170,6 +173,27 @@ public sealed class ProviderEasySetupService
 
         var status = await _openRouter.TestConnectionAsync(apiKey, cancellationToken);
         settings.OpenRouter.LastConnectionStatus = status;
+        return new EasySetupResult(status);
+    }
+
+    public async Task<EasySetupResult> SetupFalAsync(
+        WidgetSettings settings,
+        CancellationToken cancellationToken = default)
+    {
+        settings.Fal.ShowProLimits = true;
+        settings.Fal.ShowDetails = true;
+
+        var apiKey = CredentialStore.Retrieve(settings.Fal.CredentialId);
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            _launcher.OpenFal();
+            const string message = "Paste your fal.ai Admin API key in Advanced.";
+            settings.Fal.LastConnectionStatus = message;
+            return new EasySetupResult(message, OpenedExternalUrl: true);
+        }
+
+        var status = await _fal.TestConnectionAsync(apiKey, cancellationToken);
+        settings.Fal.LastConnectionStatus = status;
         return new EasySetupResult(status);
     }
 

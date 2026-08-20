@@ -20,6 +20,7 @@ internal static class SettingsSectionMapper
         if (ProviderFeatureFlags.OpenRouterEnabled)
             sections.Add(BuildOpenRouterSection(settings, host));
         sections.Add(BuildOpenCodeSection(settings, host));
+        sections.Add(BuildFalSection(settings, host));
         sections.Add(BuildDiskSection(settings, host));
         sections.Add(BuildHardwareSection(settings, host));
 
@@ -59,6 +60,9 @@ internal static class SettingsSectionMapper
                     break;
                 case SettingsExpandedProvider.OpenCode:
                     ApplyOpenCode(section, settings);
+                    break;
+                case SettingsExpandedProvider.Fal:
+                    ApplyFal(section, settings);
                     break;
                 case SettingsExpandedProvider.Disk:
                     ApplyDisk(section, settings);
@@ -129,14 +133,14 @@ internal static class SettingsSectionMapper
 
         var grokBot = CreateSource(
             ProviderSourceKind.GrokBotLimits,
-            "Grok Bot weekly",
+            "Grok Bot",
             settings.GrokBot.ShowProLimits,
             settings.GrokBot.ShowDetails,
             settings.GrokBot.LastConnectionStatus ?? "",
             showConnect: true,
             showTest: true);
         grokBot.AdvancedHint =
-            "Weekly Grok Bot allowance via Cursor login (Ultra / Premium). No API key needed.";
+            "Grok Bot allowance via Cursor login (Ultra / Premium). No API key needed.";
         grokBot.ShowAdvancedSection = false;
 
         var section = new ProviderSettingsSectionViewModel
@@ -197,7 +201,8 @@ internal static class SettingsSectionMapper
             showConnect: false,
             showTest: true);
         apiConsole.SupportsAdvanced = true;
-        apiConsole.ShowApiKeyField = !host.HasClaudeApiKeySaved;
+        // Keep field visible after save so Clear / replace still work.
+        apiConsole.ShowApiKeyField = settings.Claude.ShowApiConsoleBilling;
         apiConsole.ShowBudgetField = settings.Claude.ShowApiConsoleBilling;
         apiConsole.Budget = FormatBudget(settings.Claude.MonthlyBudgetUsd);
         apiConsole.ApiKeyWatermark = host.ClaudeApiKeyWatermark;
@@ -229,7 +234,8 @@ internal static class SettingsSectionMapper
             showConnect: false,
             showTest: true);
         direct.SupportsAdvanced = true;
-        direct.ShowApiKeyField = !host.HasOpenAiApiKeySaved;
+        // Keep field visible after save so Clear / replace still work.
+        direct.ShowApiKeyField = settings.OpenAi.ShowDirectSource;
         direct.ShowOrgIdField = settings.OpenAi.ShowDirectSource;
         direct.ShowBudgetField = settings.OpenAi.ShowDirectSource;
         direct.OrgId = settings.OpenAi.OrganizationId ?? "";
@@ -313,8 +319,9 @@ internal static class SettingsSectionMapper
             showConnect: true,
             showTest: true);
         credits.SupportsAdvanced = true;
-        credits.ShowApiKeyField = !host.HasOpenRouterApiKeySaved;
-        credits.ShowManagementApiKeyField = !host.HasOpenRouterManagementApiKeySaved;
+        // Keep fields visible after save so Clear / replace still work.
+        credits.ShowApiKeyField = settings.OpenRouter.ShowProLimits;
+        credits.ShowManagementApiKeyField = settings.OpenRouter.ShowProLimits;
         credits.ApiKeyWatermark = host.OpenRouterApiKeyWatermark;
         credits.ManagementApiKeyWatermark = host.OpenRouterManagementApiKeyWatermark;
         credits.HasApiKeySaved = host.HasOpenRouterApiKeySaved;
@@ -329,6 +336,38 @@ internal static class SettingsSectionMapper
             ProviderId = SettingsExpandedProvider.OpenRouter,
             Title = "OpenRouter",
             MasterEnable = settings.OpenRouter.ShowProLimits,
+            SummaryStatus = credits.Status
+        };
+        section.Sources.Add(credits);
+        return section;
+    }
+
+    private static ProviderSettingsSectionViewModel BuildFalSection(
+        WidgetSettings settings,
+        SettingsPanelViewModel host)
+    {
+        var credits = CreateSource(
+            ProviderSourceKind.FalCredits,
+            "Credits",
+            settings.Fal.ShowProLimits,
+            settings.Fal.ShowDetails,
+            settings.Fal.LastConnectionStatus ?? "",
+            showConnect: true,
+            showTest: true);
+        credits.SupportsAdvanced = true;
+        // Keep field visible after save so Clear / replace still work.
+        credits.ShowApiKeyField = settings.Fal.ShowProLimits;
+        credits.ApiKeyWatermark = host.FalApiKeyWatermark;
+        credits.HasApiKeySaved = host.HasFalApiKeySaved;
+        credits.AdvancedHint =
+            "Admin API key from fal.ai/dashboard/keys. Shows prepaid credit balance remaining.";
+        credits.ShowAdvancedSection = settings.Fal.ShowProLimits;
+
+        var section = new ProviderSettingsSectionViewModel
+        {
+            ProviderId = SettingsExpandedProvider.Fal,
+            Title = "fal.ai",
+            MasterEnable = settings.Fal.ShowProLimits,
             SummaryStatus = credits.Status
         };
         section.Sources.Add(credits);
@@ -544,6 +583,15 @@ internal static class SettingsSectionMapper
         settings.OpenRouter.ShowProLimits = credits.IsEnabled;
         settings.OpenRouter.ShowDetails = credits.ShowDetails;
         settings.OpenRouter.LastConnectionStatus = NullIfEmpty(credits.Status);
+        section.MasterEnable = credits.IsEnabled;
+    }
+
+    private static void ApplyFal(ProviderSettingsSectionViewModel section, WidgetSettings settings)
+    {
+        var credits = section.Sources.Single();
+        settings.Fal.ShowProLimits = credits.IsEnabled;
+        settings.Fal.ShowDetails = credits.ShowDetails;
+        settings.Fal.LastConnectionStatus = NullIfEmpty(credits.Status);
         section.MasterEnable = credits.IsEnabled;
     }
 

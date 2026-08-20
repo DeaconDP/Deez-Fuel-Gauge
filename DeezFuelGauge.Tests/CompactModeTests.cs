@@ -115,6 +115,7 @@ public sealed class CompactGlancePresenterTests
         settings.OpenRouter.ShowProLimits = false;
         settings.OpenCode.ShowDirectSource = false;
         settings.OpenCode.ShowProLimits = false;
+        settings.Fal.ShowProLimits = false;
         settings.GrokBot.ShowProLimits = false;
         return settings;
     }

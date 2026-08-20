@@ -18,6 +18,7 @@ public sealed class SettingsPanelViewModel : ViewModelBase
     private readonly AntigravityUsageClient _antigravityBilling;
     private readonly OpenRouterUsageClient _openRouterBilling;
     private readonly OpenCodeUsageClient _openCodeBilling;
+    private readonly FalUsageClient _falBilling;
     private readonly GrokBotUsageClient _grokBotBilling;
     private readonly OpenCodeAuthResolver _openCodeAuthResolver;
     private readonly GeminiAuthResolver _geminiAuthResolver;
@@ -31,6 +32,7 @@ public sealed class SettingsPanelViewModel : ViewModelBase
     private string? _openAiProSessionCredentialId;
     private string? _openRouterCredentialId;
     private string? _openRouterManagementCredentialId;
+    private string? _falCredentialId;
     private string? _openCodeProSessionCredentialId;
     private string? _openCodeWorkspaceId;
     private string? _claudeProSessionCredentialId;
@@ -57,6 +59,7 @@ public sealed class SettingsPanelViewModel : ViewModelBase
         AntigravityUsageClient antigravityBilling,
         OpenRouterUsageClient openRouterBilling,
         OpenCodeUsageClient openCodeBilling,
+        FalUsageClient? falBilling = null,
         Func<CursorTokens>? cursorTokenReader = null,
         GeminiAuthResolver? geminiAuthResolver = null,
         AnthropicBillingClient? anthropicBilling = null,
@@ -77,6 +80,7 @@ public sealed class SettingsPanelViewModel : ViewModelBase
         _antigravityBilling = antigravityBilling;
         _openRouterBilling = openRouterBilling;
         _openCodeBilling = openCodeBilling;
+        _falBilling = falBilling ?? new FalUsageClient();
         _grokBotBilling = grokBotBilling ?? new GrokBotUsageClient();
         _openCodeAuthResolver = new OpenCodeAuthResolver();
         _cursorTokenReader = cursorTokenReader ?? CursorTokenReader.Read;
@@ -110,6 +114,7 @@ public sealed class SettingsPanelViewModel : ViewModelBase
     public bool IsGeminiExpanded => ExpandedProvider == SettingsExpandedProvider.Gemini;
     public bool IsOpenRouterExpanded => ExpandedProvider == SettingsExpandedProvider.OpenRouter;
     public bool IsOpenCodeExpanded => ExpandedProvider == SettingsExpandedProvider.OpenCode;
+    public bool IsFalExpanded => ExpandedProvider == SettingsExpandedProvider.Fal;
     public bool IsDiskExpanded => ExpandedProvider == SettingsExpandedProvider.Disk;
     public bool IsHardwareExpanded => ExpandedProvider == SettingsExpandedProvider.Hardware;
 
@@ -444,6 +449,24 @@ public sealed class SettingsPanelViewModel : ViewModelBase
         set => SetSourceStatus(GetSource(ProviderSourceKind.OpenCodeZen), value);
     }
 
+    public bool ShowFalLimits
+    {
+        get => GetSource(ProviderSourceKind.FalCredits).IsEnabled;
+        set => SetSourceEnabled(GetSource(ProviderSourceKind.FalCredits), value);
+    }
+
+    public bool ShowFalDetails
+    {
+        get => GetSource(ProviderSourceKind.FalCredits).ShowDetails;
+        set => SetSourceDetail(GetSource(ProviderSourceKind.FalCredits), value);
+    }
+
+    public string FalStatus
+    {
+        get => GetSource(ProviderSourceKind.FalCredits).Status;
+        set => SetSourceStatus(GetSource(ProviderSourceKind.FalCredits), value);
+    }
+
     public bool ShowGrokBotLimits
     {
         get => GetSource(ProviderSourceKind.GrokBotLimits).IsEnabled;
@@ -515,6 +538,7 @@ public sealed class SettingsPanelViewModel : ViewModelBase
     public string OpenRouterApiKeyWatermark => BuildWatermark("API key (sk-or-...)", _openRouterCredentialId);
     public string OpenRouterManagementApiKeyWatermark =>
         BuildWatermark("Management key (optional, for balance)", _openRouterManagementCredentialId);
+    public string FalApiKeyWatermark => BuildWatermark("Admin API key", _falCredentialId);
     public string OpenCodeSessionWatermark => BuildWatermark("opencode.ai auth cookie", _openCodeProSessionCredentialId);
     public string ClaudeApiKeyWatermark => BuildWatermark("Admin API key (sk-ant-admin...)", _claudeCredentialId);
     public string ClaudeProSessionWatermark =>
@@ -524,6 +548,7 @@ public sealed class SettingsPanelViewModel : ViewModelBase
     public bool HasOpenAiSessionCookieSaved => !string.IsNullOrWhiteSpace(_openAiProSessionCredentialId);
     public bool HasOpenRouterApiKeySaved => !string.IsNullOrWhiteSpace(_openRouterCredentialId);
     public bool HasOpenRouterManagementApiKeySaved => !string.IsNullOrWhiteSpace(_openRouterManagementCredentialId);
+    public bool HasFalApiKeySaved => !string.IsNullOrWhiteSpace(_falCredentialId);
     public bool HasOpenCodeSessionSaved => !string.IsNullOrWhiteSpace(_openCodeProSessionCredentialId);
     public bool HasClaudeApiKeySaved => !string.IsNullOrWhiteSpace(_claudeCredentialId);
     public bool HasClaudeSessionCookieSaved => !string.IsNullOrWhiteSpace(_claudeProSessionCredentialId);
@@ -612,6 +637,7 @@ public sealed class SettingsPanelViewModel : ViewModelBase
             _openAiProSessionCredentialId = settings.OpenAi.ProSessionCredentialId;
             _openRouterCredentialId = settings.OpenRouter.CredentialId;
             _openRouterManagementCredentialId = settings.OpenRouter.ManagementCredentialId;
+            _falCredentialId = settings.Fal.CredentialId;
             _openCodeProSessionCredentialId = settings.OpenCode.ProSessionCredentialId;
             _openCodeWorkspaceId = settings.OpenCode.WorkspaceId;
             _claudeProSessionCredentialId = settings.Claude.ProSessionCredentialId;
@@ -641,6 +667,7 @@ public sealed class SettingsPanelViewModel : ViewModelBase
         settings.OpenAi.ProSessionCredentialId = _openAiProSessionCredentialId;
         settings.OpenRouter.CredentialId = _openRouterCredentialId;
         settings.OpenRouter.ManagementCredentialId = _openRouterManagementCredentialId;
+        settings.Fal.CredentialId = _falCredentialId;
         settings.OpenCode.ProSessionCredentialId = _openCodeProSessionCredentialId;
         settings.Claude.ProSessionCredentialId = _claudeProSessionCredentialId;
         settings.Claude.ProOAuthCredentialId = _claudeProOAuthCredentialId;
@@ -670,6 +697,7 @@ public sealed class SettingsPanelViewModel : ViewModelBase
         if (ProviderFeatureFlags.OpenRouterEnabled)
             OpenRouterStatus = settings.OpenRouter.LastConnectionStatus ?? OpenRouterStatus;
         OpenCodeStatus = settings.OpenCode.ProLastConnectionStatus ?? OpenCodeStatus;
+        FalStatus = settings.Fal.LastConnectionStatus ?? FalStatus;
         GrokBotStatus = settings.GrokBot.LastConnectionStatus ?? GrokBotStatus;
         UpdateConnectionStates();
     }
@@ -730,6 +758,10 @@ public sealed class SettingsPanelViewModel : ViewModelBase
                 ProviderConnectionStateHelper.FromConnected(ShowOpenCodeGo, openCodeConnected)));
 
         SetSectionColor(
+            SettingsExpandedProvider.Fal,
+            ProviderConnectionStateHelper.FromConnected(ShowFalLimits, HasFalApiKeySaved));
+
+        SetSectionColor(
             SettingsExpandedProvider.Disk,
             ShowDiskDrives ? ProviderConnectionState.Connected : ProviderConnectionState.Off);
 
@@ -767,6 +799,9 @@ public sealed class SettingsPanelViewModel : ViewModelBase
                 break;
             case ProviderSourceKind.OpenRouterCredits:
                 await RunEasySetupOpenRouterAsync(settings);
+                break;
+            case ProviderSourceKind.FalCredits:
+                await RunEasySetupFalAsync(settings);
                 break;
             case ProviderSourceKind.OpenCodeZen:
             case ProviderSourceKind.OpenCodeGo:
@@ -807,6 +842,9 @@ public sealed class SettingsPanelViewModel : ViewModelBase
             case ProviderSourceKind.OpenRouterCredits:
                 await TestOpenRouterAsync(settings);
                 break;
+            case ProviderSourceKind.FalCredits:
+                await TestFalAsync(settings);
+                break;
             case ProviderSourceKind.OpenCodeZen:
             case ProviderSourceKind.OpenCodeGo:
                 await TestOpenCodeAsync(settings);
@@ -819,6 +857,10 @@ public sealed class SettingsPanelViewModel : ViewModelBase
 
     public void SaveApiKey(ProviderSourceKind kind, string? text)
     {
+        // Empty blur must not wipe a saved key — use Clear for that.
+        if (string.IsNullOrWhiteSpace(text))
+            return;
+
         switch (kind)
         {
             case ProviderSourceKind.OpenAiDirect:
@@ -826,6 +868,9 @@ public sealed class SettingsPanelViewModel : ViewModelBase
                 break;
             case ProviderSourceKind.OpenRouterCredits:
                 SaveCredential("openrouter", ref _openRouterCredentialId, text);
+                break;
+            case ProviderSourceKind.FalCredits:
+                SaveCredential("fal", ref _falCredentialId, text);
                 break;
             case ProviderSourceKind.ClaudeApiConsole:
                 SaveCredential("claude", ref _claudeCredentialId, text);
@@ -841,6 +886,10 @@ public sealed class SettingsPanelViewModel : ViewModelBase
         if (kind != ProviderSourceKind.OpenRouterCredits)
             return;
 
+        // Empty blur must not wipe a saved key — use Clear for that.
+        if (string.IsNullOrWhiteSpace(text))
+            return;
+
         SaveCredential("openrouter-mgmt", ref _openRouterManagementCredentialId, text);
         UpdateCredentialDerivedState();
         NotifyChanged();
@@ -848,6 +897,10 @@ public sealed class SettingsPanelViewModel : ViewModelBase
 
     public void SaveSession(ProviderSourceKind kind, string? text)
     {
+        // Empty blur must not wipe a saved session — use Clear for that.
+        if (string.IsNullOrWhiteSpace(text))
+            return;
+
         switch (kind)
         {
             case ProviderSourceKind.OpenAiCodex:
@@ -877,6 +930,10 @@ public sealed class SettingsPanelViewModel : ViewModelBase
             case ProviderSourceKind.OpenRouterCredits:
                 CredentialStore.Delete(_openRouterCredentialId);
                 _openRouterCredentialId = null;
+                break;
+            case ProviderSourceKind.FalCredits:
+                CredentialStore.Delete(_falCredentialId);
+                _falCredentialId = null;
                 break;
             case ProviderSourceKind.ClaudeApiConsole:
                 CredentialStore.Delete(_claudeCredentialId);
@@ -1006,6 +1063,13 @@ public sealed class SettingsPanelViewModel : ViewModelBase
     {
         var result = await _easySetup.SetupOpenRouterAsync(settings);
         OpenRouterStatus = settings.OpenRouter.LastConnectionStatus ?? result.StatusMessage ?? "";
+        await CompleteEasySetupAsync(settings);
+    }
+
+    public async Task RunEasySetupFalAsync(WidgetSettings settings)
+    {
+        var result = await _easySetup.SetupFalAsync(settings);
+        FalStatus = settings.Fal.LastConnectionStatus ?? result.StatusMessage ?? "";
         await CompleteEasySetupAsync(settings);
     }
 
@@ -1221,6 +1285,15 @@ public sealed class SettingsPanelViewModel : ViewModelBase
         _host?.OnSettingsChanged();
     }
 
+    public async Task TestFalAsync(WidgetSettings settings)
+    {
+        Commit(settings);
+        var key = CredentialStore.Retrieve(_falCredentialId);
+        FalStatus = await _falBilling.TestConnectionAsync(key ?? "");
+        settings.Fal.LastConnectionStatus = FalStatus;
+        _host?.OnSettingsChanged();
+    }
+
     public async Task TestOpenCodeAsync(WidgetSettings settings)
     {
         Commit(settings);
@@ -1367,7 +1440,8 @@ public sealed class SettingsPanelViewModel : ViewModelBase
 
             var direct = GetSource(ProviderSourceKind.OpenAiDirect);
             direct.ShowAdvancedSection = ShowOpenAiDirect;
-            direct.ShowApiKeyField = !HasOpenAiApiKeySaved;
+            // Keep field visible after save so Clear / replace still work.
+            direct.ShowApiKeyField = ShowOpenAiDirect;
             direct.ShowOrgIdField = ShowOpenAiDirect;
             direct.ShowBudgetField = ShowOpenAiDirect;
             direct.HasApiKeySaved = HasOpenAiApiKeySaved;
@@ -1384,14 +1458,23 @@ public sealed class SettingsPanelViewModel : ViewModelBase
             {
                 var openRouter = GetSource(ProviderSourceKind.OpenRouterCredits);
                 openRouter.ShowAdvancedSection = ShowOpenRouterLimits;
-                openRouter.ShowApiKeyField = !HasOpenRouterApiKeySaved;
-                openRouter.ShowManagementApiKeyField = ShowOpenRouterLimits && !HasOpenRouterManagementApiKeySaved;
+                // Keep fields visible after save so Clear / replace still work.
+                openRouter.ShowApiKeyField = ShowOpenRouterLimits;
+                openRouter.ShowManagementApiKeyField = ShowOpenRouterLimits;
                 openRouter.HasApiKeySaved = HasOpenRouterApiKeySaved;
                 openRouter.HasManagementApiKeySaved = HasOpenRouterManagementApiKeySaved;
                 openRouter.ApiKeyWatermark = OpenRouterApiKeyWatermark;
                 openRouter.ManagementApiKeyWatermark = OpenRouterManagementApiKeyWatermark;
                 openRouter.NotifyAdvancedVisibility();
             }
+
+            var fal = GetSource(ProviderSourceKind.FalCredits);
+            fal.ShowAdvancedSection = ShowFalLimits;
+            // Keep field visible after save so Clear / replace still work.
+            fal.ShowApiKeyField = ShowFalLimits;
+            fal.HasApiKeySaved = HasFalApiKeySaved;
+            fal.ApiKeyWatermark = FalApiKeyWatermark;
+            fal.NotifyAdvancedVisibility();
 
             var claudePro = GetSource(ProviderSourceKind.ClaudePro);
             claudePro.HasAutoAuth = HasClaudeCodeAuth;
@@ -1407,7 +1490,8 @@ public sealed class SettingsPanelViewModel : ViewModelBase
 
             var claudeApi = GetSource(ProviderSourceKind.ClaudeApiConsole);
             claudeApi.ShowAdvancedSection = ShowClaudeApiConsole;
-            claudeApi.ShowApiKeyField = !HasClaudeApiKeySaved;
+            // Keep field visible after save so Clear / replace still work.
+            claudeApi.ShowApiKeyField = ShowClaudeApiConsole;
             claudeApi.ShowBudgetField = ShowClaudeApiConsole;
             claudeApi.HasApiKeySaved = HasClaudeApiKeySaved;
             claudeApi.ApiKeyWatermark = ClaudeApiKeyWatermark;
@@ -1506,6 +1590,7 @@ public sealed class SettingsPanelViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsGeminiExpanded));
         OnPropertyChanged(nameof(IsOpenRouterExpanded));
         OnPropertyChanged(nameof(IsOpenCodeExpanded));
+        OnPropertyChanged(nameof(IsFalExpanded));
         OnPropertyChanged(nameof(IsDiskExpanded));
         OnPropertyChanged(nameof(IsHardwareExpanded));
     }

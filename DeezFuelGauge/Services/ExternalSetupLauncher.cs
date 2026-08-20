@@ -205,4 +205,6 @@ public class ExternalSetupLauncher
     public void OpenOpenRouter() => OpenUrl("https://openrouter.ai/settings/keys");
 
     public void OpenOpenRouterManagementKeys() => OpenUrl("https://openrouter.ai/settings/management-keys");
+
+    public void OpenFal() => OpenUrl("https://fal.ai/dashboard/keys");
 }
