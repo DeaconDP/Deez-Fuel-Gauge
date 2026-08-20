@@ -8,6 +8,7 @@ public enum SettingsExpandedProvider
     Gemini,
     OpenRouter,
     OpenCode,
+    Fal,
     GrokBot,
     Disk,
     Hardware,

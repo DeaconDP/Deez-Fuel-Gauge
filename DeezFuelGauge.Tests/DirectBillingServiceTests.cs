@@ -17,6 +17,7 @@ public sealed class DirectBillingServiceTests
             Gemini = new ProviderBillingSettings { ShowProLimits = false },
             OpenRouter = new ProviderBillingSettings { ShowProLimits = false },
             OpenCode = new ProviderBillingSettings { ShowProLimits = false, ShowDirectSource = false },
+            Fal = new ProviderBillingSettings { ShowProLimits = false },
             GrokBot = new ProviderBillingSettings { ShowProLimits = false }
         };
 
@@ -28,6 +29,7 @@ public sealed class DirectBillingServiceTests
         Assert.False(enriched.Antigravity.IsAvailable);
         Assert.False(enriched.OpenRouter.IsAvailable);
         Assert.False(enriched.OpenCode.IsAvailable);
+        Assert.False(enriched.Fal.IsAvailable);
         Assert.False(enriched.GrokBot.IsAvailable);
         Assert.Equal(42, enriched.PercentUsed);
     }
@@ -52,6 +54,7 @@ public sealed class DirectBillingServiceTests
                 Gemini = new ProviderBillingSettings { ShowProLimits = false },
                 OpenRouter = new ProviderBillingSettings { ShowProLimits = false },
                 OpenCode = new ProviderBillingSettings { ShowProLimits = false, ShowDirectSource = false },
+                Fal = new ProviderBillingSettings { ShowProLimits = false },
                 GrokBot = new ProviderBillingSettings { ShowProLimits = false }
             };
 
@@ -69,7 +72,8 @@ public sealed class DirectBillingServiceTests
                 new ClaudeProUsageClient(http),
                 new AntigravityUsageClient(http),
                 new OpenRouterUsageClient(http),
-                new OpenCodeUsageClient(http));
+                new OpenCodeUsageClient(http),
+                new FalUsageClient(http));
 
             var source = new UsageSnapshot { PercentUsed = 10 };
             var sw = Stopwatch.StartNew();
@@ -111,7 +115,8 @@ public sealed class DirectBillingServiceTests
                 authResolver: new OpenCodeAuthResolver(
                     apiKeyReader: () => null,
                     browserCookieReader: () => null,
-                    savedSessionReader: _ => null)));
+                    savedSessionReader: _ => null)),
+            fal: new FalUsageClient(failingHttp));
     }
 
     private sealed class AlwaysNotFoundHandler : HttpMessageHandler

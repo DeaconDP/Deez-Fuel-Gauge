@@ -41,6 +41,10 @@ public partial class SettingsSourceRow : UserControl
         if (Vm is null || sender is not TextBox box)
             return;
 
+        // Empty blur keeps the saved key; paste a new value to replace, or use Clear.
+        if (string.IsNullOrWhiteSpace(box.Text))
+            return;
+
         FindPanel()?.RequestSaveApiKey(Vm.Kind, box.Text);
         box.Text = "";
     }
@@ -50,6 +54,9 @@ public partial class SettingsSourceRow : UserControl
         if (Vm is null || sender is not TextBox box)
             return;
 
+        if (string.IsNullOrWhiteSpace(box.Text))
+            return;
+
         FindPanel()?.RequestSaveManagementApiKey(Vm.Kind, box.Text);
         box.Text = "";
     }
@@ -57,6 +64,9 @@ public partial class SettingsSourceRow : UserControl
     private void SessionBox_LostFocus(object? sender, RoutedEventArgs e)
     {
         if (Vm is null || sender is not TextBox box)
+            return;
+
+        if (string.IsNullOrWhiteSpace(box.Text))
             return;
 
         FindPanel()?.RequestSaveSession(Vm.Kind, box.Text);

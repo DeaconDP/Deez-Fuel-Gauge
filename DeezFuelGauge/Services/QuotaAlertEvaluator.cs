@@ -151,6 +151,22 @@ public static class QuotaAlertEvaluator
                 "OpenCode Go monthly");
         }
 
+        if (alerts.FalBalance
+            && settings.Fal.ShowProLimits
+            && snapshot.Fal.IsAvailable
+            && snapshot.Fal.HeadlinePercentUsed >= alerts.MaxPercentUsed)
+        {
+            var balanceLabel = snapshot.Fal.DetailLabel;
+            var percentLabel = Math.Round(snapshot.Fal.HeadlinePercentUsed).ToString(CultureInfo.InvariantCulture);
+            results.Add(new QuotaAlert(
+                "fal-balance",
+                "fal",
+                "fal.ai credits",
+                snapshot.Fal.HeadlinePercentUsed,
+                0,
+                $"fal.ai: {balanceLabel} · {percentLabel}%"));
+        }
+
         if (alerts.GrokBotWeekly
             && settings.GrokBot.ShowProLimits
             && snapshot.GrokBot.IsAvailable
@@ -166,7 +182,7 @@ public static class QuotaAlertEvaluator
                 alerts,
                 "grokbot-weekly",
                 "grokbot",
-                "Grok Bot weekly");
+                "Grok Bot");
         }
 
         return results;

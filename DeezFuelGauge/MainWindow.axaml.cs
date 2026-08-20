@@ -26,6 +26,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
     private readonly AntigravityUsageClient _antigravityBilling = new();
     private readonly OpenRouterUsageClient _openRouterBilling = new();
     private readonly OpenCodeUsageClient _openCodeBilling = new();
+    private readonly FalUsageClient _falBilling = new();
     private readonly GrokBotUsageClient _grokBotBilling = new();
     private readonly DirectBillingService _directBilling;
     private readonly UsageRefreshService _refreshService;
@@ -61,6 +62,8 @@ public partial class MainWindow : Window, ISettingsPanelHost
     private double _lastGeminiHeadlinePercent;
     private double _lastOpenRouterPercent;
     private double _lastOpenRouterHeadlinePercent;
+    private double _lastFalPercent;
+    private double _lastFalHeadlinePercent;
     private double _lastGrokBotPercent;
     private double _lastOpenCodeZenPercent;
     private double _lastOpenCodeGoPercent;
@@ -135,6 +138,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
             _antigravityBilling,
             _openRouterBilling,
             _openCodeBilling,
+            _falBilling,
             _grokBotBilling);
         _refreshService = new UsageRefreshService(_usageClient, _directBilling);
         _debouncedPositionSave = new DebouncedAction(SaveSettings, TimeSpan.FromMilliseconds(400));
@@ -142,6 +146,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
             _codexBilling,
             _claudeProBilling,
             _antigravityBilling,
+            fal: _falBilling,
             grokBot: _grokBotBilling);
         _settingsViewModel = new SettingsPanelViewModel(
             _easySetup,
@@ -150,6 +155,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
             _antigravityBilling,
             _openRouterBilling,
             _openCodeBilling,
+            falBilling: _falBilling,
             grokBotBilling: _grokBotBilling,
             anthropicBilling: _anthropicBilling,
             claudeProBilling: _claudeProBilling);
@@ -383,6 +389,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
         GeminiProviderSection.IsVisible = ProviderDashboardPresenter.IsGeminiDashboardVisible(_settings.Gemini);
         OpenRouterProviderSection.IsVisible = ProviderDashboardPresenter.IsOpenRouterDashboardVisible(_settings.OpenRouter);
         OpenCodeProviderSection.IsVisible = ProviderDashboardPresenter.IsOpenCodeDashboardVisible(_settings.OpenCode);
+        FalProviderSection.IsVisible = ProviderDashboardPresenter.IsFalDashboardVisible(_settings.Fal);
 
         CursorSection.IsVisible = _settings.Cursor.ShowCursorSource;
         OpenAiSection.IsVisible = _settings.OpenAi.ShowCursorSource;
@@ -396,6 +403,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
         OpenRouterLimitsSection.IsVisible = _settings.OpenRouter.ShowProLimits;
         OpenCodeZenSection.IsVisible = _settings.OpenCode.ShowDirectSource;
         OpenCodeGoLimitsSection.IsVisible = _settings.OpenCode.ShowProLimits;
+        FalLimitsSection.IsVisible = _settings.Fal.ShowProLimits;
 
         ApplyProviderDetailChrome();
     }
@@ -448,6 +456,11 @@ public partial class MainWindow : Window, ISettingsPanelHost
         OpenRouterDetailText.IsVisible = _settings.OpenRouter.ShowProLimits && _settings.OpenRouter.ShowDetails;
         OpenRouterPercentText.IsVisible = _settings.OpenRouter.ShowProLimits;
 
+        var showFalBalance = _settings.Fal.ShowProLimits && _settings.Fal.ShowDetails;
+        FalBalanceText.IsVisible = showFalBalance;
+        if (!showFalBalance)
+            FalBalanceText.Text = "";
+
         OpenCodeZenDetailText.IsVisible = _settings.OpenCode.ShowDirectSource && _settings.OpenCode.ShowDetails;
         var openCode = _lastSnapshot?.OpenCode;
         var showOpenCodeGoBreakdown = openCode is not null
@@ -469,6 +482,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
         GeminiDetailsPanel.IsVisible = true;
         OpenRouterDetailsPanel.IsVisible = true;
         OpenCodeDetailsPanel.IsVisible = true;
+        FalDetailsPanel.IsVisible = true;
         ApplyProviderDetailChrome();
 
         if (_lastSnapshot is null || _lastSnapshot.IsError)
@@ -894,8 +908,8 @@ public partial class MainWindow : Window, ISettingsPanelHost
         ToolTip.SetTip(
             GrokBotBreakdownRow,
             grokBot.IsAvailable
-                ? (grokBot.DetailLabel ?? "Weekly Grok Bot allowance via Cursor login.")
-                : (grokBot.StatusMessage ?? "Grok Bot weekly usage unavailable."));
+                ? (grokBot.DetailLabel ?? "Grok Bot allowance via Cursor login.")
+                : (grokBot.StatusMessage ?? "Grok Bot usage unavailable."));
     }
 
     private void ApplyCodexLimitsBreakdownLayout(ProviderBillingSettings options, CodexSnapshot codex)
@@ -1413,6 +1427,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
             GeminiProviderSection.IsVisible = false;
             OpenRouterProviderSection.IsVisible = false;
             OpenCodeProviderSection.IsVisible = false;
+            FalProviderSection.IsVisible = false;
             ScheduleLayoutRefresh(oldHeight);
             return;
         }
@@ -1450,6 +1465,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
         ApplyAntigravityBars(snapshot.Antigravity, _settings.Gemini);
         ApplyOpenRouterBars(snapshot.OpenRouter, _settings.OpenRouter);
         ApplyOpenCodeBars(snapshot.OpenCode, _settings.OpenCode);
+        ApplyFalBars(snapshot.Fal, _settings.Fal);
         ApplyProviderHeadlines(snapshot);
         SyncSettingsAndVisibility();
         // Sub-bars inside collapsed/unmeasured panels skip width updates; refresh after layout.
@@ -1515,6 +1531,15 @@ public partial class MainWindow : Window, ISettingsPanelHost
             ref _lastOpenCodeHeadlinePercent,
             openCodePercent,
             openCodeConnected);
+
+        var falConnected = ProviderDashboardPresenter.IsFalHeadlineConnected(snapshot, _settings.Fal);
+        var falPercent = ProviderDashboardPresenter.ComputeFalHeadline(snapshot, _settings.Fal);
+        ApplyHeadlineBar(
+            FalHeadlineTrack,
+            FalHeadlineFill,
+            ref _lastFalHeadlinePercent,
+            falPercent,
+            falConnected);
     }
 
     private static void ApplyHeadlineBar(Grid track, Border fill, ref double lastPercent, double percent, bool connected)
@@ -1700,6 +1725,27 @@ public partial class MainWindow : Window, ISettingsPanelHost
         OpenRouterDetailText.IsVisible = options.ShowDetails && openRouter.IsAvailable;
     }
 
+    private void ApplyFalBars(FalSnapshot fal, ProviderBillingSettings options)
+    {
+        if (!options.ShowProLimits)
+            return;
+
+        ProviderLimitsPresenter.ApplyBreakdownSubBar(
+            FalProgressTrack,
+            FalProgressFill,
+            FalPercentText,
+            ref _lastFalPercent,
+            fal.HeadlinePercentUsed,
+            fal.IsAvailable);
+
+        if (!fal.IsAvailable)
+            FalPercentText.Text = fal.StatusMessage ?? "—";
+
+        var showBalance = options.ShowDetails && fal.IsAvailable;
+        FalBalanceText.Text = showBalance ? fal.DetailLabel : "";
+        FalBalanceText.IsVisible = showBalance;
+    }
+
     private void ApplyOpenCodeBars(OpenCodeSnapshot openCode, ProviderBillingSettings options)
     {
         if (options.ShowDirectSource)
@@ -1881,6 +1927,8 @@ public partial class MainWindow : Window, ISettingsPanelHost
         _lastAntigravityPercent = 0;
         _lastOpenRouterPercent = 0;
         _lastOpenRouterHeadlinePercent = 0;
+        _lastFalPercent = 0;
+        _lastFalHeadlinePercent = 0;
         _lastGrokBotPercent = 0;
         _lastOpenCodeZenPercent = 0;
         _lastOpenCodeGoPercent = 0;
@@ -1909,6 +1957,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
         AntigravityThirdPartySessionProgressFill.Width = 0;
         AntigravityThirdPartyWeeklyProgressFill.Width = 0;
         OpenRouterProgressFill.Width = 0;
+        FalProgressFill.Width = 0;
         GrokBotProgressFill.Width = 0;
         OpenCodeZenProgressFill.Width = 0;
         OpenCodeGoProgressFill.Width = 0;
@@ -1932,6 +1981,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
         AntigravityThirdPartySessionProgressTrack.Opacity = 0.45;
         AntigravityThirdPartyWeeklyProgressTrack.Opacity = 0.45;
         OpenRouterProgressTrack.Opacity = 0.45;
+        FalProgressTrack.Opacity = 0.45;
         GrokBotProgressTrack.Opacity = 0.45;
         OpenCodeZenProgressTrack.Opacity = 0.45;
         OpenCodeGoProgressTrack.Opacity = 0.45;
@@ -1944,6 +1994,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
         GeminiHeadlineFill.Width = 0;
         OpenRouterHeadlineFill.Width = 0;
         OpenCodeHeadlineFill.Width = 0;
+        FalHeadlineFill.Width = 0;
         OpenAiDetailText.IsVisible = false;
         ClaudeDetailText.IsVisible = false;
         GeminiDetailText.IsVisible = false;
@@ -1968,6 +2019,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
             ProviderBarPresenter.UpdateProgressWidth(GeminiHeadlineTrack, GeminiHeadlineFill, _lastGeminiHeadlinePercent);
             ProviderBarPresenter.UpdateProgressWidth(OpenRouterHeadlineTrack, OpenRouterHeadlineFill, _lastOpenRouterHeadlinePercent);
             ProviderBarPresenter.UpdateProgressWidth(OpenCodeHeadlineTrack, OpenCodeHeadlineFill, _lastOpenCodeHeadlinePercent);
+            ProviderBarPresenter.UpdateProgressWidth(FalHeadlineTrack, FalHeadlineFill, _lastFalHeadlinePercent);
             ProviderBarPresenter.UpdateProgressWidth(OpenAiProgressTrack, OpenAiProgressFill, _lastOpenAiPercent);
             ProviderBarPresenter.UpdateProgressWidth(ClaudeProgressTrack, ClaudeProgressFill, _lastClaudePercent);
             ProviderBarPresenter.UpdateProgressWidth(GeminiProgressTrack, GeminiProgressFill, _lastGeminiPercent);
@@ -1994,6 +2046,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
         ProviderBarPresenter.UpdateProgressWidth(ClaudeProProgressTrack, ClaudeProProgressFill, _lastClaudeProPercent);
         ProviderBarPresenter.UpdateProgressWidth(AntigravityProgressTrack, AntigravityProgressFill, _lastAntigravityPercent);
         ProviderBarPresenter.UpdateProgressWidth(OpenRouterProgressTrack, OpenRouterProgressFill, _lastOpenRouterPercent);
+        ProviderBarPresenter.UpdateProgressWidth(FalProgressTrack, FalProgressFill, _lastFalPercent);
         ProviderBarPresenter.UpdateProgressWidth(OpenCodeGoProgressTrack, OpenCodeGoProgressFill, _lastOpenCodeGoPercent);
         ProviderBarPresenter.UpdateProgressWidth(CodexSessionProgressTrack, CodexSessionProgressFill, _lastCodexSessionPercent);
         ProviderBarPresenter.UpdateProgressWidth(CodexWeeklyProgressTrack, CodexWeeklyProgressFill, _lastCodexWeeklyPercent);
@@ -2204,6 +2257,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
         ToolTip.SetTip(GeminiDetailsPanel, _widgetViewModel.Gemini.DegradedMessage);
         ToolTip.SetTip(OpenRouterDetailsPanel, _widgetViewModel.OpenRouter.DegradedMessage);
         ToolTip.SetTip(OpenCodeDetailsPanel, _widgetViewModel.OpenCode.DegradedMessage);
+        ToolTip.SetTip(FalDetailsPanel, _widgetViewModel.Fal.DegradedMessage);
     }
 
     private void SaveSettings()
@@ -2222,6 +2276,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
         _settings.IsGeminiProviderExpanded = true;
         _settings.IsOpenRouterProviderExpanded = true;
         _settings.IsOpenCodeProviderExpanded = true;
+        _settings.IsFalProviderExpanded = true;
         _settings.SettingsExpandedProvider = _settingsViewModel.ExpandedProvider;
         SettingsStore.Save(_settings);
     }
@@ -2244,6 +2299,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
         _antigravityBilling.Dispose();
         _openRouterBilling.Dispose();
         _openCodeBilling.Dispose();
+        _falBilling.Dispose();
         base.OnClosed(e);
     }
 }

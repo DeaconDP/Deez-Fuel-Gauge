@@ -344,6 +344,51 @@ public sealed class ProviderDashboardPresenterTests
     }
 
     [Fact]
+    public void IsFalHeadlineConnected_true_when_available()
+    {
+        var snapshot = new UsageSnapshot
+        {
+            Fal = FalSnapshot.FromBalance(24.5)
+        };
+        var settings = new ProviderBillingSettings { ShowProLimits = true };
+
+        Assert.True(ProviderDashboardPresenter.IsFalHeadlineConnected(snapshot, settings));
+        Assert.Equal(0, ProviderDashboardPresenter.ComputeFalHeadline(snapshot, settings));
+    }
+
+    [Fact]
+    public void IsFalHeadlineConnected_false_when_unavailable()
+    {
+        var snapshot = new UsageSnapshot
+        {
+            Fal = FalSnapshot.Unavailable("Admin API key not set")
+        };
+        var settings = new ProviderBillingSettings { ShowProLimits = true };
+
+        Assert.False(ProviderDashboardPresenter.IsFalHeadlineConnected(snapshot, settings));
+        Assert.Equal(0, ProviderDashboardPresenter.ComputeFalHeadline(snapshot, settings));
+    }
+
+    [Fact]
+    public void ComputeFalHeadline_uses_low_balance_heuristic()
+    {
+        var snapshot = new UsageSnapshot
+        {
+            Fal = FalSnapshot.FromBalance(3)
+        };
+        var settings = new ProviderBillingSettings { ShowProLimits = true };
+
+        Assert.Equal(75, ProviderDashboardPresenter.ComputeFalHeadline(snapshot, settings));
+    }
+
+    [Fact]
+    public void IsFalDashboardVisible_follows_show_pro_limits()
+    {
+        Assert.True(ProviderDashboardPresenter.IsFalDashboardVisible(new ProviderBillingSettings { ShowProLimits = true }));
+        Assert.False(ProviderDashboardPresenter.IsFalDashboardVisible(new ProviderBillingSettings { ShowProLimits = false }));
+    }
+
+    [Fact]
     public void ComputeGrokBotHeadline_uses_weekly_percent_when_available()
     {
         var snapshot = new UsageSnapshot

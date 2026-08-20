@@ -34,6 +34,29 @@ Rebuilds from this folder and launches the widget. On Windows, missing .NET can 
 
 Provider details and auth setup: **[docs/providers.md](docs/providers.md)**.
 
+## Compact mode abbreviations
+
+When compact (mini) mode is on, each enabled source shows as a short code plus percent (or `—` if disconnected):
+
+| Abbr | Meaning |
+|------|---------|
+| **C** | Cursor plan (overall) |
+| **CM** | Cursor Models (Auto pool, when breakdown is on) |
+| **CA** | Cursor API pool (when breakdown is on) |
+| **CO** | OpenAI via Cursor |
+| **CC** | Claude via Cursor |
+| **CG** | Gemini via Cursor |
+| **CX** | Codex / ChatGPT limits |
+| **OA** | OpenAI API |
+| **CL** | Claude.ai Pro limits |
+| **AC** | Claude API Console |
+| **GM** | Gemini App (Antigravity) |
+| **OR** | OpenRouter |
+| **OZ** | OpenCode Zen |
+| **OG** | OpenCode Go |
+| **FA** | fal.ai credits |
+| **GB** | Grok Bot |
+
 ## Screenshots
 
 <details>

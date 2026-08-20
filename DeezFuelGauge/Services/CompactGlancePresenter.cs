@@ -130,6 +130,13 @@ public static class CompactGlancePresenter
             HasAlert(alerts, "opencode-go-monthly"));
         AddConnected(
             rows,
+            settings.Fal.ShowProLimits,
+            "FA",
+            snapshot.Fal.IsAvailable,
+            snapshot.Fal.IsAvailable ? snapshot.Fal.HeadlinePercentUsed : null,
+            HasAlert(alerts, "fal-balance"));
+        AddConnected(
+            rows,
             settings.GrokBot.ShowProLimits,
             "GB",
             snapshot.GrokBot.IsAvailable,

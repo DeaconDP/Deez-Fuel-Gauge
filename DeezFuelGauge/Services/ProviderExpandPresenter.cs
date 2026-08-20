@@ -7,7 +7,8 @@ public enum ProviderSection
     Claude,
     Gemini,
     OpenRouter,
-    OpenCode
+    OpenCode,
+    Fal
 }
 
 public readonly record struct ProviderExpandState(
@@ -16,18 +17,20 @@ public readonly record struct ProviderExpandState(
     bool Claude,
     bool Gemini,
     bool OpenRouter,
-    bool OpenCode)
+    bool OpenCode,
+    bool Fal)
 {
-    public static ProviderExpandState None => new(false, false, false, false, false, false);
+    public static ProviderExpandState None => new(false, false, false, false, false, false, false);
 
     public static ProviderExpandState ExpandOnly(ProviderSection section) => section switch
     {
-        ProviderSection.Cursor => new(true, false, false, false, false, false),
-        ProviderSection.OpenAi => new(false, true, false, false, false, false),
-        ProviderSection.Claude => new(false, false, true, false, false, false),
-        ProviderSection.Gemini => new(false, false, false, true, false, false),
-        ProviderSection.OpenRouter => new(false, false, false, false, true, false),
-        ProviderSection.OpenCode => new(false, false, false, false, false, true),
+        ProviderSection.Cursor => new(true, false, false, false, false, false, false),
+        ProviderSection.OpenAi => new(false, true, false, false, false, false, false),
+        ProviderSection.Claude => new(false, false, true, false, false, false, false),
+        ProviderSection.Gemini => new(false, false, false, true, false, false, false),
+        ProviderSection.OpenRouter => new(false, false, false, false, true, false, false),
+        ProviderSection.OpenCode => new(false, false, false, false, false, true, false),
+        ProviderSection.Fal => new(false, false, false, false, false, false, true),
         _ => None
     };
 }
@@ -52,6 +55,7 @@ public static class ProviderExpandPresenter
             ProviderSection.Gemini => current with { Gemini = expanding },
             ProviderSection.OpenRouter => current with { OpenRouter = expanding },
             ProviderSection.OpenCode => current with { OpenCode = expanding },
+            ProviderSection.Fal => current with { Fal = expanding },
             _ => current
         };
     }
@@ -65,6 +69,7 @@ public static class ProviderExpandPresenter
             ProviderSection.Gemini => state.Gemini,
             ProviderSection.OpenRouter => state.OpenRouter,
             ProviderSection.OpenCode => state.OpenCode,
+            ProviderSection.Fal => state.Fal,
             _ => false
         };
 }

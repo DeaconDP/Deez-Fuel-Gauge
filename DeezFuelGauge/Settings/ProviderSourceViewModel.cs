@@ -149,10 +149,14 @@ public sealed class ProviderSourceViewModel : ViewModelBase
         OnPropertyChanged(nameof(HasAutoAuth));
         OnPropertyChanged(nameof(AutoAuthSummary));
         OnPropertyChanged(nameof(ShowApiKeyField));
+        OnPropertyChanged(nameof(HasApiKeySaved));
+        OnPropertyChanged(nameof(ApiKeyWatermark));
         OnPropertyChanged(nameof(ShowManagementApiKeyField));
         OnPropertyChanged(nameof(HasManagementApiKeySaved));
         OnPropertyChanged(nameof(ManagementApiKeyWatermark));
         OnPropertyChanged(nameof(ShowSessionField));
+        OnPropertyChanged(nameof(HasSessionSaved));
+        OnPropertyChanged(nameof(SessionWatermark));
         OnPropertyChanged(nameof(ShowSignInButton));
         OnPropertyChanged(nameof(ShowDisconnectOAuth));
         OnPropertyChanged(nameof(IsOAuthPending));

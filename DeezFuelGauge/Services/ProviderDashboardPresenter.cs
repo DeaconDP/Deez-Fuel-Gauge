@@ -26,6 +26,9 @@ public static class ProviderDashboardPresenter
     public static bool IsOpenCodeDashboardVisible(ProviderBillingSettings settings) =>
         settings.ShowDirectSource || settings.ShowProLimits;
 
+    public static bool IsFalDashboardVisible(ProviderBillingSettings settings) =>
+        settings.ShowProLimits;
+
     public static double ComputeCursorHeadline(UsageSnapshot snapshot, WidgetSettings settings)
     {
         // Cursor plan usage has separate Auto and API pools. When breakdown is on, surface the
@@ -147,6 +150,14 @@ public static class ProviderDashboardPresenter
         return values.Count > 0 ? values.Max() : 0;
     }
 
+    public static double ComputeFalHeadline(UsageSnapshot snapshot, ProviderBillingSettings settings)
+    {
+        if (!settings.ShowProLimits || !snapshot.Fal.IsAvailable)
+            return 0;
+
+        return snapshot.Fal.HeadlinePercentUsed;
+    }
+
     public static double ComputeGrokBotHeadline(UsageSnapshot snapshot, ProviderBillingSettings settings)
     {
         if (!settings.ShowProLimits || !snapshot.GrokBot.IsAvailable)
@@ -189,6 +200,9 @@ public static class ProviderDashboardPresenter
     public static bool IsOpenCodeHeadlineConnected(UsageSnapshot snapshot, ProviderBillingSettings settings) =>
         (settings.ShowDirectSource && snapshot.OpenCode.ZenIsAvailable)
         || (settings.ShowProLimits && snapshot.OpenCode.HasGoSubscription);
+
+    public static bool IsFalHeadlineConnected(UsageSnapshot snapshot, ProviderBillingSettings settings) =>
+        settings.ShowProLimits && snapshot.Fal.IsAvailable;
 
     public static bool IsGrokBotHeadlineConnected(UsageSnapshot snapshot, ProviderBillingSettings settings) =>
         settings.ShowProLimits && snapshot.GrokBot.IsAvailable;
