@@ -65,7 +65,7 @@ public sealed class WindowAnchorHelperTests
     }
 
     [Fact]
-    public void ResolveSettingsExpandEndY_prefers_bottom_lock_even_when_nearer_top_than_CompensateSizeChange()
+    public void ResolveSettingsExpandEndY_matches_bottom_right_Y_when_width_unchanged()
     {
         var areas = new[] { (0, 0, 1920, 1080) };
         const int currentX = 40;
@@ -73,10 +73,10 @@ public sealed class WindowAnchorHelperTests
         const double currentHeight = 36;
         const double newHeight = 260;
 
-        var (_, edgeAwareY) = WindowAnchorHelper.CompensateSizeChange(
+        var (_, brY) = WindowAnchorHelper.CompensateSizeChange(
             oldWidth: 140,
             oldHeight: currentHeight,
-            newWidth: 300,
+            newWidth: 140,
             newHeight: newHeight,
             currentX: currentX,
             currentY: currentY,
@@ -84,9 +84,8 @@ public sealed class WindowAnchorHelperTests
 
         var settingsY = WindowAnchorHelper.ResolveSettingsExpandEndY(currentY, currentHeight, newHeight);
 
-        Assert.Equal(40, edgeAwareY); // edge-aware keeps top when near top
-        Assert.Equal(40 + 36 - 260, settingsY); // settings always bottom-locks
-        Assert.True(settingsY < edgeAwareY);
+        Assert.Equal(40 + 36 - 260, settingsY);
+        Assert.Equal(settingsY, brY);
     }
 
     [Fact]
@@ -139,7 +138,7 @@ public sealed class WindowAnchorHelperTests
     }
 
     [Fact]
-    public void CompensateSizeChange_grows_down_and_right_when_away_from_far_edges()
+    public void CompensateSizeChange_pins_bottom_right_when_away_from_far_edges()
     {
         var areas = new[] { (0, 0, 1920, 1080) };
 
@@ -152,8 +151,10 @@ public sealed class WindowAnchorHelperTests
             currentY: 40,
             areas);
 
-        Assert.Equal(40, x);
-        Assert.Equal(40, y);
+        Assert.Equal(40 + 140 - 300, x);
+        Assert.Equal(40 + 36 - 260, y);
+        Assert.Equal(40 + 140, x + 300);
+        Assert.Equal(40 + 36, y + 260);
     }
 
     [Fact]
@@ -175,21 +176,63 @@ public sealed class WindowAnchorHelperTests
     }
 
     [Fact]
-    public void CompensateSizeChange_clamps_into_working_area_when_expanding_off_top()
+    public void CompensateSizeChange_clamps_when_bottom_right_pin_leaves_too_little_overlap()
     {
         var areas = new[] { (0, 0, 1920, 1080) };
 
+        // BR near the top-left; after expand visible overlap drops below MinVisibleOverlapPx.
         var (x, y) = WindowAnchorHelper.CompensateSizeChange(
-            oldWidth: 140,
-            oldHeight: 36,
+            oldWidth: 30,
+            oldHeight: 30,
             newWidth: 300,
             newHeight: 400,
-            currentX: 10,
-            currentY: 10,
+            currentX: 5,
+            currentY: 5,
             areas);
 
-        Assert.Equal(10, x);
-        Assert.Equal(10, y);
+        Assert.Equal(0, x);
+        Assert.Equal(0, y);
         Assert.True(WindowAnchorHelper.HasVisibleOverlap(x, y, 300, 400, areas[0]));
+    }
+
+    [Fact]
+    public void GetBottomRight_and_ComputeBottomRightAnchoredPosition_preserve_corner()
+    {
+        const double x = 100;
+        const double y = 200;
+        const double width = 140;
+        const double height = 36;
+
+        var (right, bottom) = WindowAnchorHelper.GetBottomRight(x, y, width, height);
+        Assert.Equal(240, right);
+        Assert.Equal(236, bottom);
+
+        var (newX, newY) = WindowAnchorHelper.ComputeBottomRightAnchoredPosition(
+            right,
+            bottom,
+            width: 300,
+            height: 260);
+
+        Assert.Equal(-60, newX);
+        Assert.Equal(-24, newY);
+        Assert.Equal(right, newX + 300);
+        Assert.Equal(bottom, newY + 260);
+    }
+
+    [Fact]
+    public void ComputeBottomRightAnchoredPosition_keeps_corner_stable_across_sizes()
+    {
+        const double anchorRight = 1800;
+        const double anchorBottom = 1000;
+
+        var (x1, y1) = WindowAnchorHelper.ComputeBottomRightAnchoredPosition(
+            anchorRight, anchorBottom, 140, 36);
+        var (x2, y2) = WindowAnchorHelper.ComputeBottomRightAnchoredPosition(
+            anchorRight, anchorBottom, 300, 260);
+
+        Assert.Equal(anchorRight, x1 + 140);
+        Assert.Equal(anchorBottom, y1 + 36);
+        Assert.Equal(anchorRight, x2 + 300);
+        Assert.Equal(anchorBottom, y2 + 260);
     }
 }

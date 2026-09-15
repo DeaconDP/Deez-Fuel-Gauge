@@ -109,8 +109,13 @@ public partial class MainWindow : Window, ISettingsPanelHost
     private bool _compactSnapNext;
     private double _compactAnimFromProgress;
     private double _compactAnimToProgress;
-    private CompactAnimSample _compactAnimStart;
     private CompactAnimSample _compactAnimEnd;
+    private double _compactAnimFromScaleX = 1;
+    private double _compactAnimFromScaleY = 1;
+    private double _compactAnimToScaleX = 1;
+    private double _compactAnimToScaleY = 1;
+    private double _compactAnimHostWidth;
+    private readonly ScaleTransform _compactScaleTransform = new(1, 1);
     private TimeSpan _compactAnimDuration;
     private TimeSpan _compactAnimElapsed;
 
@@ -786,6 +791,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
         if (!_settings.UseCompactMode)
         {
             StopCompactAnimation();
+            ClearCompactScaleTransform();
             _compactProgress = 1;
             _compactSnapNext = true;
             RestoreCompactLayerVisibility();
@@ -825,29 +831,28 @@ public partial class MainWindow : Window, ISettingsPanelHost
         var current = new CompactAnimSample(Bounds.Width, Bounds.Height, Position.X, Position.Y);
         var goingFull = targetProgress > 0.5;
         var endSize = goingFull ? fullSize : compactSize;
-        var (endX, endY) = WindowAnchorHelper.CompensateSizeChange(
-            current.Width,
-            current.Height,
-            endSize.Width,
-            endSize.Height,
+        var (anchorRight, anchorBottom) = WindowAnchorHelper.GetBottomRight(
             Position.X,
             Position.Y,
-            areas);
+            current.Width,
+            current.Height);
         // Settings open/close always grows from the widget bottom edge, even near the top of the screen.
         if (_settingsAnchorBottom is { } settingsBottom)
         {
-            endY = WindowAnchorHelper.ComputeBottomAnchoredY(settingsBottom, endSize.Height);
+            anchorBottom = settingsBottom;
             _settingsAnchorBottom = null;
             _pendingAnchorCompensation = false;
         }
         else if (_isSettingsExpanded)
         {
-            endY = WindowAnchorHelper.ResolveSettingsExpandEndY(
-                Position.Y,
-                current.Height,
-                endSize.Height);
+            anchorBottom = Position.Y + current.Height;
         }
 
+        var (endX, endY) = WindowAnchorHelper.ComputeBottomRightAnchoredPosition(
+            anchorRight,
+            anchorBottom,
+            endSize.Width,
+            endSize.Height);
         var end = new CompactAnimSample(endSize.Width, endSize.Height, endX, endY);
         var reduceMotion = PrefersReducedMotion();
 
@@ -857,20 +862,44 @@ public partial class MainWindow : Window, ISettingsPanelHost
             StopCompactAnimation();
             _compactProgress = targetProgress;
             RestoreCompactLayerVisibility();
-            ApplyCompactFrame(end, _compactProgress, cullLayers: false);
+            ClearCompactScaleTransform();
+            ApplyCompactFrame(ClampCompactSample(end, areas), _compactProgress, cullLayers: false);
             PersistCompactOriginIfNeeded();
             UpdateAllProgressWidths();
             return;
         }
 
+        var host = CompactLayoutAnimator.HostSizeForTransition(current, end);
+        var (hostX, hostY) = WindowAnchorHelper.ComputeBottomRightAnchoredPosition(
+            anchorRight,
+            anchorBottom,
+            host.Width,
+            host.Height);
+        var hostSample = ClampCompactSample(
+            new CompactAnimSample(host.Width, host.Height, hostX, hostY),
+            areas);
+        var (fromScaleX, fromScaleY) = CompactLayoutAnimator.ScaleFactorsForSize(
+            current.Width, current.Height, host.Width, host.Height);
+        var (toScaleX, toScaleY) = CompactLayoutAnimator.ScaleFactorsForSize(
+            end.Width, end.Height, host.Width, host.Height);
+
         _compactAnimFromProgress = _compactProgress;
         _compactAnimToProgress = targetProgress;
-        _compactAnimStart = current;
         _compactAnimEnd = end;
+        _compactAnimHostWidth = host.Width;
+        _compactAnimFromScaleX = fromScaleX;
+        _compactAnimFromScaleY = fromScaleY;
+        _compactAnimToScaleX = toScaleX;
+        _compactAnimToScaleY = toScaleY;
         _compactAnimElapsed = TimeSpan.Zero;
         _compactAnimLastFrameTime = null;
         _compactAnimDuration = CompactLayoutAnimator.DurationFor(_compactProgress, targetProgress);
         _compactAnimActive = true;
+
+        // One OS resize up front. Mid frames only animate a BR-origin scale.
+        ApplyCompactWindowGeometry(hostSample);
+        EnsureCompactScaleTransform();
+        ApplyCompactScaleVisual(fromScaleX, fromScaleY, _compactProgress, cullLayers: true);
         RequestAnimationFrame(OnCompactAnimationFrame);
     }
 
@@ -891,9 +920,11 @@ public partial class MainWindow : Window, ISettingsPanelHost
             ? 1
             : _compactAnimElapsed.TotalMilliseconds / _compactAnimDuration.TotalMilliseconds;
         var expanding = _compactAnimToProgress > _compactAnimFromProgress;
-        var sample = CompactLayoutAnimator.Interpolate(
-            _compactAnimStart,
-            _compactAnimEnd,
+        var (scaleX, scaleY) = CompactLayoutAnimator.InterpolateScale(
+            _compactAnimFromScaleX,
+            _compactAnimFromScaleY,
+            _compactAnimToScaleX,
+            _compactAnimToScaleY,
             linearT,
             expanding,
             reduceMotion: false);
@@ -903,20 +934,39 @@ public partial class MainWindow : Window, ISettingsPanelHost
             linearT,
             expanding,
             reduceMotion: false);
-        ApplyCompactFrame(sample, _compactProgress);
+        ApplyCompactScaleVisual(scaleX, scaleY, _compactProgress);
 
         if (linearT >= 1)
         {
             StopCompactAnimation();
             _compactProgress = _compactAnimToProgress;
             RestoreCompactLayerVisibility();
-            ApplyCompactFrame(_compactAnimEnd, _compactProgress, cullLayers: false);
+            ClearCompactScaleTransform();
+            ApplyCompactFrame(
+                ClampCompactSample(_compactAnimEnd, GetWorkingAreas()),
+                _compactProgress,
+                cullLayers: false);
             PersistCompactOriginIfNeeded();
             UpdateAllProgressWidths();
             return;
         }
 
         RequestAnimationFrame(OnCompactAnimationFrame);
+    }
+
+    private static CompactAnimSample ClampCompactSample(
+        CompactAnimSample sample,
+        IReadOnlyList<(int X, int Y, int Width, int Height)> areas)
+    {
+        var width = Math.Max(1, (int)Math.Round(sample.Width));
+        var height = Math.Max(1, (int)Math.Round(sample.Height));
+        var (x, y) = WindowAnchorHelper.ClampToWorkingAreas(
+            (int)Math.Round(sample.X),
+            (int)Math.Round(sample.Y),
+            width,
+            height,
+            areas);
+        return new CompactAnimSample(sample.Width, sample.Height, x, y);
     }
 
     private void StopCompactAnimation()
@@ -928,13 +978,49 @@ public partial class MainWindow : Window, ISettingsPanelHost
         _compactAnimLastFrameTime = null;
     }
 
-    private void ApplyCompactFrame(CompactAnimSample sample, double progress, bool cullLayers = true)
+    private void EnsureCompactScaleTransform()
+    {
+        PillBorder.RenderTransformOrigin = new RelativePoint(1, 1, RelativeUnit.Relative);
+        if (!ReferenceEquals(PillBorder.RenderTransform, _compactScaleTransform))
+            PillBorder.RenderTransform = _compactScaleTransform;
+    }
+
+    private void ClearCompactScaleTransform()
+    {
+        _compactScaleTransform.ScaleX = 1;
+        _compactScaleTransform.ScaleY = 1;
+        if (ReferenceEquals(PillBorder.RenderTransform, _compactScaleTransform))
+            PillBorder.RenderTransform = null;
+    }
+
+    private void ApplyCompactWindowGeometry(CompactAnimSample sample)
     {
         Width = Math.Max(1, sample.Width);
         Height = Math.Max(1, sample.Height);
         Position = new PixelPoint(
             (int)Math.Round(sample.X),
             (int)Math.Round(sample.Y));
+    }
+
+    private void ApplyCompactScaleVisual(
+        double scaleX,
+        double scaleY,
+        double progress,
+        bool cullLayers = true)
+    {
+        EnsureCompactScaleTransform();
+        _compactScaleTransform.ScaleX = scaleX;
+        _compactScaleTransform.ScaleY = scaleY;
+        // Host is the larger rect for the whole flight, so keep full padding while scaling.
+        PillBorder.Padding = _compactAnimHostWidth >= FullWindowWidth - 0.5 || progress > 0.5
+            ? FullPadding
+            : CompactPadding;
+        ApplyCompactOpacities(progress, cullLayers);
+    }
+
+    private void ApplyCompactFrame(CompactAnimSample sample, double progress, bool cullLayers = true)
+    {
+        ApplyCompactWindowGeometry(sample);
         PillBorder.Padding = progress > 0.5 ? FullPadding : CompactPadding;
         ApplyCompactOpacities(progress, cullLayers);
     }
