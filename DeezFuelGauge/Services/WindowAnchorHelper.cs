@@ -17,9 +17,8 @@ public static class WindowAnchorHelper
     }
 
     /// <summary>
-    /// Repositions the window when both width and height change. Grows toward the interior of
-    /// the nearest working area (keep the right edge when closer to the right, keep the bottom
-    /// edge when closer to the bottom). Otherwise keeps the top-left origin.
+    /// Repositions the window when both width and height change, keeping the bottom-right corner
+    /// fixed, then clamps into a connected working area if needed.
     /// </summary>
     public static (int X, int Y) CompensateSizeChange(
         double oldWidth,
@@ -30,26 +29,8 @@ public static class WindowAnchorHelper
         int currentY,
         IReadOnlyList<(int X, int Y, int Width, int Height)> workingAreas)
     {
-        var keepRight = false;
-        var keepBottom = false;
-        if (workingAreas.Count > 0)
-        {
-            var oldW = Math.Max(1, (int)Math.Round(oldWidth));
-            var oldH = Math.Max(1, (int)Math.Round(oldHeight));
-            var area = FindNearestWorkingArea(currentX, currentY, oldW, oldH, workingAreas);
-            var distLeft = currentX - area.X;
-            var distRight = area.X + area.Width - (currentX + oldW);
-            keepRight = distRight < distLeft;
-
-            var distTop = currentY - area.Y;
-            var distBottom = area.Y + area.Height - (currentY + oldH);
-            keepBottom = distBottom < distTop;
-        }
-
-        var dx = (int)Math.Round(newWidth - oldWidth);
-        var dy = (int)Math.Round(newHeight - oldHeight);
-        var x = keepRight ? currentX - dx : currentX;
-        var y = keepBottom ? currentY - dy : currentY;
+        var (anchorRight, anchorBottom) = GetBottomRight(currentX, currentY, oldWidth, oldHeight);
+        var (x, y) = ComputeBottomRightAnchoredPosition(anchorRight, anchorBottom, newWidth, newHeight);
 
         return ClampToWorkingAreas(
             x,
@@ -58,6 +39,28 @@ public static class WindowAnchorHelper
             Math.Max(1, (int)Math.Round(newHeight)),
             workingAreas);
     }
+
+    /// <summary>
+    /// Returns the bottom-right corner of a window rect.
+    /// </summary>
+    public static (double Right, double Bottom) GetBottomRight(
+        double x,
+        double y,
+        double width,
+        double height) =>
+        (x + width, y + height);
+
+    /// <summary>
+    /// Returns the top-left position that keeps the bottom-right corner at the given anchor.
+    /// </summary>
+    public static (int X, int Y) ComputeBottomRightAnchoredPosition(
+        double anchorRight,
+        double anchorBottom,
+        double width,
+        double height) =>
+        (
+            (int)Math.Round(anchorRight - width),
+            (int)Math.Round(anchorBottom - height));
 
     /// <summary>
     /// Returns the window Y position that keeps the bottom edge at <paramref name="anchorBottom"/>.

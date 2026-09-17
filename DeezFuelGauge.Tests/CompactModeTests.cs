@@ -215,6 +215,47 @@ public sealed class CompactLayoutAnimatorTests
     }
 
     [Fact]
+    public void InterpolateSize_with_bottom_right_pin_keeps_corner_stable_mid_progress()
+    {
+        var start = new CompactAnimSample(120, 40, 10, 20);
+        var end = new CompactAnimSample(300, 260, -170, -200);
+        var (anchorRight, anchorBottom) = WindowAnchorHelper.GetBottomRight(
+            start.X, start.Y, start.Width, start.Height);
+
+        var sized = CompactLayoutAnimator.InterpolateSize(
+            start, end, 0.4, expanding: true, reduceMotion: false);
+        var (x, y) = WindowAnchorHelper.ComputeBottomRightAnchoredPosition(
+            anchorRight, anchorBottom, sized.Width, sized.Height);
+
+        // Position is integer pixels; width/height stay fractional during the lerp.
+        Assert.InRange(x + sized.Width, anchorRight - 0.5, anchorRight + 0.5);
+        Assert.InRange(y + sized.Height, anchorBottom - 0.5, anchorBottom + 0.5);
+        Assert.InRange(sized.Width, start.Width, end.Width);
+        Assert.InRange(sized.Height, start.Height, end.Height);
+    }
+
+    [Fact]
+    public void HostSizeForTransition_picks_larger_of_each_axis()
+    {
+        var compact = new CompactAnimSample(140, 36, 0, 0);
+        var full = new CompactAnimSample(300, 260, 0, 0);
+        var host = CompactLayoutAnimator.HostSizeForTransition(compact, full);
+        Assert.Equal(300, host.Width);
+        Assert.Equal(260, host.Height);
+    }
+
+    [Fact]
+    public void InterpolateScale_eases_from_compact_ratio_to_one()
+    {
+        var (fromX, fromY) = CompactLayoutAnimator.ScaleFactorsForSize(140, 36, 300, 260);
+        var (sx, sy) = CompactLayoutAnimator.InterpolateScale(
+            fromX, fromY, 1, 1, 0.5, expanding: true, reduceMotion: false);
+        Assert.InRange(sx, fromX, 1);
+        Assert.InRange(sy, fromY, 1);
+        Assert.Equal(0.75, CompactLayoutAnimator.ApplyEase(0.5, expanding: true));
+    }
+
+    [Fact]
     public void FullOpacity_stays_zero_until_fade_start()
     {
         Assert.Equal(0, CompactLayoutAnimator.FullOpacity(0.15));
