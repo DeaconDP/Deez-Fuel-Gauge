@@ -192,4 +192,93 @@ public sealed class WindowAnchorHelperTests
         Assert.Equal(10, y);
         Assert.True(WindowAnchorHelper.HasVisibleOverlap(x, y, 300, 400, areas[0]));
     }
+
+    [Fact]
+    public void TransitionEnd_returns_to_the_compact_origin_after_expand()
+    {
+        var areas = new[] { (0, 0, 2048, 1104) };
+        const double compactW = 140;
+        const double compactH = 48;
+        const double fullW = 300;
+        const double fullH = 640;
+
+        var walked = new List<string>();
+        for (var y = 0; y <= 1000; y += 40)
+        {
+            for (var x = 0; x <= 1800; x += 40)
+            {
+                var rest = new CompactRestOrigin(x, y, compactW, compactH);
+                var expanded = CompactPlacement.TransitionEnd(rest, true, fullW, fullH, areas, null);
+                var collapsed = CompactPlacement.TransitionEnd(rest, false, fullW, fullH, areas, null);
+                var (anchorX, anchorY) = WindowAnchorHelper.CompensateSizeChange(
+                    compactW, compactH, fullW, fullH, x, y, areas);
+                if (collapsed.X != x || collapsed.Y != y || expanded.X != anchorX || expanded.Y != anchorY)
+                    walked.Add($"({x},{y}) -> ({expanded.X},{expanded.Y}) -> ({collapsed.X},{collapsed.Y})");
+            }
+        }
+
+        Assert.True(walked.Count == 0, string.Join("\n", walked.Take(8)));
+    }
+
+    [Fact]
+    public void TransitionEnd_keeps_the_origin_where_redeciding_the_anchor_walks()
+    {
+        var areas = new[] { (0, 0, 2048, 1104) };
+        var rest = new CompactRestOrigin(880, 0, 140, 48);
+
+        var expanded = CompactPlacement.TransitionEnd(rest, true, 300, 640, areas, null);
+        var collapsed = CompactPlacement.TransitionEnd(rest, false, 300, 640, areas, null);
+        var (legacyX, legacyY) = WindowAnchorHelper.CompensateSizeChange(
+            300, 640, 140, 48, expanded.X, expanded.Y, areas);
+
+        Assert.Equal(880, expanded.X);
+        Assert.Equal(0, expanded.Y);
+        Assert.Equal(880, collapsed.X);
+        Assert.Equal(0, collapsed.Y);
+        Assert.Equal(1040, legacyX);
+        Assert.Equal(0, legacyY);
+    }
+
+    [Fact]
+    public void TransitionEnd_bottom_locks_settings_and_still_collapses_home()
+    {
+        var areas = new[] { (0, 0, 1920, 1080) };
+        var rest = new CompactRestOrigin(40, 40, 140, 36);
+
+        var expanded = CompactPlacement.TransitionEnd(rest, true, 300, 260, areas, settingsAnchorBottom: 76);
+        var collapsed = CompactPlacement.TransitionEnd(rest, false, 300, 260, areas, settingsAnchorBottom: 76);
+
+        Assert.Equal(40, expanded.X);
+        Assert.Equal(76 - 260, expanded.Y);
+        Assert.Equal(40, collapsed.X);
+        Assert.Equal(40, collapsed.Y);
+    }
+
+    [Fact]
+    public void AfterExpandedDrag_moves_the_compact_origin_by_the_same_delta()
+    {
+        var rest = new CompactRestOrigin(100, 200, 140, 48);
+
+        var moved = CompactPlacement.AfterExpandedDrag(rest, placedX: 100, placedY: 80, draggedX: 130, draggedY: 50);
+
+        Assert.Equal(130, moved.X);
+        Assert.Equal(170, moved.Y);
+        Assert.Equal(140, moved.Width);
+        Assert.Equal(48, moved.Height);
+    }
+
+    [Fact]
+    public void Layout_shift_skips_a_frame_the_compact_transition_owns()
+    {
+        Assert.False(CompactPlacement.ShouldApplyLayoutShift(
+            pending: true,
+            transitionOwnsFrame: true,
+            anchorFromHeight: 640,
+            newHeight: 48));
+        Assert.True(CompactPlacement.ShouldApplyLayoutShift(
+            pending: true,
+            transitionOwnsFrame: false,
+            anchorFromHeight: 400,
+            newHeight: 460));
+    }
 }

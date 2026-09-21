@@ -113,6 +113,10 @@ public partial class MainWindow : Window, ISettingsPanelHost
     private CompactAnimSample _compactAnimEnd;
     private TimeSpan _compactAnimDuration;
     private TimeSpan _compactAnimElapsed;
+    private int? _compactRestX;
+    private int? _compactRestY;
+    private PixelPoint? _expandedPlacement;
+    private bool _compactFrameOwnsPosition;
 
     private sealed class DiskBarRow
     {
@@ -268,6 +272,11 @@ public partial class MainWindow : Window, ISettingsPanelHost
                 workingAreas);
             Position = new PixelPoint(x, y);
             _initialPositionApplied = true;
+            if (_settings.UseCompactMode)
+            {
+                _compactRestX = x;
+                _compactRestY = y;
+            }
             if (x != (int)_settings.Left || y != (int)_settings.Top)
             {
                 _settings.Left = x;
@@ -290,6 +299,11 @@ public partial class MainWindow : Window, ISettingsPanelHost
             area.X, area.Y, area.Width, area.Height, width, height);
         Position = new PixelPoint(cx, cy);
         _initialPositionApplied = true;
+        if (_settings.UseCompactMode)
+        {
+            _compactRestX = cx;
+            _compactRestY = cy;
+        }
     }
 
     private void PinToggle_PointerPressed(object? sender, PointerPressedEventArgs e)
@@ -310,6 +324,13 @@ public partial class MainWindow : Window, ISettingsPanelHost
     {
         if (_settings.UseCompactMode && !_showingCompactRest)
         {
+            if (_compactRestX is int restX && _compactRestY is int restY)
+            {
+                _settings.Left = restX;
+                _settings.Top = restY;
+                return;
+            }
+
             EnsureCompactTransitionSizes();
             var compactSize = _cachedCompactSize!.Value;
             var (x, y) = WindowAnchorHelper.CompensateSizeChange(
@@ -433,11 +454,12 @@ public partial class MainWindow : Window, ISettingsPanelHost
 
     private void CompensateAnchorIfNeeded()
     {
-        if (_compactAnimActive || !_pendingAnchorCompensation)
-            return;
-
         var newHeight = Bounds.Height;
-        if (Math.Abs(newHeight - _anchorFromHeight) < 0.5)
+        if (!CompactPlacement.ShouldApplyLayoutShift(
+                _pendingAnchorCompensation,
+                _compactAnimActive || _compactFrameOwnsPosition,
+                _anchorFromHeight,
+                newHeight))
             return;
 
         _pendingAnchorCompensation = false;
@@ -446,6 +468,8 @@ public partial class MainWindow : Window, ISettingsPanelHost
             : WindowAnchorHelper.CompensateVerticalGrowth(_anchorFromHeight, newHeight, Position.Y);
         _settingsAnchorBottom = null;
         Position = new PixelPoint(Position.X, newY);
+        if (_expandedPlacement is { } placed)
+            _expandedPlacement = new PixelPoint(placed.X, newY);
     }
 
     public void OnSettingsChanged()
@@ -632,6 +656,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
             return;
 
         _isDragging = false;
+        RememberCompactRestAfterDrag();
         ApplyCompactVisualState();
     }
 
@@ -640,6 +665,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
         if (_isDragging)
         {
             _isDragging = false;
+            RememberCompactRestAfterDrag();
             ApplyCompactVisualState();
         }
 
@@ -788,6 +814,9 @@ public partial class MainWindow : Window, ISettingsPanelHost
             StopCompactAnimation();
             _compactProgress = 1;
             _compactSnapNext = true;
+            _compactRestX = null;
+            _compactRestY = null;
+            _expandedPlacement = null;
             RestoreCompactLayerVisibility();
             ApplyCompactOpacities(1, cullLayers: false);
             PillBorder.Padding = FullPadding;
@@ -810,6 +839,59 @@ public partial class MainWindow : Window, ISettingsPanelHost
         Dispatcher.UIThread.Post(() => BeginCompactTransition(targetProgress), DispatcherPriority.Loaded);
     }
 
+    private void RememberCompactRestForTransition(
+        Size compactSize,
+        IReadOnlyList<(int X, int Y, int Width, int Height)> areas,
+        bool goingFull)
+    {
+        if (!_compactAnimActive && _compactProgress <= 0.001)
+        {
+            _compactRestX = Position.X;
+            _compactRestY = Position.Y;
+            return;
+        }
+
+        if (_compactRestX is not null)
+            return;
+
+        if (!goingFull)
+        {
+            var (x, y) = WindowAnchorHelper.CompensateSizeChange(
+                Bounds.Width,
+                Bounds.Height,
+                compactSize.Width,
+                compactSize.Height,
+                Position.X,
+                Position.Y,
+                areas);
+            _compactRestX = x;
+            _compactRestY = y;
+            return;
+        }
+
+        _compactRestX = Position.X;
+        _compactRestY = Position.Y;
+    }
+
+    private void RememberCompactRestAfterDrag()
+    {
+        if (!_settings.UseCompactMode || _compactRestX is null || _compactAnimActive || _compactProgress <= 0.5)
+            return;
+
+        if (_expandedPlacement is not { } placed || _cachedCompactSize is not { } compactSize)
+            return;
+
+        var updated = CompactPlacement.AfterExpandedDrag(
+            new CompactRestOrigin(_compactRestX.Value, _compactRestY!.Value, compactSize.Width, compactSize.Height),
+            placed.X,
+            placed.Y,
+            Position.X,
+            Position.Y);
+        _compactRestX = updated.X;
+        _compactRestY = updated.Y;
+        _expandedPlacement = new PixelPoint(Position.X, Position.Y);
+    }
+
     private void BeginCompactTransition(double targetProgress)
     {
         if (!_settings.UseCompactMode)
@@ -822,32 +904,29 @@ public partial class MainWindow : Window, ISettingsPanelHost
         var compactSize = _cachedCompactSize!.Value;
         var fullSize = _cachedFullSize!.Value;
         var areas = GetWorkingAreas();
-        var current = new CompactAnimSample(Bounds.Width, Bounds.Height, Position.X, Position.Y);
         var goingFull = targetProgress > 0.5;
+        RememberCompactRestForTransition(compactSize, areas, goingFull);
+        var rest = new CompactRestOrigin(
+            _compactRestX!.Value,
+            _compactRestY!.Value,
+            compactSize.Width,
+            compactSize.Height);
         var endSize = goingFull ? fullSize : compactSize;
-        var (endX, endY) = WindowAnchorHelper.CompensateSizeChange(
-            current.Width,
-            current.Height,
-            endSize.Width,
-            endSize.Height,
-            Position.X,
-            Position.Y,
-            areas);
-        // Settings open/close always grows from the widget bottom edge, even near the top of the screen.
-        if (_settingsAnchorBottom is { } settingsBottom)
-        {
-            endY = WindowAnchorHelper.ComputeBottomAnchoredY(settingsBottom, endSize.Height);
-            _settingsAnchorBottom = null;
-            _pendingAnchorCompensation = false;
-        }
-        else if (_isSettingsExpanded)
-        {
-            endY = WindowAnchorHelper.ResolveSettingsExpandEndY(
-                Position.Y,
-                current.Height,
-                endSize.Height);
-        }
+        var settingsBottom = _settingsAnchorBottom
+            ?? (_isSettingsExpanded && goingFull ? Position.Y + Bounds.Height : null);
+        var (endX, endY) = CompactPlacement.TransitionEnd(
+            rest,
+            goingFull,
+            fullSize.Width,
+            fullSize.Height,
+            areas,
+            settingsBottom);
+        _settingsAnchorBottom = null;
+        _pendingAnchorCompensation = false;
+        if (goingFull)
+            _expandedPlacement = new PixelPoint(endX, endY);
 
+        var current = new CompactAnimSample(Bounds.Width, Bounds.Height, Position.X, Position.Y);
         var end = new CompactAnimSample(endSize.Width, endSize.Height, endX, endY);
         var reduceMotion = PrefersReducedMotion();
 
@@ -907,6 +986,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
 
         if (linearT >= 1)
         {
+            _pendingAnchorCompensation = false;
             StopCompactAnimation();
             _compactProgress = _compactAnimToProgress;
             RestoreCompactLayerVisibility();
@@ -930,11 +1010,13 @@ public partial class MainWindow : Window, ISettingsPanelHost
 
     private void ApplyCompactFrame(CompactAnimSample sample, double progress, bool cullLayers = true)
     {
+        _compactFrameOwnsPosition = true;
         Width = Math.Max(1, sample.Width);
         Height = Math.Max(1, sample.Height);
         Position = new PixelPoint(
             (int)Math.Round(sample.X),
             (int)Math.Round(sample.Y));
+        _compactFrameOwnsPosition = false;
         PillBorder.Padding = progress > 0.5 ? FullPadding : CompactPadding;
         ApplyCompactOpacities(progress, cullLayers);
     }
