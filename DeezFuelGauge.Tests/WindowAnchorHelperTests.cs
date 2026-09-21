@@ -194,6 +194,23 @@ public sealed class WindowAnchorHelperTests
     }
 
     [Fact]
+    public void TransitionEnd_minify_keeps_the_bottom_right_corner_near_the_top_left()
+    {
+        var areas = new[] { (0, 0, 1920, 1080) };
+        var rest = new CompactRestOrigin(40, 40, 140, 36);
+
+        var expanded = CompactPlacement.TransitionEnd(rest, true, 300, 260, areas, null);
+        var collapsed = CompactPlacement.TransitionEnd(rest, false, 300, 260, areas, null);
+
+        Assert.Equal(-120, expanded.X);
+        Assert.Equal(-184, expanded.Y);
+        Assert.Equal(40, collapsed.X);
+        Assert.Equal(40, collapsed.Y);
+        Assert.Equal(expanded.X + 300, collapsed.X + 140);
+        Assert.Equal(expanded.Y + 260, collapsed.Y + 36);
+    }
+
+    [Fact]
     public void TransitionEnd_returns_to_the_compact_origin_after_expand()
     {
         var areas = new[] { (0, 0, 2048, 1104) };
