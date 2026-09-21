@@ -215,6 +215,44 @@ public sealed class CompactLayoutAnimatorTests
     }
 
     [Fact]
+    public void Scale_host_keeps_one_window_rect_while_resize_lerp_rewrites_every_frame()
+    {
+        var start = new CompactAnimSample(300, 260, 40, 40);
+        var end = new CompactAnimSample(140, 36, 200, 264);
+        var resizeRects = new HashSet<string>();
+        for (var i = 0; i <= 20; i++)
+        {
+            var sample = CompactLayoutAnimator.Interpolate(start, end, i / 20.0, expanding: false, reduceMotion: false);
+            resizeRects.Add($"{Math.Round(sample.X)}:{Math.Round(sample.Y)}:{Math.Round(sample.Width)}:{Math.Round(sample.Height)}");
+        }
+
+        Assert.True(resizeRects.Count >= 15);
+        Assert.True(CompactLayoutAnimator.TryCreateScaleHost(start, end, out var host));
+        Assert.Equal(40, host.X);
+        Assert.Equal(40, host.Y);
+        Assert.Equal(300, host.Width);
+        Assert.Equal(260, host.Height);
+        Assert.Equal(1, host.FromScaleX, precision: 5);
+        Assert.Equal(140d / 300d, host.ToScaleX, precision: 5);
+        Assert.Equal(36d / 260d, host.ToScaleY, precision: 5);
+
+        var (scaleX, scaleY) = host.ScaleAt(1);
+        Assert.Equal(host.ToScaleX, scaleX, precision: 5);
+        Assert.Equal(host.ToScaleY, scaleY, precision: 5);
+        Assert.Equal(340, host.X + host.Width, precision: 5);
+        Assert.Equal(300, host.Y + host.Height, precision: 5);
+    }
+
+    [Fact]
+    public void TryCreateScaleHost_rejects_rects_that_do_not_share_a_corner()
+    {
+        var start = new CompactAnimSample(300, 260, 40, 40);
+        var end = new CompactAnimSample(140, 36, 40, 40);
+
+        Assert.False(CompactLayoutAnimator.TryCreateScaleHost(start, end, out _));
+    }
+
+    [Fact]
     public void Interpolate_reduced_motion_snaps_to_end()
     {
         var start = new CompactAnimSample(120, 40, 10, 20);

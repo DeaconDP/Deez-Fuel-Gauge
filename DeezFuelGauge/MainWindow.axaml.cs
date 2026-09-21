@@ -117,6 +117,8 @@ public partial class MainWindow : Window, ISettingsPanelHost
     private int? _compactRestY;
     private PixelPoint? _expandedPlacement;
     private bool _compactFrameOwnsPosition;
+    private readonly ScaleTransform _compactScale = new(1, 1);
+    private CompactScaleHost? _compactScaleHost;
 
     private sealed class DiskBarRow
     {
@@ -143,6 +145,8 @@ public partial class MainWindow : Window, ISettingsPanelHost
     public MainWindow()
     {
         InitializeComponent();
+        PillBorder.RenderTransformOrigin = new RelativePoint(1, 1, RelativeUnit.Relative);
+        PillBorder.RenderTransform = _compactScale;
 
         _directBilling = new DirectBillingService(
             _openAiBilling,
@@ -921,7 +925,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
         if (goingFull)
             _expandedPlacement = new PixelPoint(endX, endY);
 
-        var current = new CompactAnimSample(Bounds.Width, Bounds.Height, Position.X, Position.Y);
+        var current = CurrentCompactSample();
         var end = new CompactAnimSample(endSize.Width, endSize.Height, endX, endY);
         var reduceMotion = PrefersReducedMotion();
 
@@ -945,7 +949,47 @@ public partial class MainWindow : Window, ISettingsPanelHost
         _compactAnimLastFrameTime = null;
         _compactAnimDuration = CompactLayoutAnimator.DurationFor(_compactProgress, targetProgress);
         _compactAnimActive = true;
+        if (CompactLayoutAnimator.TryCreateScaleHost(current, end, out var host))
+            HostCompactScale(host);
+        else
+            ResetCompactScale();
+
         RequestAnimationFrame(OnCompactAnimationFrame);
+    }
+
+    private CompactAnimSample CurrentCompactSample()
+    {
+        if (_compactScaleHost is { } host)
+        {
+            var width = Math.Max(1, host.Width * _compactScale.ScaleX);
+            var height = Math.Max(1, host.Height * _compactScale.ScaleY);
+            var right = host.X + host.Width;
+            var bottom = host.Y + host.Height;
+            return new CompactAnimSample(width, height, right - width, bottom - height);
+        }
+
+        return new CompactAnimSample(Bounds.Width, Bounds.Height, Position.X, Position.Y);
+    }
+
+    private void HostCompactScale(CompactScaleHost host)
+    {
+        _compactScaleHost = host;
+        _compactFrameOwnsPosition = true;
+        Width = Math.Max(1, host.Width);
+        Height = Math.Max(1, host.Height);
+        Position = new PixelPoint(host.X, host.Y);
+        _compactFrameOwnsPosition = false;
+        _compactScale.ScaleX = host.FromScaleX;
+        _compactScale.ScaleY = host.FromScaleY;
+    }
+
+    private void ResetCompactScale()
+    {
+        _compactScaleHost = null;
+        if (_compactScale.ScaleX != 1)
+            _compactScale.ScaleX = 1;
+        if (_compactScale.ScaleY != 1)
+            _compactScale.ScaleY = 1;
     }
 
     private void OnCompactAnimationFrame(TimeSpan totalTime)
@@ -965,19 +1009,33 @@ public partial class MainWindow : Window, ISettingsPanelHost
             ? 1
             : _compactAnimElapsed.TotalMilliseconds / _compactAnimDuration.TotalMilliseconds;
         var expanding = _compactAnimToProgress > _compactAnimFromProgress;
-        var sample = CompactLayoutAnimator.Interpolate(
-            _compactAnimStart,
-            _compactAnimEnd,
-            linearT,
-            expanding,
-            reduceMotion: false);
         _compactProgress = CompactLayoutAnimator.InterpolateProgress(
             _compactAnimFromProgress,
             _compactAnimToProgress,
             linearT,
             expanding,
             reduceMotion: false);
-        ApplyCompactFrame(sample, _compactProgress);
+
+        if (_compactScaleHost is { } host)
+        {
+            var eased = linearT >= 1
+                ? 1
+                : CompactLayoutAnimator.ApplyEase(Math.Clamp(linearT, 0, 1), expanding);
+            var (scaleX, scaleY) = host.ScaleAt(eased);
+            _compactScale.ScaleX = scaleX;
+            _compactScale.ScaleY = scaleY;
+            ApplyCompactOpacities(_compactProgress);
+        }
+        else
+        {
+            var sample = CompactLayoutAnimator.Interpolate(
+                _compactAnimStart,
+                _compactAnimEnd,
+                linearT,
+                expanding,
+                reduceMotion: false);
+            ApplyCompactFrame(sample, _compactProgress);
+        }
 
         if (linearT >= 1)
         {
@@ -996,11 +1054,9 @@ public partial class MainWindow : Window, ISettingsPanelHost
 
     private void StopCompactAnimation()
     {
-        if (!_compactAnimActive)
-            return;
-
         _compactAnimActive = false;
         _compactAnimLastFrameTime = null;
+        ResetCompactScale();
     }
 
     private void ApplyCompactFrame(CompactAnimSample sample, double progress, bool cullLayers = true)

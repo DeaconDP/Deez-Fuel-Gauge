@@ -98,4 +98,55 @@ public static class CompactLayoutAnimator
         var t = ApplyEase(Math.Clamp(linearT, 0, 1), expanding);
         return Lerp(startProgress, endProgress, t);
     }
+
+    public static bool TryCreateScaleHost(
+        CompactAnimSample start,
+        CompactAnimSample end,
+        out CompactScaleHost host)
+    {
+        var startRight = start.X + start.Width;
+        var endRight = end.X + end.Width;
+        var startBottom = start.Y + start.Height;
+        var endBottom = end.Y + end.Height;
+        if (Math.Abs(startRight - endRight) > 1.5
+            || Math.Abs(startBottom - endBottom) > 1.5
+            || start.Width < 1
+            || start.Height < 1
+            || end.Width < 1
+            || end.Height < 1)
+        {
+            host = default;
+            return false;
+        }
+
+        var right = (startRight + endRight) / 2;
+        var bottom = (startBottom + endBottom) / 2;
+        var width = Math.Max(start.Width, end.Width);
+        var height = Math.Max(start.Height, end.Height);
+        host = new CompactScaleHost(
+            (int)Math.Round(right - width),
+            (int)Math.Round(bottom - height),
+            width,
+            height,
+            start.Width / width,
+            start.Height / height,
+            end.Width / width,
+            end.Height / height);
+        return true;
+    }
+}
+
+public readonly record struct CompactScaleHost(
+    int X,
+    int Y,
+    double Width,
+    double Height,
+    double FromScaleX,
+    double FromScaleY,
+    double ToScaleX,
+    double ToScaleY)
+{
+    public (double ScaleX, double ScaleY) ScaleAt(double easedT) =>
+        (CompactLayoutAnimator.Lerp(FromScaleX, ToScaleX, easedT),
+         CompactLayoutAnimator.Lerp(FromScaleY, ToScaleY, easedT));
 }
