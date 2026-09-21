@@ -66,6 +66,16 @@ public static class WindowAnchorHelper
         (int)Math.Round(anchorBottom - height);
 
     /// <summary>
+    /// Top-left for a rect whose bottom-right corner stays at the given anchor.
+    /// </summary>
+    public static (int X, int Y) PlaceKeepingBottomRight(
+        double anchorRight,
+        double anchorBottom,
+        double width,
+        double height) =>
+        ((int)Math.Round(anchorRight - width), (int)Math.Round(anchorBottom - height));
+
+    /// <summary>
     /// End Y for settings expand/collapse: keep the current bottom edge fixed while height changes.
     /// </summary>
     public static int ResolveSettingsExpandEndY(int currentY, double currentHeight, double newHeight) =>

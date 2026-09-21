@@ -203,6 +203,18 @@ public sealed class CompactLayoutAnimatorTests
     }
 
     [Fact]
+    public void Interpolate_keeps_the_bottom_right_corner_while_minifying()
+    {
+        var start = new CompactAnimSample(300, 260, 40, 40);
+        var end = new CompactAnimSample(140, 36, 200, 264);
+
+        var sample = CompactLayoutAnimator.Interpolate(start, end, 0.5, expanding: false, reduceMotion: false);
+
+        Assert.Equal(340, sample.X + sample.Width, precision: 5);
+        Assert.Equal(300, sample.Y + sample.Height, precision: 5);
+    }
+
+    [Fact]
     public void Interpolate_reduced_motion_snaps_to_end()
     {
         var start = new CompactAnimSample(120, 40, 10, 20);

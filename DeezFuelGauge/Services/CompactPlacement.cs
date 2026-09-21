@@ -15,20 +15,33 @@ public static class CompactPlacement
         if (!goingFull)
             return (rest.X, rest.Y);
 
-        var (x, y) = WindowAnchorHelper.CompensateSizeChange(
-            rest.Width,
-            rest.Height,
+        var anchorBottom = settingsAnchorBottom ?? (rest.Y + rest.Height);
+        var (x, y) = WindowAnchorHelper.PlaceKeepingBottomRight(
+            rest.X + rest.Width,
+            anchorBottom,
             fullWidth,
-            fullHeight,
-            rest.X,
-            rest.Y,
+            fullHeight);
+
+        return WindowAnchorHelper.ClampToWorkingAreas(
+            x,
+            y,
+            Math.Max(1, (int)Math.Round(fullWidth)),
+            Math.Max(1, (int)Math.Round(fullHeight)),
             workingAreas);
-
-        if (settingsAnchorBottom is { } bottom)
-            y = WindowAnchorHelper.ComputeBottomAnchoredY(bottom, fullHeight);
-
-        return (x, y);
     }
+
+    public static (int X, int Y) CollapseEnd(
+        int currentX,
+        int currentY,
+        double currentWidth,
+        double currentHeight,
+        double compactWidth,
+        double compactHeight) =>
+        WindowAnchorHelper.PlaceKeepingBottomRight(
+            currentX + currentWidth,
+            currentY + currentHeight,
+            compactWidth,
+            compactHeight);
 
     public static CompactRestOrigin AfterExpandedDrag(
         CompactRestOrigin rest,

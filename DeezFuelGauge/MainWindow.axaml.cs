@@ -333,14 +333,13 @@ public partial class MainWindow : Window, ISettingsPanelHost
 
             EnsureCompactTransitionSizes();
             var compactSize = _cachedCompactSize!.Value;
-            var (x, y) = WindowAnchorHelper.CompensateSizeChange(
+            var (x, y) = CompactPlacement.CollapseEnd(
+                Position.X,
+                Position.Y,
                 Bounds.Width,
                 Bounds.Height,
                 compactSize.Width,
-                compactSize.Height,
-                Position.X,
-                Position.Y,
-                GetWorkingAreas());
+                compactSize.Height);
             _settings.Left = x;
             _settings.Top = y;
             return;
@@ -839,10 +838,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
         Dispatcher.UIThread.Post(() => BeginCompactTransition(targetProgress), DispatcherPriority.Loaded);
     }
 
-    private void RememberCompactRestForTransition(
-        Size compactSize,
-        IReadOnlyList<(int X, int Y, int Width, int Height)> areas,
-        bool goingFull)
+    private void RememberCompactRestForTransition(Size compactSize, bool goingFull)
     {
         if (!_compactAnimActive && _compactProgress <= 0.001)
         {
@@ -854,16 +850,15 @@ public partial class MainWindow : Window, ISettingsPanelHost
         if (_compactRestX is not null)
             return;
 
-        if (!goingFull)
+        if (!goingFull && !_compactSnapNext)
         {
-            var (x, y) = WindowAnchorHelper.CompensateSizeChange(
+            var (x, y) = CompactPlacement.CollapseEnd(
+                Position.X,
+                Position.Y,
                 Bounds.Width,
                 Bounds.Height,
                 compactSize.Width,
-                compactSize.Height,
-                Position.X,
-                Position.Y,
-                areas);
+                compactSize.Height);
             _compactRestX = x;
             _compactRestY = y;
             return;
@@ -905,7 +900,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
         var fullSize = _cachedFullSize!.Value;
         var areas = GetWorkingAreas();
         var goingFull = targetProgress > 0.5;
-        RememberCompactRestForTransition(compactSize, areas, goingFull);
+        RememberCompactRestForTransition(compactSize, goingFull);
         var rest = new CompactRestOrigin(
             _compactRestX!.Value,
             _compactRestY!.Value,

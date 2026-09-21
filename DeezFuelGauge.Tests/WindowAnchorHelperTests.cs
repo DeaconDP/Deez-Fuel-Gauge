@@ -211,6 +211,17 @@ public sealed class WindowAnchorHelperTests
     }
 
     [Fact]
+    public void CollapseEnd_moves_the_top_left_down_to_the_live_bottom_right()
+    {
+        var (x, y) = CompactPlacement.CollapseEnd(40, 40, 300, 260, 140, 36);
+
+        Assert.Equal(200, x);
+        Assert.Equal(264, y);
+        Assert.Equal(40 + 300, x + 140);
+        Assert.Equal(40 + 260, y + 36);
+    }
+
+    [Fact]
     public void TransitionEnd_returns_to_the_compact_origin_after_expand()
     {
         var areas = new[] { (0, 0, 2048, 1104) };
@@ -227,9 +238,11 @@ public sealed class WindowAnchorHelperTests
                 var rest = new CompactRestOrigin(x, y, compactW, compactH);
                 var expanded = CompactPlacement.TransitionEnd(rest, true, fullW, fullH, areas, null);
                 var collapsed = CompactPlacement.TransitionEnd(rest, false, fullW, fullH, areas, null);
-                var (anchorX, anchorY) = WindowAnchorHelper.CompensateSizeChange(
-                    compactW, compactH, fullW, fullH, x, y, areas);
-                if (collapsed.X != x || collapsed.Y != y || expanded.X != anchorX || expanded.Y != anchorY)
+                var rawX = (int)Math.Round(x + compactW - fullW);
+                var rawY = (int)Math.Round(y + compactH - fullH);
+                var (pinnedX, pinnedY) = WindowAnchorHelper.ClampToWorkingAreas(
+                    rawX, rawY, (int)fullW, (int)fullH, areas);
+                if (collapsed.X != x || collapsed.Y != y || expanded.X != pinnedX || expanded.Y != pinnedY)
                     walked.Add($"({x},{y}) -> ({expanded.X},{expanded.Y}) -> ({collapsed.X},{collapsed.Y})");
             }
         }
@@ -238,22 +251,20 @@ public sealed class WindowAnchorHelperTests
     }
 
     [Fact]
-    public void TransitionEnd_keeps_the_origin_where_redeciding_the_anchor_walks()
+    public void TransitionEnd_pins_bottom_right_when_the_compact_pill_is_near_the_top()
     {
         var areas = new[] { (0, 0, 2048, 1104) };
         var rest = new CompactRestOrigin(880, 0, 140, 48);
 
         var expanded = CompactPlacement.TransitionEnd(rest, true, 300, 640, areas, null);
         var collapsed = CompactPlacement.TransitionEnd(rest, false, 300, 640, areas, null);
-        var (legacyX, legacyY) = WindowAnchorHelper.CompensateSizeChange(
-            300, 640, 140, 48, expanded.X, expanded.Y, areas);
 
-        Assert.Equal(880, expanded.X);
-        Assert.Equal(0, expanded.Y);
+        Assert.Equal(720, expanded.X);
+        Assert.Equal(-592, expanded.Y);
         Assert.Equal(880, collapsed.X);
         Assert.Equal(0, collapsed.Y);
-        Assert.Equal(1040, legacyX);
-        Assert.Equal(0, legacyY);
+        Assert.Equal(expanded.X + 300, collapsed.X + 140);
+        Assert.Equal(expanded.Y + 640, collapsed.Y + 48);
     }
 
     [Fact]
@@ -265,10 +276,26 @@ public sealed class WindowAnchorHelperTests
         var expanded = CompactPlacement.TransitionEnd(rest, true, 300, 260, areas, settingsAnchorBottom: 76);
         var collapsed = CompactPlacement.TransitionEnd(rest, false, 300, 260, areas, settingsAnchorBottom: 76);
 
-        Assert.Equal(40, expanded.X);
+        Assert.Equal(-120, expanded.X);
         Assert.Equal(76 - 260, expanded.Y);
         Assert.Equal(40, collapsed.X);
         Assert.Equal(40, collapsed.Y);
+    }
+
+    [Fact]
+    public void TransitionEnd_clamped_expand_still_collapses_to_the_compact_origin()
+    {
+        var areas = new[] { (0, 0, 1920, 1080) };
+        var rest = new CompactRestOrigin(0, 0, 140, 36);
+
+        var expanded = CompactPlacement.TransitionEnd(rest, true, 300, 400, areas, null);
+        var collapsed = CompactPlacement.TransitionEnd(rest, false, 300, 400, areas, null);
+
+        Assert.Equal(0, expanded.X);
+        Assert.Equal(0, expanded.Y);
+        Assert.Equal(0, collapsed.X);
+        Assert.Equal(0, collapsed.Y);
+        Assert.NotEqual(36, expanded.Y + 400);
     }
 
     [Fact]
