@@ -253,6 +253,12 @@ public sealed class CompactLayoutAnimatorTests
     }
 
     [Fact]
+    public void Compact_transitions_never_rewrite_window_geometry_each_frame()
+    {
+        Assert.False(CompactLayoutAnimator.ShouldRewriteWindowGeometryEachFrame());
+    }
+
+    [Fact]
     public void Interpolate_reduced_motion_snaps_to_end()
     {
         var start = new CompactAnimSample(120, 40, 10, 20);
@@ -276,9 +282,21 @@ public sealed class CompactLayoutAnimatorTests
     [Fact]
     public void DurationFor_uses_revised_expand_and_collapse_durations()
     {
-        Assert.Equal(220, CompactLayoutAnimator.DurationFor(0, 1).TotalMilliseconds);
-        Assert.Equal(170, CompactLayoutAnimator.DurationFor(1, 0).TotalMilliseconds);
-        Assert.Equal(110, CompactLayoutAnimator.DurationFor(0.5, 1).TotalMilliseconds);
+        Assert.Equal(140, CompactLayoutAnimator.DurationFor(0, 1).TotalMilliseconds);
+        Assert.Equal(100, CompactLayoutAnimator.DurationFor(1, 0).TotalMilliseconds);
+        Assert.Equal(70, CompactLayoutAnimator.DurationFor(0.5, 1).TotalMilliseconds);
+    }
+
+    [Fact]
+    public void AdvanceElapsedMs_catches_up_under_sparse_frames()
+    {
+        // Three 200ms gaps must finish a 100ms collapse in one frame of wall time,
+        // not stretch across capped 50ms steps (old slow-mo behaviour).
+        var elapsed = 0.0;
+        elapsed = CompactLayoutAnimator.AdvanceElapsedMs(elapsed, 200);
+        Assert.True(elapsed >= CompactLayoutAnimator.CollapseDuration.TotalMilliseconds);
+        var linearT = elapsed / CompactLayoutAnimator.CollapseDuration.TotalMilliseconds;
+        Assert.True(linearT >= 1);
     }
 
     [Fact]
