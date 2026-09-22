@@ -203,6 +203,62 @@ public sealed class CompactLayoutAnimatorTests
     }
 
     [Fact]
+    public void Interpolate_keeps_the_bottom_right_corner_while_minifying()
+    {
+        var start = new CompactAnimSample(300, 260, 40, 40);
+        var end = new CompactAnimSample(140, 36, 200, 264);
+
+        var sample = CompactLayoutAnimator.Interpolate(start, end, 0.5, expanding: false, reduceMotion: false);
+
+        Assert.Equal(340, sample.X + sample.Width, precision: 5);
+        Assert.Equal(300, sample.Y + sample.Height, precision: 5);
+    }
+
+    [Fact]
+    public void Scale_host_keeps_one_window_rect_while_resize_lerp_rewrites_every_frame()
+    {
+        var start = new CompactAnimSample(300, 260, 40, 40);
+        var end = new CompactAnimSample(140, 36, 200, 264);
+        var resizeRects = new HashSet<string>();
+        for (var i = 0; i <= 20; i++)
+        {
+            var sample = CompactLayoutAnimator.Interpolate(start, end, i / 20.0, expanding: false, reduceMotion: false);
+            resizeRects.Add($"{Math.Round(sample.X)}:{Math.Round(sample.Y)}:{Math.Round(sample.Width)}:{Math.Round(sample.Height)}");
+        }
+
+        Assert.True(resizeRects.Count >= 15);
+        Assert.True(CompactLayoutAnimator.TryCreateScaleHost(start, end, out var host));
+        Assert.Equal(40, host.X);
+        Assert.Equal(40, host.Y);
+        Assert.Equal(300, host.Width);
+        Assert.Equal(260, host.Height);
+        Assert.Equal(1, host.FromScaleX, precision: 5);
+        Assert.Equal(140d / 300d, host.ToScaleX, precision: 5);
+        Assert.Equal(36d / 260d, host.ToScaleY, precision: 5);
+
+        var (scaleX, scaleY) = host.ScaleAt(1);
+        Assert.Equal(host.ToScaleX, scaleX, precision: 5);
+        Assert.Equal(host.ToScaleY, scaleY, precision: 5);
+        Assert.Equal(340, host.X + host.Width, precision: 5);
+        Assert.Equal(300, host.Y + host.Height, precision: 5);
+    }
+
+    [Fact]
+    public void TryCreateScaleHost_rejects_rects_that_do_not_share_a_corner()
+    {
+        var start = new CompactAnimSample(300, 260, 40, 40);
+        var end = new CompactAnimSample(140, 36, 40, 40);
+
+        Assert.False(CompactLayoutAnimator.TryCreateScaleHost(start, end, out _));
+    }
+
+    [Fact]
+    public void Compact_transitions_never_rewrite_window_geometry_each_frame()
+    {
+        Assert.False(CompactLayoutAnimator.ShouldRewriteWindowGeometryEachFrame());
+    }
+
+    [Fact]
     public void Interpolate_reduced_motion_snaps_to_end()
     {
         var start = new CompactAnimSample(120, 40, 10, 20);
@@ -226,9 +282,21 @@ public sealed class CompactLayoutAnimatorTests
     [Fact]
     public void DurationFor_uses_revised_expand_and_collapse_durations()
     {
-        Assert.Equal(220, CompactLayoutAnimator.DurationFor(0, 1).TotalMilliseconds);
-        Assert.Equal(170, CompactLayoutAnimator.DurationFor(1, 0).TotalMilliseconds);
-        Assert.Equal(110, CompactLayoutAnimator.DurationFor(0.5, 1).TotalMilliseconds);
+        Assert.Equal(140, CompactLayoutAnimator.DurationFor(0, 1).TotalMilliseconds);
+        Assert.Equal(100, CompactLayoutAnimator.DurationFor(1, 0).TotalMilliseconds);
+        Assert.Equal(70, CompactLayoutAnimator.DurationFor(0.5, 1).TotalMilliseconds);
+    }
+
+    [Fact]
+    public void AdvanceElapsedMs_catches_up_under_sparse_frames()
+    {
+        // Three 200ms gaps must finish a 100ms collapse in one frame of wall time,
+        // not stretch across capped 50ms steps (old slow-mo behaviour).
+        var elapsed = 0.0;
+        elapsed = CompactLayoutAnimator.AdvanceElapsedMs(elapsed, 200);
+        Assert.True(elapsed >= CompactLayoutAnimator.CollapseDuration.TotalMilliseconds);
+        var linearT = elapsed / CompactLayoutAnimator.CollapseDuration.TotalMilliseconds;
+        Assert.True(linearT >= 1);
     }
 
     [Fact]

@@ -8,8 +8,8 @@ public readonly record struct CompactAnimSample(
 
 public static class CompactLayoutAnimator
 {
-    public static readonly TimeSpan ExpandDuration = TimeSpan.FromMilliseconds(220);
-    public static readonly TimeSpan CollapseDuration = TimeSpan.FromMilliseconds(170);
+    public static readonly TimeSpan ExpandDuration = TimeSpan.FromMilliseconds(140);
+    public static readonly TimeSpan CollapseDuration = TimeSpan.FromMilliseconds(100);
     public const double FullFadeStart = 0.20;
     public const double CompactCullThreshold = 0.95;
     public const double FullCullThreshold = 0.05;
@@ -67,6 +67,13 @@ public static class CompactLayoutAnimator
         return TimeSpan.FromMilliseconds(Math.Max(1, full.TotalMilliseconds * remaining));
     }
 
+    /// <summary>
+    /// Advances animation elapsed time by the real frame gap so sparse frames under
+    /// load catch up instead of slow-motioning (do not clamp to ~16–50ms).
+    /// </summary>
+    public static double AdvanceElapsedMs(double elapsedMs, double rawDeltaMs) =>
+        elapsedMs + Math.Max(0, rawDeltaMs);
+
     public static CompactAnimSample Interpolate(
         CompactAnimSample start,
         CompactAnimSample end,
@@ -98,4 +105,61 @@ public static class CompactLayoutAnimator
         var t = ApplyEase(Math.Clamp(linearT, 0, 1), expanding);
         return Lerp(startProgress, endProgress, t);
     }
+
+    public static bool TryCreateScaleHost(
+        CompactAnimSample start,
+        CompactAnimSample end,
+        out CompactScaleHost host)
+    {
+        var startRight = start.X + start.Width;
+        var endRight = end.X + end.Width;
+        var startBottom = start.Y + start.Height;
+        var endBottom = end.Y + end.Height;
+        if (Math.Abs(startRight - endRight) > 1.5
+            || Math.Abs(startBottom - endBottom) > 1.5
+            || start.Width < 1
+            || start.Height < 1
+            || end.Width < 1
+            || end.Height < 1)
+        {
+            host = default;
+            return false;
+        }
+
+        var right = (startRight + endRight) / 2;
+        var bottom = (startBottom + endBottom) / 2;
+        var width = Math.Max(start.Width, end.Width);
+        var height = Math.Max(start.Height, end.Height);
+        host = new CompactScaleHost(
+            (int)Math.Round(right - width),
+            (int)Math.Round(bottom - height),
+            width,
+            height,
+            start.Width / width,
+            start.Height / height,
+            end.Width / width,
+            end.Height / height);
+        return true;
+    }
+
+    /// <summary>
+    /// Compact transitions must not rewrite Position/Width/Height every frame.
+    /// Prefer a scale host; otherwise opacity-only until a single snap at the end.
+    /// </summary>
+    public static bool ShouldRewriteWindowGeometryEachFrame() => false;
+}
+
+public readonly record struct CompactScaleHost(
+    int X,
+    int Y,
+    double Width,
+    double Height,
+    double FromScaleX,
+    double FromScaleY,
+    double ToScaleX,
+    double ToScaleY)
+{
+    public (double ScaleX, double ScaleY) ScaleAt(double easedT) =>
+        (CompactLayoutAnimator.Lerp(FromScaleX, ToScaleX, easedT),
+         CompactLayoutAnimator.Lerp(FromScaleY, ToScaleY, easedT));
 }
