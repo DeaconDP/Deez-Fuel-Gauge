@@ -11,7 +11,7 @@ public sealed class ClaudeProUsageClientTests
 {
     [Theory]
     [InlineData(0.42, 42)]
-    [InlineData(1, 100)]
+    [InlineData(1, 1)]
     [InlineData(42, 42)]
     [InlineData(0, 0)]
     public void NormalizeUtilization_handles_fraction_and_percent(double input, double expected)
@@ -37,6 +37,43 @@ public sealed class ClaudeProUsageClientTests
         var uuid = ClaudeProUsageClient.ParseOrgUuid(document.RootElement);
 
         Assert.Equal("org-abc-123", uuid);
+    }
+
+    [Fact]
+    public void ParseUsageResponse_keeps_integer_one_percent_weekly_as_one_percent()
+    {
+        const string json = """
+            {
+              "five_hour": { "utilization": 6 },
+              "seven_day": { "utilization": 1, "resets_at": "2026-09-30T06:59:00Z" }
+            }
+            """;
+
+        using var document = JsonDocument.Parse(json);
+        var snapshot = ClaudeProUsageClient.ParseUsageResponse(document.RootElement);
+
+        Assert.True(snapshot.IsAvailable);
+        Assert.Equal(6, snapshot.SessionPercentUsed, 1);
+        Assert.Equal(1, snapshot.WeeklyPercentUsed, 1);
+        Assert.Contains("wk 1%", snapshot.DetailLabel);
+    }
+
+    [Fact]
+    public void ParseUsageResponse_treats_fraction_one_point_zero_as_full_weekly()
+    {
+        const string json = """
+            {
+              "five_hour": { "utilization": 0.06 },
+              "seven_day": { "utilization": 1.0 }
+            }
+            """;
+
+        using var document = JsonDocument.Parse(json);
+        var snapshot = ClaudeProUsageClient.ParseUsageResponse(document.RootElement);
+
+        Assert.True(snapshot.IsAvailable);
+        Assert.Equal(6, snapshot.SessionPercentUsed, 1);
+        Assert.Equal(100, snapshot.WeeklyPercentUsed, 1);
     }
 
     [Fact]
