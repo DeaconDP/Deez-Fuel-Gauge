@@ -20,6 +20,22 @@ public sealed class ClaudeProUsageClientTests
         Assert.Equal(expected, result);
     }
 
+    [Theory]
+    [InlineData("0.42", 42)]
+    [InlineData("1", 1)]
+    [InlineData("1.0", 100)]
+    [InlineData("42", 42)]
+    [InlineData("0", 0)]
+    [InlineData("35.0", 35)]
+    public void NormalizeUtilization_from_json_distinguishes_integer_one_from_fraction_one(
+        string rawNumber,
+        double expected)
+    {
+        using var document = JsonDocument.Parse(rawNumber);
+        var result = ClaudeProUsageClient.NormalizeUtilization(document.RootElement);
+        Assert.Equal(expected, result);
+    }
+
     [Fact]
     public void ParseOrgUuid_reads_organization_uuid_from_memberships()
     {
