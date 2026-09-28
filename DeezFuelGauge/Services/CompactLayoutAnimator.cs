@@ -147,6 +147,42 @@ public static class CompactLayoutAnimator
     /// Prefer a scale host; otherwise opacity-only until a single snap at the end.
     /// </summary>
     public static bool ShouldRewriteWindowGeometryEachFrame() => false;
+
+    public const double ScaleSettleEpsilon = 0.02;
+    public const int MaxFinishDefers = 30;
+
+    /// <summary>
+    /// True when the live scale is close enough to the host target that snapping
+    /// window geometry will not hitch. Collapse uses an ease-in, so finishing early
+    /// cuts the motion-heavy tail and looks like a stutter.
+    /// </summary>
+    public static bool IsScaleSettled(
+        double scaleX,
+        double scaleY,
+        double toScaleX,
+        double toScaleY,
+        double epsilon = ScaleSettleEpsilon) =>
+        Math.Abs(scaleX - toScaleX) <= epsilon
+        && Math.Abs(scaleY - toScaleY) <= epsilon;
+
+    /// <summary>
+    /// Finish timer must wait for the scale transition when a host is active.
+    /// Caps deferrals so a stuck transition cannot loop forever.
+    /// </summary>
+    public static bool ShouldDeferCompactFinish(
+        bool hasScaleHost,
+        double scaleX,
+        double scaleY,
+        double toScaleX,
+        double toScaleY,
+        int deferCount,
+        int maxDefers = MaxFinishDefers)
+    {
+        if (!hasScaleHost || deferCount >= maxDefers)
+            return false;
+
+        return !IsScaleSettled(scaleX, scaleY, toScaleX, toScaleY);
+    }
 }
 
 public readonly record struct CompactScaleHost(

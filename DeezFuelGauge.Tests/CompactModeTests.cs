@@ -317,6 +317,48 @@ public sealed class CompactLayoutAnimatorTests
         Assert.Equal(renderCompact, CompactLayoutAnimator.ShouldRenderCompact(progress));
         Assert.Equal(renderFull, CompactLayoutAnimator.ShouldRenderFull(progress));
     }
+
+    [Fact]
+    public void IsScaleSettled_rejects_mid_collapse_scale_that_used_to_finish_early()
+    {
+        // Runtime evidence: finish fired at ScaleX≈0.50 while ToScaleX≈0.24.
+        Assert.False(CompactLayoutAnimator.IsScaleSettled(0.503, 0.50, 0.24, 0.137));
+        Assert.True(CompactLayoutAnimator.IsScaleSettled(0.24, 0.137, 0.24, 0.137));
+        Assert.True(CompactLayoutAnimator.IsScaleSettled(0.245, 0.14, 0.24, 0.137));
+    }
+
+    [Fact]
+    public void ShouldDeferCompactFinish_waits_for_scale_then_gives_up()
+    {
+        Assert.True(CompactLayoutAnimator.ShouldDeferCompactFinish(
+            hasScaleHost: true,
+            scaleX: 0.50,
+            scaleY: 0.50,
+            toScaleX: 0.24,
+            toScaleY: 0.137,
+            deferCount: 0));
+        Assert.False(CompactLayoutAnimator.ShouldDeferCompactFinish(
+            hasScaleHost: true,
+            scaleX: 0.24,
+            scaleY: 0.137,
+            toScaleX: 0.24,
+            toScaleY: 0.137,
+            deferCount: 0));
+        Assert.False(CompactLayoutAnimator.ShouldDeferCompactFinish(
+            hasScaleHost: false,
+            scaleX: 0.50,
+            scaleY: 0.50,
+            toScaleX: 0.24,
+            toScaleY: 0.137,
+            deferCount: 0));
+        Assert.False(CompactLayoutAnimator.ShouldDeferCompactFinish(
+            hasScaleHost: true,
+            scaleX: 0.50,
+            scaleY: 0.50,
+            toScaleX: 0.24,
+            toScaleY: 0.137,
+            deferCount: CompactLayoutAnimator.MaxFinishDefers));
+    }
 }
 
 public sealed class CompactInteractionTrackerTests
