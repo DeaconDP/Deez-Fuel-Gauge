@@ -180,7 +180,7 @@ public sealed class CompactLayoutAnimatorTests
         var start = new CompactAnimSample(120, 40, 10, 20);
         var end = new CompactAnimSample(300, 260, 10, 20);
 
-        var sample = CompactLayoutAnimator.Interpolate(start, end, 0, expanding: true, reduceMotion: false);
+        var sample = CompactLayoutAnimator.Interpolate(start, end, 0, reduceMotion: false);
 
         Assert.Equal(120, sample.Width);
         Assert.Equal(40, sample.Height);
@@ -194,7 +194,7 @@ public sealed class CompactLayoutAnimatorTests
         var start = new CompactAnimSample(120, 40, 10, 20);
         var end = new CompactAnimSample(300, 260, -20, -40);
 
-        var sample = CompactLayoutAnimator.Interpolate(start, end, 1, expanding: true, reduceMotion: false);
+        var sample = CompactLayoutAnimator.Interpolate(start, end, 1, reduceMotion: false);
 
         Assert.Equal(300, sample.Width);
         Assert.Equal(260, sample.Height);
@@ -208,7 +208,7 @@ public sealed class CompactLayoutAnimatorTests
         var start = new CompactAnimSample(300, 260, 40, 40);
         var end = new CompactAnimSample(140, 36, 200, 264);
 
-        var sample = CompactLayoutAnimator.Interpolate(start, end, 0.5, expanding: false, reduceMotion: false);
+        var sample = CompactLayoutAnimator.Interpolate(start, end, 0.5, reduceMotion: false);
 
         Assert.Equal(340, sample.X + sample.Width, precision: 5);
         Assert.Equal(300, sample.Y + sample.Height, precision: 5);
@@ -222,7 +222,7 @@ public sealed class CompactLayoutAnimatorTests
         var resizeRects = new HashSet<string>();
         for (var i = 0; i <= 20; i++)
         {
-            var sample = CompactLayoutAnimator.Interpolate(start, end, i / 20.0, expanding: false, reduceMotion: false);
+            var sample = CompactLayoutAnimator.Interpolate(start, end, i / 20.0, reduceMotion: false);
             resizeRects.Add($"{Math.Round(sample.X)}:{Math.Round(sample.Y)}:{Math.Round(sample.Width)}:{Math.Round(sample.Height)}");
         }
 
@@ -253,17 +253,44 @@ public sealed class CompactLayoutAnimatorTests
     }
 
     [Fact]
-    public void Compact_transitions_never_rewrite_window_geometry_each_frame()
+    public void Compact_rest_uses_native_window_geometry_on_all_platforms()
     {
-        Assert.False(CompactLayoutAnimator.ShouldRewriteWindowGeometryEachFrame());
+        // Position and rest are the same HWND; transitions still use a scale host.
+        Assert.True(CompactLayoutAnimator.TryCreateScaleHost(
+            new CompactAnimSample(300, 260, 40, 40),
+            new CompactAnimSample(140, 36, 200, 264),
+            out _));
     }
 
     [Fact]
-    public void Stable_host_geometry_policy_matches_platform()
+    public void Treating_full_host_origin_as_compact_rest_breaks_the_br_anchor()
     {
-        Assert.Equal(OperatingSystem.IsWindows(), CompactLayoutAnimator.PreferStableCompactHostGeometry);
-        Assert.Equal(!OperatingSystem.IsWindows(), CompactLayoutAnimator.ShouldShrinkWindowToCompactRest());
-        Assert.Equal(!OperatingSystem.IsWindows(), CompactLayoutAnimator.ShouldResizeWindowForCompactTransition());
+        const int hostX = 1048;
+        const int hostY = -287;
+        const double fullW = 300;
+        const double fullH = 390;
+        const double compactW = 94;
+        const double compactH = 126;
+
+        var trueRestX = hostX + (int)fullW - (int)compactW;
+        var trueRestY = hostY + (int)fullH - (int)compactH;
+        var (correctHostX, correctHostY) = CompactPlacement.TransitionAnimEnd(
+            new CompactRestOrigin(trueRestX, trueRestY, compactW, compactH),
+            goingFull: true,
+            fullW,
+            fullH,
+            settingsAnchorBottom: null);
+        var (wrongHostX, wrongHostY) = CompactPlacement.TransitionAnimEnd(
+            new CompactRestOrigin(hostX, hostY, compactW, compactH),
+            goingFull: true,
+            fullW,
+            fullH,
+            settingsAnchorBottom: null);
+
+        Assert.Equal(hostX, correctHostX);
+        Assert.Equal(hostY, correctHostY);
+        Assert.NotEqual(correctHostX, wrongHostX);
+        Assert.NotEqual(correctHostY, wrongHostY);
     }
 
     [Fact]
@@ -272,7 +299,7 @@ public sealed class CompactLayoutAnimatorTests
         var start = new CompactAnimSample(120, 40, 10, 20);
         var end = new CompactAnimSample(300, 260, 10, 20);
 
-        var sample = CompactLayoutAnimator.Interpolate(start, end, 0.4, expanding: true, reduceMotion: true);
+        var sample = CompactLayoutAnimator.Interpolate(start, end, 0.4, reduceMotion: true);
 
         Assert.Equal(300, sample.Width);
         Assert.Equal(260, sample.Height);
@@ -308,10 +335,9 @@ public sealed class CompactLayoutAnimatorTests
     }
 
     [Fact]
-    public void ApplyEase_uses_ease_out_quad_both_ways()
+    public void ApplyEase_uses_ease_out_quad()
     {
-        Assert.Equal(0.75, CompactLayoutAnimator.ApplyEase(0.5, expanding: true));
-        Assert.Equal(0.75, CompactLayoutAnimator.ApplyEase(0.5, expanding: false));
+        Assert.Equal(0.75, CompactLayoutAnimator.ApplyEase(0.5));
     }
 
     [Theory]
@@ -327,13 +353,16 @@ public sealed class CompactLayoutAnimatorTests
     }
 
     [Fact]
-    public void FullOpacity_crossfades_from_the_first_frame()
+    public void Layouts_hand_off_before_the_pill_is_half_grown()
     {
+        Assert.Equal(1, CompactLayoutAnimator.CompactOpacity(0));
         Assert.Equal(0, CompactLayoutAnimator.FullOpacity(0));
-        Assert.Equal(0.15, CompactLayoutAnimator.FullOpacity(0.15), precision: 5);
         Assert.Equal(0, CompactLayoutAnimator.CompactOpacity(1));
         Assert.Equal(1, CompactLayoutAnimator.FullOpacity(1));
-        Assert.Equal(1, CompactLayoutAnimator.CompactOpacity(0));
+        Assert.Equal(0, CompactLayoutAnimator.CompactOpacity(0.5));
+        Assert.Equal(1, CompactLayoutAnimator.FullOpacity(0.5));
+        Assert.True(CompactLayoutAnimator.CompactOpacity(0.1) > 0.5);
+        Assert.True(CompactLayoutAnimator.FullOpacity(0.1) < 0.2);
     }
 
     [Fact]
@@ -346,8 +375,8 @@ public sealed class CompactLayoutAnimatorTests
         Assert.True(hostOk);
 
         const double linearT = 0.5;
-        var eased = CompactLayoutAnimator.ApplyEase(linearT, expanding: false);
-        var progress = CompactLayoutAnimator.InterpolateProgress(1, 0, linearT, expanding: false, reduceMotion: false);
+        var eased = CompactLayoutAnimator.ApplyEase(linearT);
+        var progress = CompactLayoutAnimator.InterpolateProgress(1, 0, linearT, reduceMotion: false);
         var (scaleX, _) = host.ScaleAt(eased);
 
         Assert.Equal(0.25, progress, precision: 5);

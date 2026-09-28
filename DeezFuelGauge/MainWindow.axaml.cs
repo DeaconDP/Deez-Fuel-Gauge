@@ -252,6 +252,11 @@ public partial class MainWindow : Window, ISettingsPanelHost
             _compactSnapNext = true;
             ApplyCompactVisualState();
             await RefreshAsync();
+            if (string.Equals(
+                    Environment.GetEnvironmentVariable("DEEZ_COMPACT_SELFTEST"),
+                    "1",
+                    StringComparison.Ordinal))
+                await RunCompactSelfTestAsync();
         };
         SizeChanged += (_, _) =>
         {
@@ -287,36 +292,6 @@ public partial class MainWindow : Window, ISettingsPanelHost
             {
                 EnsureCompactTransitionSizes();
                 var compact = _cachedCompactSize!.Value;
-                if (CompactLayoutAnimator.PreferStableCompactHostGeometry
-                    && _cachedFullSize is { } full)
-                {
-                    var (hostX, hostY, restX, restY, moved) =
-                        PinnedPositionRestore.ResolveStableCompactHost(
-                            _settings.Left,
-                            _settings.Top,
-                            compact.Width,
-                            compact.Height,
-                            full.Width,
-                            full.Height,
-                            workingAreas);
-                    _compactFrameOwnsPosition = true;
-                    Width = Math.Max(1, full.Width);
-                    Height = Math.Max(1, full.Height);
-                    Position = new PixelPoint(hostX, hostY);
-                    _compactFrameOwnsPosition = false;
-                    _compactRestX = restX;
-                    _compactRestY = restY;
-                    _initialPositionApplied = true;
-                    if (moved)
-                    {
-                        _settings.Left = restX;
-                        _settings.Top = restY;
-                        SaveSettings();
-                    }
-
-                    return;
-                }
-
                 var (x, y, movedCompact) = PinnedPositionRestore.Resolve(
                     _settings.Left,
                     _settings.Top,
@@ -739,13 +714,107 @@ public partial class MainWindow : Window, ISettingsPanelHost
     {
         _pointerOver = true;
         _compactCollapseTimer.Stop();
+        TraceCompactGeometry("pointer-enter");
         ApplyCompactVisualState();
     }
 
     private void Window_PointerExited(object? sender, PointerEventArgs e)
     {
         _pointerOver = false;
+        TraceCompactGeometry("pointer-exit");
         ScheduleCompactCollapseIfNeeded();
+    }
+
+    private void TraceCompactGeometry(string name, bool regionCleared = false)
+    {
+        var pillW = !double.IsNaN(PillBorder.Width) && PillBorder.Width > 1
+            ? PillBorder.Width
+            : Bounds.Width;
+        var pillH = !double.IsNaN(PillBorder.Height) && PillBorder.Height > 1
+            ? PillBorder.Height
+            : Bounds.Height;
+        CompactGeometryTrace.Event(
+            name,
+            Position.X,
+            Position.Y,
+            Bounds.Width,
+            Bounds.Height,
+            _compactRestX,
+            _compactRestY,
+            pillW,
+            pillH,
+            _compactProgress,
+            _pointerOver,
+            regionCleared);
+    }
+
+    private async Task RunCompactSelfTestAsync()
+    {
+        if (!_settings.UseCompactMode)
+        {
+            CompactGeometryTrace.Event(
+                "selftest-skip-not-compact",
+                Position.X, Position.Y, Bounds.Width, Bounds.Height,
+                _compactRestX, _compactRestY, Bounds.Width, Bounds.Height,
+                _compactProgress, _pointerOver);
+            Close();
+            return;
+        }
+
+        await Task.Delay(400);
+        UpdateLayout();
+        TraceCompactGeometry("selftest-rest");
+        var restW = Bounds.Width;
+        var restH = Bounds.Height;
+        var restBrX = Position.X + Bounds.Width;
+        var restBrY = Position.Y + Bounds.Height;
+
+        _pointerOver = true;
+        _compactCollapseTimer.Stop();
+        ApplyCompactVisualState();
+        await Task.Delay(500);
+        while (_compactAnimActive)
+            await Task.Delay(50);
+        UpdateLayout();
+        TraceCompactGeometry("selftest-expanded");
+        var expanded = Bounds.Width > restW + 20 || Bounds.Height > restH + 20;
+
+        _pointerOver = false;
+        ScheduleCompactCollapseIfNeeded();
+        await Task.Delay(CompactHoverController.CollapseDelay + TimeSpan.FromMilliseconds(500));
+        while (_compactAnimActive)
+            await Task.Delay(50);
+        UpdateLayout();
+        TraceCompactGeometry("selftest-collapsed");
+        var leaveW = Bounds.Width;
+        var leaveH = Bounds.Height;
+        var leaveBrX = Position.X + Bounds.Width;
+        var leaveBrY = Position.Y + Bounds.Height;
+        var brOk = Math.Abs(restBrX - leaveBrX) <= 8 && Math.Abs(restBrY - leaveBrY) <= 8;
+        var sizeOk = Math.Abs(leaveW - restW) <= 12 && Math.Abs(leaveH - restH) <= 12;
+        var pass = expanded && brOk && sizeOk && Position.Y >= -40;
+        CompactGeometryTrace.Event(
+            pass ? "selftest-pass" : "selftest-fail",
+            Position.X, Position.Y, Bounds.Width, Bounds.Height,
+            _compactRestX, _compactRestY, leaveW, leaveH,
+            _compactProgress, _pointerOver);
+        try
+        {
+            var path = Path.Combine(Path.GetTempPath(), "deez-compact-selftest.txt");
+            await File.WriteAllTextAsync(
+                path,
+                $"pass={pass} expanded={expanded} brOk={brOk} sizeOk={sizeOk} " +
+                $"rest={restW:0}x{restH:0}@{restBrX - restW:0},{restBrY - restH:0} " +
+                $"leave={leaveW:0}x{leaveH:0}@{Position.X},{Position.Y} " +
+                $"brRest=({restBrX:0},{restBrY:0}) brLeave=({leaveBrX:0},{leaveBrY:0})" +
+                Environment.NewLine);
+        }
+        catch
+        {
+            // Self-test report is best-effort.
+        }
+
+        Close();
     }
 
     private void OnSettingsInputFocusChanged(object? sender, RoutedEventArgs e)
@@ -886,7 +955,6 @@ public partial class MainWindow : Window, ISettingsPanelHost
             _compactRestX = null;
             _compactRestY = null;
             _expandedPlacement = null;
-            ClearStableCompactRestChrome();
             RestoreCompactLayerVisibility();
             ApplyCompactOpacities(1, cullLayers: false);
             PillBorder.Padding = FullPadding;
@@ -903,8 +971,6 @@ public partial class MainWindow : Window, ISettingsPanelHost
         if (Math.Abs(_compactProgress - targetProgress) < 0.001 && !_compactAnimActive && !_compactSnapNext)
         {
             ApplyCompactOpacities(_compactProgress);
-            if (CompactLayoutAnimator.PreferStableCompactHostGeometry)
-                EnsureStableCompactHostVisual(_compactProgress);
             return;
         }
 
@@ -914,41 +980,6 @@ public partial class MainWindow : Window, ISettingsPanelHost
 
     private void RememberCompactRestForTransition(Size compactSize, bool goingFull)
     {
-        if (CompactLayoutAnimator.PreferStableCompactHostGeometry)
-        {
-            if (_compactScaleHost is { } host)
-            {
-                var (x, y) = WindowAnchorHelper.PlaceKeepingBottomRight(
-                    host.X + host.Width,
-                    host.Y + host.Height,
-                    compactSize.Width,
-                    compactSize.Height);
-                _compactRestX = x;
-                _compactRestY = y;
-                return;
-            }
-
-            if (goingFull && _compactRestX is not null && _compactRestY is not null)
-                return;
-
-            // Startup can set Width/Height to the full host before Bounds catches up.
-            // CollapseEnd(Position, stale Bounds) would push the BR pill off-screen.
-            if (!goingFull
-                && _compactRestX is int seedX
-                && _compactRestY is int seedY
-                && _cachedFullSize is { } fullSize)
-            {
-                var (expectedHostX, expectedHostY) = CompactPlacement.TransitionAnimEnd(
-                    new CompactRestOrigin(seedX, seedY, compactSize.Width, compactSize.Height),
-                    goingFull: true,
-                    fullSize.Width,
-                    fullSize.Height,
-                    settingsAnchorBottom: null);
-                if (Position.X == expectedHostX && Position.Y == expectedHostY)
-                    return;
-            }
-        }
-
         var atCompactRest = !_compactAnimActive && _compactProgress <= 0.001 && _showingCompactRest;
         var resolved = CompactPlacement.ResolveRestForTransition(
             goingFull,
@@ -985,14 +1016,6 @@ public partial class MainWindow : Window, ISettingsPanelHost
                 compactSize.Height);
             _compactRestX = x;
             _compactRestY = y;
-            if (CompactLayoutAnimator.PreferStableCompactHostGeometry)
-            {
-                _expandedPlacement = new PixelPoint(Position.X, Position.Y);
-                if (_compactScaleHost is { } host)
-                    _compactScaleHost = host with { X = Position.X, Y = Position.Y };
-                ApplyWindowsCompactClipToPill();
-            }
-
             return;
         }
 
@@ -1080,15 +1103,6 @@ public partial class MainWindow : Window, ISettingsPanelHost
         {
             _compactSnapNext = false;
             _compactAnimFinalEnd = finalEnd;
-            if (CompactLayoutAnimator.PreferStableCompactHostGeometry)
-            {
-                _compactProgress = targetProgress;
-                EnsureStableCompactHostVisual(targetProgress);
-                ApplyCompactOpacities(targetProgress, cullLayers: true);
-                PersistCompactOriginIfNeeded();
-                return;
-            }
-
             FinishCompactTransition(targetProgress);
             return;
         }
@@ -1107,12 +1121,6 @@ public partial class MainWindow : Window, ISettingsPanelHost
         _pollWasRunningBeforeAnim = _pollTimer.IsEnabled;
         if (_pollWasRunningBeforeAnim)
             _pollTimer.Stop();
-
-        if (CompactLayoutAnimator.PreferStableCompactHostGeometry)
-        {
-            BeginStableCompactTransition(current, animEnd, finalEnd, goingFull, generation);
-            return;
-        }
 
         if (CompactLayoutAnimator.TryCreateScaleHost(current, animEnd, out var host))
         {
@@ -1148,215 +1156,6 @@ public partial class MainWindow : Window, ISettingsPanelHost
             ApplyCompactAnimFrame(0);
             _compactAnimPulse.Start();
         }, DispatcherPriority.Render);
-    }
-
-    private void BeginStableCompactTransition(
-        CompactAnimSample current,
-        CompactAnimSample animEnd,
-        CompactAnimSample finalEnd,
-        bool goingFull,
-        int generation)
-    {
-        _ = finalEnd;
-        // One full-size HWND for the whole compact session. Never SetWindowPos mid-flight
-        // or at rest; DWM hitchs on transparent resize and made the morph look horrific.
-        if (!CompactLayoutAnimator.TryCreateScaleHost(current, animEnd, out var host))
-        {
-            var full = _cachedFullSize!.Value;
-            var compact = _cachedCompactSize!.Value;
-            var rest = new CompactRestOrigin(
-                _compactRestX ?? (int)Math.Round(current.X),
-                _compactRestY ?? (int)Math.Round(current.Y),
-                compact.Width,
-                compact.Height);
-            var (fullX, fullY) = CompactPlacement.TransitionAnimEnd(
-                rest, goingFull: true, full.Width, full.Height, null);
-            var compactScaleX = compact.Width / Math.Max(1, full.Width);
-            var compactScaleY = compact.Height / Math.Max(1, full.Height);
-            host = new CompactScaleHost(
-                fullX,
-                fullY,
-                full.Width,
-                full.Height,
-                goingFull ? compactScaleX : 1,
-                goingFull ? compactScaleY : 1,
-                goingFull ? 1 : compactScaleX,
-                goingFull ? 1 : compactScaleY);
-        }
-
-        // Keep rest chrome until the render tick that starts the proxy, so we never
-        // flash a full unscaled pill before FromScale is painted.
-        _compactScale.ScaleX = host.FromScaleX;
-        _compactScale.ScaleY = host.FromScaleY;
-        EnsureStableHostGeometry(host);
-        _compactScaleHost = host;
-
-        Dispatcher.UIThread.Post(() =>
-        {
-            if (!_compactAnimActive || generation != _compactAnimGeneration)
-                return;
-
-            ClearStableCompactRestChrome(keepHostGeometry: true);
-            _compactScale.ScaleX = host.FromScaleX;
-            _compactScale.ScaleY = host.FromScaleY;
-
-            if (!TryBeginCompactProxyMotion(host))
-            {
-                _compactScale.ScaleX = host.FromScaleX;
-                _compactScale.ScaleY = host.FromScaleY;
-                PillBorder.IsVisible = true;
-                CompactAnimProxy.IsVisible = false;
-            }
-
-            _compactAnimClock.Restart();
-            ApplyCompactAnimFrame(0);
-            _compactAnimPulse.Start();
-        }, DispatcherPriority.Render);
-    }
-
-    private void EnsureStableHostGeometry(CompactScaleHost host)
-    {
-        var widthOk = Math.Abs(Bounds.Width - host.Width) < 1.5 || Math.Abs(Width - host.Width) < 1.5;
-        var heightOk = Math.Abs(Bounds.Height - host.Height) < 1.5 || Math.Abs(Height - host.Height) < 1.5;
-        var posOk = Position.X == host.X && Position.Y == host.Y;
-        if (widthOk && heightOk && posOk)
-        {
-            _compactScaleHost = host;
-            return;
-        }
-
-        HostCompactScale(host);
-    }
-
-    private void EnsureStableCompactHostVisual(double progress)
-    {
-        EnsureCompactTransitionSizes();
-        if (_cachedCompactSize is not { } compact || _cachedFullSize is not { } full)
-            return;
-
-        if (_compactRestX is null || _compactRestY is null)
-        {
-            var (rx, ry) = CompactPlacement.CollapseEnd(
-                Position.X,
-                Position.Y,
-                Bounds.Width,
-                Bounds.Height,
-                compact.Width,
-                compact.Height);
-            _compactRestX = rx;
-            _compactRestY = ry;
-        }
-
-        var rest = new CompactRestOrigin(_compactRestX.Value, _compactRestY.Value, compact.Width, compact.Height);
-        var (fullX, fullY) = CompactPlacement.TransitionAnimEnd(
-            rest, goingFull: true, full.Width, full.Height, null);
-        var host = new CompactScaleHost(
-            fullX,
-            fullY,
-            full.Width,
-            full.Height,
-            compact.Width / Math.Max(1, full.Width),
-            compact.Height / Math.Max(1, full.Height),
-            1,
-            1);
-        EnsureStableHostGeometry(host);
-        _compactScaleHost = host;
-        _expandedPlacement = new PixelPoint(fullX, fullY);
-
-        if (progress <= 0.5)
-        {
-            ApplyStableCompactRestChrome(compact);
-            return;
-        }
-
-        ClearStableCompactRestChrome(keepHostGeometry: true);
-        _compactScale.ScaleX = 1;
-        _compactScale.ScaleY = 1;
-        PillBorder.Padding = FullPadding;
-        ApplyCompactOpacities(1, cullLayers: true);
-    }
-
-    private void FinishStableCompactTransition(double progress)
-    {
-        EnsureCompactTransitionSizes();
-        var compact = _cachedCompactSize ?? new Size(72, 32);
-
-        if (progress <= 0.5)
-        {
-            if (_compactScaleHost is { } host)
-            {
-                var (rx, ry) = WindowAnchorHelper.PlaceKeepingBottomRight(
-                    host.X + host.Width,
-                    host.Y + host.Height,
-                    compact.Width,
-                    compact.Height);
-                _compactRestX = rx;
-                _compactRestY = ry;
-            }
-            else if (_compactAnimFinalEnd.Width > 1)
-            {
-                _compactRestX = (int)Math.Round(_compactAnimFinalEnd.X);
-                _compactRestY = (int)Math.Round(_compactAnimFinalEnd.Y);
-            }
-
-            ApplyStableCompactRestChrome(compact);
-            return;
-        }
-
-        ClearStableCompactRestChrome(keepHostGeometry: true);
-        if (_compactScaleHost is { } expandedHost)
-            _expandedPlacement = new PixelPoint(expandedHost.X, expandedHost.Y);
-        _compactScale.ScaleX = 1;
-        _compactScale.ScaleY = 1;
-        PillBorder.Padding = FullPadding;
-        ApplyCompactOpacities(progress, cullLayers: true);
-    }
-
-    private void ApplyStableCompactRestChrome(Size compact)
-    {
-        CompactAnimProxy.IsVisible = false;
-        CompactAnimProxy.Source = null;
-        _compactAnimBitmap?.Dispose();
-        _compactAnimBitmap = null;
-
-        PillBorder.HorizontalAlignment = HorizontalAlignment.Right;
-        PillBorder.VerticalAlignment = VerticalAlignment.Bottom;
-        PillBorder.Width = Math.Max(1, compact.Width);
-        PillBorder.Height = Math.Max(1, compact.Height);
-        PillBorder.Padding = CompactPadding;
-        PillBorder.Opacity = 1;
-        PillBorder.IsVisible = true;
-        _compactScale.ScaleX = 1;
-        _compactScale.ScaleY = 1;
-        ApplyCompactOpacities(0, cullLayers: true);
-        UpdateLayout();
-        ApplyWindowsCompactClipToPill();
-    }
-
-    private void ClearStableCompactRestChrome(bool keepHostGeometry = false)
-    {
-        WindowsWindowRegion.TryClear(this);
-        PillBorder.HorizontalAlignment = HorizontalAlignment.Stretch;
-        PillBorder.VerticalAlignment = VerticalAlignment.Stretch;
-        PillBorder.Width = double.NaN;
-        PillBorder.Height = double.NaN;
-        _ = keepHostGeometry;
-    }
-
-    private void ApplyWindowsCompactClipToPill()
-    {
-        if (!CompactLayoutAnimator.PreferStableCompactHostGeometry)
-            return;
-
-        var origin = PillBorder.TranslatePoint(new Avalonia.Point(0, 0), this) ?? new Avalonia.Point(0, 0);
-        var rect = new Avalonia.Rect(origin, PillBorder.Bounds.Size);
-        if (rect.Width < 1 || rect.Height < 1)
-            rect = new Avalonia.Rect(
-                Math.Max(0, Bounds.Width - PillBorder.Width),
-                Math.Max(0, Bounds.Height - PillBorder.Height),
-                Math.Max(1, PillBorder.Width),
-                Math.Max(1, PillBorder.Height));
-        WindowsWindowRegion.TrySetLogicalClientRegion(this, rect, RenderScaling);
     }
 
     private bool TryBeginCompactProxyMotion(CompactScaleHost host)
@@ -1435,19 +1234,16 @@ public partial class MainWindow : Window, ISettingsPanelHost
 
     private void ApplyCompactAnimFrame(double linearT)
     {
-        var expanding = _compactAnimToProgress > _compactAnimFromProgress;
         var progress = CompactLayoutAnimator.InterpolateProgress(
             _compactAnimFromProgress,
             _compactAnimToProgress,
             linearT,
-            expanding,
             reduceMotion: false);
         _compactProgress = progress;
 
         if (_compactScaleHost is { } host)
         {
-            var eased = CompactLayoutAnimator.ApplyEase(linearT, expanding);
-            var (scaleX, scaleY) = host.ScaleAt(eased);
+            var (scaleX, scaleY) = host.ScaleAt(CompactLayoutAnimator.ApplyEase(linearT));
             _compactScale.ScaleX = scaleX;
             _compactScale.ScaleY = scaleY;
         }
@@ -1472,24 +1268,6 @@ public partial class MainWindow : Window, ISettingsPanelHost
     {
         if (_compactScaleHost is { } host)
         {
-            // Stable rest parks a BR pill inside the full host. Report the pill size so
-            // the next expand builds a correct FromScale without resizing the HWND.
-            if (!_compactAnimActive
-                && _compactProgress <= 0.5
-                && !double.IsNaN(PillBorder.Width)
-                && PillBorder.Width > 1
-                && !double.IsNaN(PillBorder.Height)
-                && PillBorder.Height > 1)
-            {
-                var right = host.X + host.Width;
-                var bottom = host.Y + host.Height;
-                return new CompactAnimSample(
-                    PillBorder.Width,
-                    PillBorder.Height,
-                    right - PillBorder.Width,
-                    bottom - PillBorder.Height);
-            }
-
             var width = Math.Max(1, host.Width * _compactScale.ScaleX);
             var height = Math.Max(1, host.Height * _compactScale.ScaleY);
             var hostRight = host.X + host.Width;
@@ -1527,22 +1305,6 @@ public partial class MainWindow : Window, ISettingsPanelHost
         _compactAnimActive = false;
         _compactProgress = progress;
         ClearCompactPropertyTransitions();
-
-        if (CompactLayoutAnimator.PreferStableCompactHostGeometry)
-        {
-            // Drop the proxy without flashing the full-host pill at ToScale.
-            CompactAnimProxy.IsVisible = false;
-            CompactAnimProxy.Source = null;
-            _compactAnimBitmap?.Dispose();
-            _compactAnimBitmap = null;
-            FinishStableCompactTransition(progress);
-            if (_pollWasRunningBeforeAnim && !_pollTimer.IsEnabled)
-                _pollTimer.Start();
-            _pollWasRunningBeforeAnim = false;
-            PersistCompactOriginIfNeeded();
-            UpdateAllProgressWidths();
-            return;
-        }
 
         EndCompactProxyMotion();
         RestoreCompactLayerVisibility();
@@ -1615,15 +1377,8 @@ public partial class MainWindow : Window, ISettingsPanelHost
         EndCompactProxyMotion();
         ClearCompactPropertyTransitions();
         _compactProgress = progress;
-        if (CompactLayoutAnimator.PreferStableCompactHostGeometry)
-        {
-            EnsureStableCompactHostVisual(progress);
-        }
-        else
-        {
-            ApplyCompactFrame(mid, progress, cullLayers: false);
-            ResetCompactScale();
-        }
+        ApplyCompactFrame(mid, progress, cullLayers: false);
+        ResetCompactScale();
 
         UpdateLayout();
         if (_pollWasRunningBeforeAnim && !_pollTimer.IsEnabled)
@@ -1637,8 +1392,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
         _compactAnimActive = false;
         _compactAnimGeneration++;
         EndCompactProxyMotion();
-        if (!CompactLayoutAnimator.PreferStableCompactHostGeometry)
-            ResetCompactScale();
+        ResetCompactScale();
         if (_pollWasRunningBeforeAnim && !_pollTimer.IsEnabled)
             _pollTimer.Start();
         _pollWasRunningBeforeAnim = false;
@@ -1717,21 +1471,14 @@ public partial class MainWindow : Window, ISettingsPanelHost
         if (!ShouldCapturePinnedPosition())
             return;
 
-        if (CompactLayoutAnimator.PreferStableCompactHostGeometry
-            && _compactProgress <= 0.5
-            && _compactRestX is int restX
-            && _compactRestY is int restY)
-        {
-            _settings.Left = restX;
-            _settings.Top = restY;
-        }
-        else
-        {
-            _settings.Left = Position.X;
-            _settings.Top = Position.Y;
-        }
-
+        WritePinnedCompactOrigin();
         SaveSettings();
+    }
+
+    private void WritePinnedCompactOrigin()
+    {
+        _settings.Left = Position.X;
+        _settings.Top = Position.Y;
     }
 
     private void UpdateCompactGlance(UsageSnapshot? snapshot)
@@ -1761,19 +1508,6 @@ public partial class MainWindow : Window, ISettingsPanelHost
         {
             EnsureCompactTransitionSizes();
             var size = _cachedCompactSize!.Value;
-            if (CompactLayoutAnimator.PreferStableCompactHostGeometry)
-            {
-                if (Math.Abs(PillBorder.Width - size.Width) < 0.5
-                    && Math.Abs(PillBorder.Height - size.Height) < 0.5)
-                    return;
-
-                PillBorder.Width = size.Width;
-                PillBorder.Height = size.Height;
-                UpdateLayout();
-                ApplyWindowsCompactClipToPill();
-                return;
-            }
-
             var currentWidth = Bounds.Width > 1 ? Bounds.Width : Width;
             var currentHeight = Bounds.Height > 1 ? Bounds.Height : Height;
             if (Math.Abs(currentWidth - size.Width) < 0.5 && Math.Abs(currentHeight - size.Height) < 0.5)
@@ -3282,10 +3016,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
     {
         SettingsPanelControl.CommitToSettings(_settings);
         if (ShouldCapturePinnedPosition())
-        {
-            _settings.Left = Position.X;
-            _settings.Top = Position.Y;
-        }
+            WritePinnedCompactOrigin();
         _settings.IsSettingsExpanded = _isSettingsExpanded;
         // Provider accordion removed — persist always-expanded so older builds stay open.
         _settings.IsCursorProviderExpanded = true;

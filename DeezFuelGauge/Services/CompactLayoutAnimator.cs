@@ -10,21 +10,9 @@ public static class CompactLayoutAnimator
 {
     public static readonly TimeSpan ExpandDuration = TimeSpan.FromMilliseconds(240);
     public static readonly TimeSpan CollapseDuration = TimeSpan.FromMilliseconds(200);
-    public const double FullFadeStart = 0;
+    public const double FullFadeStart = 0.12;
     public const double CompactCullThreshold = 0.95;
     public const double FullCullThreshold = 0.05;
-
-    public static double EaseOutCubic(double t)
-    {
-        t = Math.Clamp(t, 0, 1);
-        return 1 - Math.Pow(1 - t, 3);
-    }
-
-    public static double EaseInCubic(double t)
-    {
-        t = Math.Clamp(t, 0, 1);
-        return t * t * t;
-    }
 
     public static double EaseOutQuad(double t)
     {
@@ -32,31 +20,29 @@ public static class CompactLayoutAnimator
         return 1 - (1 - t) * (1 - t);
     }
 
-    public static double EaseInQuad(double t)
-    {
-        t = Math.Clamp(t, 0, 1);
-        return t * t;
-    }
-
-    public static double ApplyEase(double linearT, bool expanding)
-    {
-        // Ease-out both ways. Ease-in collapse back-loaded motion into a short tail that
-        // read as staccato when frames were sparse.
-        _ = expanding;
-        return EaseOutQuad(linearT);
-    }
+    public static double ApplyEase(double linearT) => EaseOutQuad(linearT);
 
     public static double Lerp(double a, double b, double t) => a + (b - a) * t;
 
-    public static double CompactOpacity(double progress) =>
-        Math.Clamp(1 - progress, 0, 1);
+    public const double CompactFadeEnd = 0.28;
+    public const double FullFadeEnd = 0.40;
+
+    public static double CompactOpacity(double progress)
+    {
+        if (progress <= 0)
+            return 1;
+        if (progress >= CompactFadeEnd)
+            return 0;
+        return 1 - progress / CompactFadeEnd;
+    }
 
     public static double FullOpacity(double progress)
     {
         if (progress <= FullFadeStart)
             return 0;
-
-        return Math.Clamp((progress - FullFadeStart) / (1 - FullFadeStart), 0, 1);
+        if (progress >= FullFadeEnd)
+            return 1;
+        return Math.Clamp((progress - FullFadeStart) / (FullFadeEnd - FullFadeStart), 0, 1);
     }
 
     public static bool ShouldRenderCompact(double progress) =>
@@ -72,10 +58,6 @@ public static class CompactLayoutAnimator
         return TimeSpan.FromMilliseconds(Math.Max(1, full.TotalMilliseconds * remaining));
     }
 
-    /// <summary>
-    /// Advances animation elapsed time by the real frame gap so sparse frames under
-    /// load catch up instead of slow-motioning (do not clamp to ~16–50ms).
-    /// </summary>
     public static double AdvanceElapsedMs(double elapsedMs, double rawDeltaMs) =>
         elapsedMs + Math.Max(0, rawDeltaMs);
 
@@ -83,13 +65,12 @@ public static class CompactLayoutAnimator
         CompactAnimSample start,
         CompactAnimSample end,
         double linearT,
-        bool expanding,
         bool reduceMotion)
     {
         if (reduceMotion || linearT >= 1)
             return end;
 
-        var t = ApplyEase(Math.Clamp(linearT, 0, 1), expanding);
+        var t = ApplyEase(Math.Clamp(linearT, 0, 1));
         return new CompactAnimSample(
             Lerp(start.Width, end.Width, t),
             Lerp(start.Height, end.Height, t),
@@ -101,13 +82,12 @@ public static class CompactLayoutAnimator
         double startProgress,
         double endProgress,
         double linearT,
-        bool expanding,
         bool reduceMotion)
     {
         if (reduceMotion || linearT >= 1)
             return endProgress;
 
-        var t = ApplyEase(Math.Clamp(linearT, 0, 1), expanding);
+        var t = ApplyEase(Math.Clamp(linearT, 0, 1));
         return Lerp(startProgress, endProgress, t);
     }
 
@@ -147,31 +127,9 @@ public static class CompactLayoutAnimator
         return true;
     }
 
-    /// <summary>
-    /// Compact transitions must not rewrite Position/Width/Height every frame.
-    /// Prefer a scale host; otherwise opacity-only until a single snap at the end.
-    /// </summary>
-    public static bool ShouldRewriteWindowGeometryEachFrame() => false;
-
-    /// <summary>
-    /// Windows DWM hitchs on transparent HWND resize. Keep one full host for the
-    /// whole compact session and animate scale only. Rest uses a BR-aligned compact
-    /// pill chrome (plus Win32 region clip) so minimise is not a scaled-down full widget.
-    /// </summary>
-    public static bool PreferStableCompactHostGeometry { get; } = OperatingSystem.IsWindows();
-
-    public static bool ShouldShrinkWindowToCompactRest() => !PreferStableCompactHostGeometry;
-
-    public static bool ShouldResizeWindowForCompactTransition() => !PreferStableCompactHostGeometry;
-
     public const double ScaleSettleEpsilon = 0.02;
     public const int MaxFinishDefers = 30;
 
-    /// <summary>
-    /// True when the live scale is close enough to the host target that snapping
-    /// window geometry will not hitch. Collapse uses an ease-in, so finishing early
-    /// cuts the motion-heavy tail and looks like a stutter.
-    /// </summary>
     public static bool IsScaleSettled(
         double scaleX,
         double scaleY,
@@ -181,10 +139,6 @@ public static class CompactLayoutAnimator
         Math.Abs(scaleX - toScaleX) <= epsilon
         && Math.Abs(scaleY - toScaleY) <= epsilon;
 
-    /// <summary>
-    /// Finish timer must wait for the scale transition when a host is active.
-    /// Caps deferrals so a stuck transition cannot loop forever.
-    /// </summary>
     public static bool ShouldDeferCompactFinish(
         bool hasScaleHost,
         double scaleX,
