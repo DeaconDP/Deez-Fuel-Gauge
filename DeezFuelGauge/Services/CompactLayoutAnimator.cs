@@ -154,13 +154,13 @@ public static class CompactLayoutAnimator
     public static bool ShouldRewriteWindowGeometryEachFrame() => false;
 
     /// <summary>
-    /// Windows DWM hitchs on transparent HWND resize mid-animation. Animate on a
-    /// full host during the transition only. Rest always uses native compact geometry
-    /// so minimise does not look like a scaled-down full widget.
+    /// Windows DWM hitchs on transparent HWND resize. Keep one full host for the
+    /// whole compact session and animate scale only. Rest uses a BR-aligned compact
+    /// pill chrome (plus Win32 region clip) so minimise is not a scaled-down full widget.
     /// </summary>
     public static bool PreferStableCompactHostGeometry { get; } = OperatingSystem.IsWindows();
 
-    public static bool ShouldShrinkWindowToCompactRest() => true;
+    public static bool ShouldShrinkWindowToCompactRest() => !PreferStableCompactHostGeometry;
 
     public static bool ShouldResizeWindowForCompactTransition() => !PreferStableCompactHostGeometry;
 

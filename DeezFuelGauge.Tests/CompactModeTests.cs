@@ -262,7 +262,7 @@ public sealed class CompactLayoutAnimatorTests
     public void Stable_host_geometry_policy_matches_platform()
     {
         Assert.Equal(OperatingSystem.IsWindows(), CompactLayoutAnimator.PreferStableCompactHostGeometry);
-        Assert.True(CompactLayoutAnimator.ShouldShrinkWindowToCompactRest());
+        Assert.Equal(!OperatingSystem.IsWindows(), CompactLayoutAnimator.ShouldShrinkWindowToCompactRest());
         Assert.Equal(!OperatingSystem.IsWindows(), CompactLayoutAnimator.ShouldResizeWindowForCompactTransition());
     }
 
