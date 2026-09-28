@@ -153,6 +153,16 @@ public static class CompactLayoutAnimator
     /// </summary>
     public static bool ShouldRewriteWindowGeometryEachFrame() => false;
 
+    /// <summary>
+    /// Windows DWM hitchs on transparent HWND resize. Keep the full host rect and
+    /// animate scale only. macOS is fine with per-transition geometry.
+    /// </summary>
+    public static bool PreferStableCompactHostGeometry { get; } = OperatingSystem.IsWindows();
+
+    public static bool ShouldShrinkWindowToCompactRest() => !PreferStableCompactHostGeometry;
+
+    public static bool ShouldResizeWindowForCompactTransition() => !PreferStableCompactHostGeometry;
+
     public const double ScaleSettleEpsilon = 0.02;
     public const int MaxFinishDefers = 30;
 

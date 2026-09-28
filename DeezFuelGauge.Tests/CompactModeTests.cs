@@ -259,6 +259,14 @@ public sealed class CompactLayoutAnimatorTests
     }
 
     [Fact]
+    public void Stable_host_geometry_policy_matches_platform()
+    {
+        Assert.Equal(OperatingSystem.IsWindows(), CompactLayoutAnimator.PreferStableCompactHostGeometry);
+        Assert.Equal(!OperatingSystem.IsWindows(), CompactLayoutAnimator.ShouldShrinkWindowToCompactRest());
+        Assert.Equal(!OperatingSystem.IsWindows(), CompactLayoutAnimator.ShouldResizeWindowForCompactTransition());
+    }
+
+    [Fact]
     public void Interpolate_reduced_motion_snaps_to_end()
     {
         var start = new CompactAnimSample(120, 40, 10, 20);
