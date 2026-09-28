@@ -86,4 +86,38 @@ public sealed class PinnedPositionRestoreTests
         Assert.Equal(150, y);
         Assert.False(moved);
     }
+
+    [Fact]
+    public void ResolveStableCompactHost_places_full_hwnd_so_br_pill_stays_on_screen()
+    {
+        // Repro from a pinned compact rest past the right edge on a 2048-wide work area.
+        // Setting Position to the clamped compact rest while the HWND stays full-sized
+        // parks the Win32-clipped pill at x>=2048 (invisible / unopenable).
+        var areas = new[] { (0, 0, 2048, 1104) };
+        const double compactW = 94;
+        const double compactH = 126;
+        const double fullW = 300;
+        const double fullH = 274;
+
+        var (hostX, hostY, restX, restY, moved) = PinnedPositionRestore.ResolveStableCompactHost(
+            savedLeft: 2450,
+            savedTop: 1046,
+            compactW,
+            compactH,
+            fullW,
+            fullH,
+            areas);
+
+        Assert.True(moved);
+        Assert.Equal(2048 - (int)compactW, restX);
+        Assert.Equal(1104 - (int)compactH, restY);
+        Assert.Equal(restX + (int)compactW - (int)fullW, hostX);
+        Assert.Equal(restY + (int)compactH - (int)fullH, hostY);
+        Assert.True(WindowAnchorHelper.HasVisibleOverlap(
+            restX, restY, (int)compactW, (int)compactH, areas[0]));
+
+        // Wrong restore (Position = compact rest, HWND = full) puts the BR pill off-screen.
+        var wrongPillX = restX + (int)fullW - (int)compactW;
+        Assert.True(wrongPillX >= 2048);
+    }
 }
