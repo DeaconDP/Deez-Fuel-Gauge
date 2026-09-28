@@ -6,12 +6,12 @@ using System.Text.Json;
 using System.Threading;
 using Avalonia;
 using Avalonia.Animation;
-using Avalonia.Animation.Easings;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using DeezFuelGauge.Models;
 using DeezFuelGauge.Services;
@@ -123,7 +123,14 @@ public partial class MainWindow : Window, ISettingsPanelHost
     private bool _compactFrameOwnsPosition;
     private readonly ScaleTransform _compactScale = new(1, 1);
     private CompactScaleHost? _compactScaleHost;
-    private readonly DispatcherTimer _compactAnimTimer = new();
+    private int _compactAnimGeneration;
+    private readonly Stopwatch _compactAnimClock = new();
+    private RenderTargetBitmap? _compactAnimBitmap;
+    private bool _pollWasRunningBeforeAnim;
+    private readonly DispatcherTimer _compactAnimPulse = new()
+    {
+        Interval = TimeSpan.FromMilliseconds(8)
+    };
 
     private sealed class DiskBarRow
     {
@@ -152,6 +159,9 @@ public partial class MainWindow : Window, ISettingsPanelHost
         InitializeComponent();
         PillBorder.RenderTransformOrigin = new RelativePoint(1, 1, RelativeUnit.Relative);
         PillBorder.RenderTransform = _compactScale;
+        CompactAnimProxy.RenderTransformOrigin = new RelativePoint(1, 1, RelativeUnit.Relative);
+        CompactAnimProxy.RenderTransform = _compactScale;
+        _compactAnimPulse.Tick += OnCompactAnimPulseTick;
 
         _directBilling = new DirectBillingService(
             _openAiBilling,
@@ -229,8 +239,6 @@ public partial class MainWindow : Window, ISettingsPanelHost
             ApplyCompactVisualState();
         };
         _compactSnapNext = true;
-        _compactAnimTimer.Tick += OnCompactAnimTimerTick;
-
         _hardwareTimer = new DispatcherTimer { Interval = HardwareRefreshInterval };
         _hardwareTimer.Tick += async (_, _) => await SampleHardwareMetricsAsync();
         ApplyHardwareTimerState();
@@ -244,6 +252,11 @@ public partial class MainWindow : Window, ISettingsPanelHost
             _compactSnapNext = true;
             ApplyCompactVisualState();
             await RefreshAsync();
+            if (string.Equals(
+                    Environment.GetEnvironmentVariable("DEEZ_COMPACT_SELFTEST"),
+                    "1",
+                    StringComparison.Ordinal))
+                await RunCompactSelfTestAsync();
         };
         SizeChanged += (_, _) =>
         {
@@ -275,33 +288,42 @@ public partial class MainWindow : Window, ISettingsPanelHost
 
         if (_settings.IsPositionPinned)
         {
-            var restoreWidth = (double)width;
-            var restoreHeight = (double)height;
             if (_settings.UseCompactMode)
             {
                 EnsureCompactTransitionSizes();
                 var compact = _cachedCompactSize!.Value;
-                restoreWidth = compact.Width;
-                restoreHeight = compact.Height;
-            }
-
-            var (x, y, moved) = PinnedPositionRestore.Resolve(
-                _settings.Left,
-                _settings.Top,
-                restoreWidth,
-                restoreHeight,
-                workingAreas);
-            Position = new PixelPoint(x, y);
-            _initialPositionApplied = true;
-            if (_settings.UseCompactMode)
-            {
+                var (x, y, movedCompact) = PinnedPositionRestore.Resolve(
+                    _settings.Left,
+                    _settings.Top,
+                    compact.Width,
+                    compact.Height,
+                    workingAreas);
+                Position = new PixelPoint(x, y);
                 _compactRestX = x;
                 _compactRestY = y;
+                _initialPositionApplied = true;
+                if (movedCompact)
+                {
+                    _settings.Left = x;
+                    _settings.Top = y;
+                    SaveSettings();
+                }
+
+                return;
             }
-            if (moved)
+
+            var (fullPinX, fullPinY, movedFull) = PinnedPositionRestore.Resolve(
+                _settings.Left,
+                _settings.Top,
+                width,
+                height,
+                workingAreas);
+            Position = new PixelPoint(fullPinX, fullPinY);
+            _initialPositionApplied = true;
+            if (movedFull)
             {
-                _settings.Left = x;
-                _settings.Top = y;
+                _settings.Left = fullPinX;
+                _settings.Top = fullPinY;
                 SaveSettings();
             }
 
@@ -692,13 +714,107 @@ public partial class MainWindow : Window, ISettingsPanelHost
     {
         _pointerOver = true;
         _compactCollapseTimer.Stop();
+        TraceCompactGeometry("pointer-enter");
         ApplyCompactVisualState();
     }
 
     private void Window_PointerExited(object? sender, PointerEventArgs e)
     {
         _pointerOver = false;
+        TraceCompactGeometry("pointer-exit");
         ScheduleCompactCollapseIfNeeded();
+    }
+
+    private void TraceCompactGeometry(string name, bool regionCleared = false)
+    {
+        var pillW = !double.IsNaN(PillBorder.Width) && PillBorder.Width > 1
+            ? PillBorder.Width
+            : Bounds.Width;
+        var pillH = !double.IsNaN(PillBorder.Height) && PillBorder.Height > 1
+            ? PillBorder.Height
+            : Bounds.Height;
+        CompactGeometryTrace.Event(
+            name,
+            Position.X,
+            Position.Y,
+            Bounds.Width,
+            Bounds.Height,
+            _compactRestX,
+            _compactRestY,
+            pillW,
+            pillH,
+            _compactProgress,
+            _pointerOver,
+            regionCleared);
+    }
+
+    private async Task RunCompactSelfTestAsync()
+    {
+        if (!_settings.UseCompactMode)
+        {
+            CompactGeometryTrace.Event(
+                "selftest-skip-not-compact",
+                Position.X, Position.Y, Bounds.Width, Bounds.Height,
+                _compactRestX, _compactRestY, Bounds.Width, Bounds.Height,
+                _compactProgress, _pointerOver);
+            Close();
+            return;
+        }
+
+        await Task.Delay(400);
+        UpdateLayout();
+        TraceCompactGeometry("selftest-rest");
+        var restW = Bounds.Width;
+        var restH = Bounds.Height;
+        var restBrX = Position.X + Bounds.Width;
+        var restBrY = Position.Y + Bounds.Height;
+
+        _pointerOver = true;
+        _compactCollapseTimer.Stop();
+        ApplyCompactVisualState();
+        await Task.Delay(500);
+        while (_compactAnimActive)
+            await Task.Delay(50);
+        UpdateLayout();
+        TraceCompactGeometry("selftest-expanded");
+        var expanded = Bounds.Width > restW + 20 || Bounds.Height > restH + 20;
+
+        _pointerOver = false;
+        ScheduleCompactCollapseIfNeeded();
+        await Task.Delay(CompactHoverController.CollapseDelay + TimeSpan.FromMilliseconds(500));
+        while (_compactAnimActive)
+            await Task.Delay(50);
+        UpdateLayout();
+        TraceCompactGeometry("selftest-collapsed");
+        var leaveW = Bounds.Width;
+        var leaveH = Bounds.Height;
+        var leaveBrX = Position.X + Bounds.Width;
+        var leaveBrY = Position.Y + Bounds.Height;
+        var brOk = Math.Abs(restBrX - leaveBrX) <= 8 && Math.Abs(restBrY - leaveBrY) <= 8;
+        var sizeOk = Math.Abs(leaveW - restW) <= 12 && Math.Abs(leaveH - restH) <= 12;
+        var pass = expanded && brOk && sizeOk && Position.Y >= -40;
+        CompactGeometryTrace.Event(
+            pass ? "selftest-pass" : "selftest-fail",
+            Position.X, Position.Y, Bounds.Width, Bounds.Height,
+            _compactRestX, _compactRestY, leaveW, leaveH,
+            _compactProgress, _pointerOver);
+        try
+        {
+            var path = Path.Combine(Path.GetTempPath(), "deez-compact-selftest.txt");
+            await File.WriteAllTextAsync(
+                path,
+                $"pass={pass} expanded={expanded} brOk={brOk} sizeOk={sizeOk} " +
+                $"rest={restW:0}x{restH:0}@{restBrX - restW:0},{restBrY - restH:0} " +
+                $"leave={leaveW:0}x{leaveH:0}@{Position.X},{Position.Y} " +
+                $"brRest=({restBrX:0},{restBrY:0}) brLeave=({leaveBrX:0},{leaveBrY:0})" +
+                Environment.NewLine);
+        }
+        catch
+        {
+            // Self-test report is best-effort.
+        }
+
+        Close();
     }
 
     private void OnSettingsInputFocusChanged(object? sender, RoutedEventArgs e)
@@ -832,6 +948,8 @@ public partial class MainWindow : Window, ISettingsPanelHost
         if (!_settings.UseCompactMode)
         {
             StopCompactAnimation();
+            ResetCompactScale();
+            _compactScaleHost = null;
             _compactProgress = 1;
             _compactSnapNext = true;
             _compactRestX = null;
@@ -880,12 +998,26 @@ public partial class MainWindow : Window, ISettingsPanelHost
 
     private void RememberCompactRestAfterDrag()
     {
-        if (!_settings.UseCompactMode || _compactAnimActive || _compactProgress <= 0.5)
+        if (!_settings.UseCompactMode || _compactAnimActive)
             return;
 
         EnsureCompactTransitionSizes();
         if (_cachedCompactSize is not { } compactSize)
             return;
+
+        if (_compactProgress <= 0.5)
+        {
+            var (x, y) = CompactPlacement.CollapseEnd(
+                Position.X,
+                Position.Y,
+                Bounds.Width,
+                Bounds.Height,
+                compactSize.Width,
+                compactSize.Height);
+            _compactRestX = x;
+            _compactRestY = y;
+            return;
+        }
 
         // No expand baseline yet: sync rest to the live expanded BR and record placement.
         if (_expandedPlacement is not { } placed || _compactRestX is null || _compactRestY is null)
@@ -983,80 +1115,146 @@ public partial class MainWindow : Window, ISettingsPanelHost
         _compactAnimElapsed = TimeSpan.Zero;
         _compactAnimDuration = CompactLayoutAnimator.DurationFor(_compactProgress, targetProgress);
         _compactAnimActive = true;
+        var generation = ++_compactAnimGeneration;
 
         ClearCompactPropertyTransitions();
+        _pollWasRunningBeforeAnim = _pollTimer.IsEnabled;
+        if (_pollWasRunningBeforeAnim)
+            _pollTimer.Stop();
+
         if (CompactLayoutAnimator.TryCreateScaleHost(current, animEnd, out var host))
         {
-            // J1: pin FromScale while Transitions are cleared, BEFORE HostCompactScale
-            // grows/moves the HWND. Otherwise one frame paints full host size at Scale=1.
-            _compactScale.ScaleX = host.FromScaleX;
-            _compactScale.ScaleY = host.FromScaleY;
             HostCompactScale(host);
-            BeginCompactCompositorMotion(host, goingFull);
-        }
-        else
-        {
-            ResetCompactScale();
-            BeginCompactCompositorMotion(host: null, goingFull);
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (!_compactAnimActive || generation != _compactAnimGeneration)
+                    return;
+
+                if (!TryBeginCompactProxyMotion(host))
+                {
+                    // Fallback: live tree scale if the snapshot fails.
+                    _compactScale.ScaleX = host.FromScaleX;
+                    _compactScale.ScaleY = host.FromScaleY;
+                    PillBorder.IsVisible = true;
+                    CompactAnimProxy.IsVisible = false;
+                }
+
+                _compactAnimClock.Restart();
+                ApplyCompactAnimFrame(0);
+                _compactAnimPulse.Start();
+            }, DispatcherPriority.Render);
+            return;
         }
 
-        _compactAnimTimer.Interval = _compactAnimDuration + TimeSpan.FromMilliseconds(8);
-        _compactAnimTimer.Start();
+        ResetCompactScale();
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (!_compactAnimActive || generation != _compactAnimGeneration)
+                return;
+
+            _compactAnimClock.Restart();
+            ApplyCompactAnimFrame(0);
+            _compactAnimPulse.Start();
+        }, DispatcherPriority.Render);
     }
 
-    private void BeginCompactCompositorMotion(CompactScaleHost? host, bool goingFull)
+    private bool TryBeginCompactProxyMotion(CompactScaleHost host)
     {
-        var duration = _compactAnimDuration;
-        Easing ease = goingFull ? new CubicEaseOut() : new CubicEaseIn();
-        var toProgress = _compactAnimToProgress;
-
-        if (host is { } scaleHost)
+        try
         {
-            // FromScale was applied before HostCompactScale; re-assert then start ToScale.
-            _compactScale.ScaleX = scaleHost.FromScaleX;
-            _compactScale.ScaleY = scaleHost.FromScaleY;
-            _compactScale.Transitions = new Transitions
-            {
-                new DoubleTransition
-                {
-                    Property = ScaleTransform.ScaleXProperty,
-                    Duration = duration,
-                    Easing = ease
-                },
-                new DoubleTransition
-                {
-                    Property = ScaleTransform.ScaleYProperty,
-                    Duration = duration,
-                    Easing = ease
-                }
-            };
-            _compactScale.ScaleX = scaleHost.ToScaleX;
-            _compactScale.ScaleY = scaleHost.ToScaleY;
+            // Snapshot the full pill once, then scale the cheap Image.
+            _compactScale.ScaleX = 1;
+            _compactScale.ScaleY = 1;
+            ApplyCompactOpacities(1, cullLayers: false);
+            PillBorder.Padding = FullPadding;
+            PillBorder.HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch;
+            PillBorder.VerticalAlignment = Avalonia.Layout.VerticalAlignment.Stretch;
+            PillBorder.Width = double.NaN;
+            PillBorder.Height = double.NaN;
+            PillBorder.IsVisible = true;
+            PillBorder.Opacity = 0;
+            CompactAnimProxy.IsVisible = false;
+            UpdateLayout();
+
+            var pixelW = Math.Max(1, (int)Math.Ceiling(host.Width * RenderScaling));
+            var pixelH = Math.Max(1, (int)Math.Ceiling(host.Height * RenderScaling));
+            var dpi = 96.0 * RenderScaling;
+            var bmp = new RenderTargetBitmap(new PixelSize(pixelW, pixelH), new Vector(dpi, dpi));
+            bmp.Render(PillBorder);
+
+            _compactAnimBitmap?.Dispose();
+            _compactAnimBitmap = bmp;
+            CompactAnimProxy.Source = bmp;
+            CompactAnimProxy.Width = host.Width;
+            CompactAnimProxy.Height = host.Height;
+            CompactAnimProxy.IsVisible = true;
+            PillBorder.IsVisible = false;
+            PillBorder.Opacity = 1;
+
+            _compactScale.ScaleX = host.FromScaleX;
+            _compactScale.ScaleY = host.FromScaleY;
+            return true;
+        }
+        catch
+        {
+            PillBorder.Opacity = 1;
+            EndCompactProxyMotion();
+            return false;
+        }
+    }
+
+    private void EndCompactProxyMotion()
+    {
+        CompactAnimProxy.IsVisible = false;
+        CompactAnimProxy.Source = null;
+        _compactAnimBitmap?.Dispose();
+        _compactAnimBitmap = null;
+        PillBorder.IsVisible = true;
+    }
+
+    private void OnCompactAnimPulseTick(object? sender, EventArgs e)
+    {
+        if (!_compactAnimActive)
+        {
+            _compactAnimPulse.Stop();
+            return;
         }
 
-        CompactRow.Transitions = new Transitions
+        var durationMs = Math.Max(1, _compactAnimDuration.TotalMilliseconds);
+        var linearT = _compactAnimClock.Elapsed.TotalMilliseconds / durationMs;
+        _compactAnimElapsed = _compactAnimClock.Elapsed;
+        ApplyCompactAnimFrame(Math.Clamp(linearT, 0, 1));
+
+        if (linearT < 1)
+            return;
+
+        _compactAnimPulse.Stop();
+        FinishCompactTransition(_compactAnimToProgress);
+    }
+
+    private void ApplyCompactAnimFrame(double linearT)
+    {
+        var progress = CompactLayoutAnimator.InterpolateProgress(
+            _compactAnimFromProgress,
+            _compactAnimToProgress,
+            linearT,
+            reduceMotion: false);
+        _compactProgress = progress;
+
+        if (_compactScaleHost is { } host)
         {
-            new DoubleTransition
-            {
-                Property = Visual.OpacityProperty,
-                Duration = duration,
-                Easing = ease
-            }
-        };
-        FullContent.Transitions = new Transitions
-        {
-            new DoubleTransition
-            {
-                Property = Visual.OpacityProperty,
-                Duration = duration,
-                Easing = ease
-            }
-        };
-        CompactRow.Opacity = CompactLayoutAnimator.CompactOpacity(toProgress);
-        FullContent.Opacity = CompactLayoutAnimator.FullOpacity(toProgress);
-        CompactRow.IsHitTestVisible = toProgress < 0.5;
-        FullContent.IsHitTestVisible = toProgress >= 0.5;
-        _compactProgress = toProgress;
+            var (scaleX, scaleY) = host.ScaleAt(CompactLayoutAnimator.ApplyEase(linearT));
+            _compactScale.ScaleX = scaleX;
+            _compactScale.ScaleY = scaleY;
+        }
+
+        if (CompactAnimProxy.IsVisible)
+            return;
+
+        CompactRow.Opacity = CompactLayoutAnimator.CompactOpacity(progress);
+        FullContent.Opacity = CompactLayoutAnimator.FullOpacity(progress);
+        CompactRow.IsHitTestVisible = progress < 0.5;
+        FullContent.IsHitTestVisible = progress >= 0.5;
     }
 
     private void ClearCompactPropertyTransitions()
@@ -1066,24 +1264,15 @@ public partial class MainWindow : Window, ISettingsPanelHost
         FullContent.Transitions = null;
     }
 
-    private void OnCompactAnimTimerTick(object? sender, EventArgs e)
-    {
-        _compactAnimTimer.Stop();
-        if (!_compactAnimActive)
-            return;
-
-        FinishCompactTransition(_compactAnimToProgress);
-    }
-
     private CompactAnimSample CurrentCompactSample()
     {
         if (_compactScaleHost is { } host)
         {
             var width = Math.Max(1, host.Width * _compactScale.ScaleX);
             var height = Math.Max(1, host.Height * _compactScale.ScaleY);
-            var right = host.X + host.Width;
-            var bottom = host.Y + host.Height;
-            return new CompactAnimSample(width, height, right - width, bottom - height);
+            var hostRight = host.X + host.Width;
+            var hostBottom = host.Y + host.Height;
+            return new CompactAnimSample(width, height, hostRight - width, hostBottom - height);
         }
 
         return new CompactAnimSample(Bounds.Width, Bounds.Height, Position.X, Position.Y);
@@ -1111,15 +1300,16 @@ public partial class MainWindow : Window, ISettingsPanelHost
 
     private void FinishCompactTransition(double progress)
     {
-        _compactAnimTimer.Stop();
+        _compactAnimPulse.Stop();
         _pendingAnchorCompensation = false;
         _compactAnimActive = false;
         _compactProgress = progress;
-        RestoreCompactLayerVisibility();
         ClearCompactPropertyTransitions();
-        // Under load the timer may fire mid-compositor. On expand, snap to ToScale while
-        // still hosted so we catch up cleanly. On collapse, do not pre-snap ToScale —
-        // ApplyCompactFrame(mini) then identity scale in the same tick (below).
+
+        EndCompactProxyMotion();
+        RestoreCompactLayerVisibility();
+
+        // Catch up to ToScale while still hosted so the geometry snap matches the visual.
         if (progress > 0.5 && _compactScaleHost is { } hosted)
         {
             if (Math.Abs(_compactScale.ScaleX - hosted.ToScaleX) > 0.0001)
@@ -1134,8 +1324,6 @@ public partial class MainWindow : Window, ISettingsPanelHost
         // Force layout so Bounds matches Width/Height before the next transition reads them.
         UpdateLayout();
 
-        var repinDx = 0;
-        var repinDy = 0;
         // MeasureCompactWindowSize can undershoot real laid-out height (~5–6px). Re-pin to
         // the intended BR using actual Bounds so mini sits in the maxi corner and the next
         // expand keeps a shared BR (scale-host).
@@ -1147,8 +1335,6 @@ public partial class MainWindow : Window, ISettingsPanelHost
             var w = Math.Max(1, Bounds.Width > 1 ? Bounds.Width : intended.Width);
             var h = Math.Max(1, Bounds.Height > 1 ? Bounds.Height : intended.Height);
             var (x, y) = WindowAnchorHelper.PlaceKeepingBottomRight(brX, brY, w, h);
-            repinDx = x - Position.X;
-            repinDy = y - Position.Y;
             _compactFrameOwnsPosition = true;
             Width = w;
             Height = h;
@@ -1160,9 +1346,12 @@ public partial class MainWindow : Window, ISettingsPanelHost
             UpdateLayout();
         }
 
+        if (_pollWasRunningBeforeAnim && !_pollTimer.IsEnabled)
+            _pollTimer.Start();
+        _pollWasRunningBeforeAnim = false;
+
         PersistCompactOriginIfNeeded();
         UpdateAllProgressWidths();
-
     }
 
     private void SettleCompactAnimationInPlace()
@@ -1170,20 +1359,43 @@ public partial class MainWindow : Window, ISettingsPanelHost
         if (!_compactAnimActive)
             return;
 
-        _compactAnimTimer.Stop();
+        _compactAnimPulse.Stop();
+        _compactAnimGeneration++;
         var mid = CurrentCompactSample();
+        var progress = _compactAnimFromProgress;
+        if (_compactScaleHost is { } host
+            && Math.Abs(host.ToScaleX - host.FromScaleX) > 0.0001)
+        {
+            var t = Math.Clamp(
+                (_compactScale.ScaleX - host.FromScaleX) / (host.ToScaleX - host.FromScaleX),
+                0,
+                1);
+            progress = CompactLayoutAnimator.Lerp(_compactAnimFromProgress, _compactAnimToProgress, t);
+        }
+
         _compactAnimActive = false;
+        EndCompactProxyMotion();
         ClearCompactPropertyTransitions();
-        ApplyCompactFrame(mid, _compactProgress, cullLayers: false);
+        _compactProgress = progress;
+        ApplyCompactFrame(mid, progress, cullLayers: false);
         ResetCompactScale();
+
         UpdateLayout();
+        if (_pollWasRunningBeforeAnim && !_pollTimer.IsEnabled)
+            _pollTimer.Start();
+        _pollWasRunningBeforeAnim = false;
     }
 
     private void StopCompactAnimation()
     {
-        _compactAnimTimer.Stop();
+        _compactAnimPulse.Stop();
         _compactAnimActive = false;
+        _compactAnimGeneration++;
+        EndCompactProxyMotion();
         ResetCompactScale();
+        if (_pollWasRunningBeforeAnim && !_pollTimer.IsEnabled)
+            _pollTimer.Start();
+        _pollWasRunningBeforeAnim = false;
     }
 
 
@@ -1259,9 +1471,14 @@ public partial class MainWindow : Window, ISettingsPanelHost
         if (!ShouldCapturePinnedPosition())
             return;
 
+        WritePinnedCompactOrigin();
+        SaveSettings();
+    }
+
+    private void WritePinnedCompactOrigin()
+    {
         _settings.Left = Position.X;
         _settings.Top = Position.Y;
-        SaveSettings();
     }
 
     private void UpdateCompactGlance(UsageSnapshot? snapshot)
@@ -2799,10 +3016,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
     {
         SettingsPanelControl.CommitToSettings(_settings);
         if (ShouldCapturePinnedPosition())
-        {
-            _settings.Left = Position.X;
-            _settings.Top = Position.Y;
-        }
+            WritePinnedCompactOrigin();
         _settings.IsSettingsExpanded = _isSettingsExpanded;
         // Provider accordion removed — persist always-expanded so older builds stay open.
         _settings.IsCursorProviderExpanded = true;
@@ -2822,7 +3036,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
         _pollTimer.Stop();
         _hardwareTimer.Stop();
         _compactCollapseTimer.Stop();
-        _compactAnimTimer.Stop();
+        _compactAnimPulse.Stop();
         StopCompactAnimation();
         _debouncedPositionSave.Dispose();
         _refreshService.Dispose();
