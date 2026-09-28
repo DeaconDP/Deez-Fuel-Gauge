@@ -273,7 +273,7 @@ public sealed class CompactLayoutAnimatorTests
     [Fact]
     public void FullOpacity_stays_zero_until_fade_start()
     {
-        Assert.Equal(0, CompactLayoutAnimator.FullOpacity(0.15));
+        Assert.Equal(0, CompactLayoutAnimator.FullOpacity(0));
         Assert.Equal(0, CompactLayoutAnimator.CompactOpacity(1));
         Assert.Equal(1, CompactLayoutAnimator.FullOpacity(1));
         Assert.Equal(1, CompactLayoutAnimator.CompactOpacity(0));
@@ -282,15 +282,15 @@ public sealed class CompactLayoutAnimatorTests
     [Fact]
     public void DurationFor_uses_revised_expand_and_collapse_durations()
     {
-        Assert.Equal(140, CompactLayoutAnimator.DurationFor(0, 1).TotalMilliseconds);
-        Assert.Equal(100, CompactLayoutAnimator.DurationFor(1, 0).TotalMilliseconds);
-        Assert.Equal(70, CompactLayoutAnimator.DurationFor(0.5, 1).TotalMilliseconds);
+        Assert.Equal(240, CompactLayoutAnimator.DurationFor(0, 1).TotalMilliseconds);
+        Assert.Equal(200, CompactLayoutAnimator.DurationFor(1, 0).TotalMilliseconds);
+        Assert.Equal(120, CompactLayoutAnimator.DurationFor(0.5, 1).TotalMilliseconds);
     }
 
     [Fact]
     public void AdvanceElapsedMs_catches_up_under_sparse_frames()
     {
-        // Three 200ms gaps must finish a 100ms collapse in one frame of wall time,
+        // Three 200ms gaps must finish a 200ms collapse in one frame of wall time,
         // not stretch across capped 50ms steps (old slow-mo behaviour).
         var elapsed = 0.0;
         elapsed = CompactLayoutAnimator.AdvanceElapsedMs(elapsed, 200);
@@ -300,10 +300,10 @@ public sealed class CompactLayoutAnimatorTests
     }
 
     [Fact]
-    public void ApplyEase_uses_quad_curves()
+    public void ApplyEase_uses_ease_out_quad_both_ways()
     {
         Assert.Equal(0.75, CompactLayoutAnimator.ApplyEase(0.5, expanding: true));
-        Assert.Equal(0.25, CompactLayoutAnimator.ApplyEase(0.5, expanding: false));
+        Assert.Equal(0.75, CompactLayoutAnimator.ApplyEase(0.5, expanding: false));
     }
 
     [Theory]
@@ -316,6 +316,35 @@ public sealed class CompactLayoutAnimatorTests
     {
         Assert.Equal(renderCompact, CompactLayoutAnimator.ShouldRenderCompact(progress));
         Assert.Equal(renderFull, CompactLayoutAnimator.ShouldRenderFull(progress));
+    }
+
+    [Fact]
+    public void FullOpacity_crossfades_from_the_first_frame()
+    {
+        Assert.Equal(0, CompactLayoutAnimator.FullOpacity(0));
+        Assert.Equal(0.15, CompactLayoutAnimator.FullOpacity(0.15), precision: 5);
+        Assert.Equal(0, CompactLayoutAnimator.CompactOpacity(1));
+        Assert.Equal(1, CompactLayoutAnimator.FullOpacity(1));
+        Assert.Equal(1, CompactLayoutAnimator.CompactOpacity(0));
+    }
+
+    [Fact]
+    public void Anim_frame_progress_and_scale_share_one_eased_clock()
+    {
+        var hostOk = CompactLayoutAnimator.TryCreateScaleHost(
+            new CompactAnimSample(300, 260, 40, 40),
+            new CompactAnimSample(140, 36, 200, 264),
+            out var host);
+        Assert.True(hostOk);
+
+        const double linearT = 0.5;
+        var eased = CompactLayoutAnimator.ApplyEase(linearT, expanding: false);
+        var progress = CompactLayoutAnimator.InterpolateProgress(1, 0, linearT, expanding: false, reduceMotion: false);
+        var (scaleX, _) = host.ScaleAt(eased);
+
+        Assert.Equal(0.25, progress, precision: 5);
+        Assert.Equal(CompactLayoutAnimator.Lerp(1, host.ToScaleX, eased), scaleX, precision: 5);
+        Assert.Equal(0.75, eased, precision: 5);
     }
 
     [Fact]

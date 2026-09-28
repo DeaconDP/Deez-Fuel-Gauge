@@ -8,9 +8,9 @@ public readonly record struct CompactAnimSample(
 
 public static class CompactLayoutAnimator
 {
-    public static readonly TimeSpan ExpandDuration = TimeSpan.FromMilliseconds(140);
-    public static readonly TimeSpan CollapseDuration = TimeSpan.FromMilliseconds(100);
-    public const double FullFadeStart = 0.20;
+    public static readonly TimeSpan ExpandDuration = TimeSpan.FromMilliseconds(240);
+    public static readonly TimeSpan CollapseDuration = TimeSpan.FromMilliseconds(200);
+    public const double FullFadeStart = 0;
     public const double CompactCullThreshold = 0.95;
     public const double FullCullThreshold = 0.05;
 
@@ -38,8 +38,13 @@ public static class CompactLayoutAnimator
         return t * t;
     }
 
-    public static double ApplyEase(double linearT, bool expanding) =>
-        expanding ? EaseOutQuad(linearT) : EaseInQuad(linearT);
+    public static double ApplyEase(double linearT, bool expanding)
+    {
+        // Ease-out both ways. Ease-in collapse back-loaded motion into a short tail that
+        // read as staccato when frames were sparse.
+        _ = expanding;
+        return EaseOutQuad(linearT);
+    }
 
     public static double Lerp(double a, double b, double t) => a + (b - a) * t;
 
