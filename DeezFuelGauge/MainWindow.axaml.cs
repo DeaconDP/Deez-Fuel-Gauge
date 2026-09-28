@@ -283,33 +283,72 @@ public partial class MainWindow : Window, ISettingsPanelHost
 
         if (_settings.IsPositionPinned)
         {
-            var restoreWidth = (double)width;
-            var restoreHeight = (double)height;
             if (_settings.UseCompactMode)
             {
                 EnsureCompactTransitionSizes();
                 var compact = _cachedCompactSize!.Value;
-                restoreWidth = compact.Width;
-                restoreHeight = compact.Height;
-            }
+                if (CompactLayoutAnimator.PreferStableCompactHostGeometry
+                    && _cachedFullSize is { } full)
+                {
+                    var (hostX, hostY, restX, restY, moved) =
+                        PinnedPositionRestore.ResolveStableCompactHost(
+                            _settings.Left,
+                            _settings.Top,
+                            compact.Width,
+                            compact.Height,
+                            full.Width,
+                            full.Height,
+                            workingAreas);
+                    _compactFrameOwnsPosition = true;
+                    Width = Math.Max(1, full.Width);
+                    Height = Math.Max(1, full.Height);
+                    Position = new PixelPoint(hostX, hostY);
+                    _compactFrameOwnsPosition = false;
+                    _compactRestX = restX;
+                    _compactRestY = restY;
+                    _initialPositionApplied = true;
+                    if (moved)
+                    {
+                        _settings.Left = restX;
+                        _settings.Top = restY;
+                        SaveSettings();
+                    }
 
-            var (x, y, moved) = PinnedPositionRestore.Resolve(
-                _settings.Left,
-                _settings.Top,
-                restoreWidth,
-                restoreHeight,
-                workingAreas);
-            Position = new PixelPoint(x, y);
-            _initialPositionApplied = true;
-            if (_settings.UseCompactMode)
-            {
+                    return;
+                }
+
+                var (x, y, movedCompact) = PinnedPositionRestore.Resolve(
+                    _settings.Left,
+                    _settings.Top,
+                    compact.Width,
+                    compact.Height,
+                    workingAreas);
+                Position = new PixelPoint(x, y);
                 _compactRestX = x;
                 _compactRestY = y;
+                _initialPositionApplied = true;
+                if (movedCompact)
+                {
+                    _settings.Left = x;
+                    _settings.Top = y;
+                    SaveSettings();
+                }
+
+                return;
             }
-            if (moved)
+
+            var (fullPinX, fullPinY, movedFull) = PinnedPositionRestore.Resolve(
+                _settings.Left,
+                _settings.Top,
+                width,
+                height,
+                workingAreas);
+            Position = new PixelPoint(fullPinX, fullPinY);
+            _initialPositionApplied = true;
+            if (movedFull)
             {
-                _settings.Left = x;
-                _settings.Top = y;
+                _settings.Left = fullPinX;
+                _settings.Top = fullPinY;
                 SaveSettings();
             }
 
@@ -891,6 +930,23 @@ public partial class MainWindow : Window, ISettingsPanelHost
 
             if (goingFull && _compactRestX is not null && _compactRestY is not null)
                 return;
+
+            // Startup can set Width/Height to the full host before Bounds catches up.
+            // CollapseEnd(Position, stale Bounds) would push the BR pill off-screen.
+            if (!goingFull
+                && _compactRestX is int seedX
+                && _compactRestY is int seedY
+                && _cachedFullSize is { } fullSize)
+            {
+                var (expectedHostX, expectedHostY) = CompactPlacement.TransitionAnimEnd(
+                    new CompactRestOrigin(seedX, seedY, compactSize.Width, compactSize.Height),
+                    goingFull: true,
+                    fullSize.Width,
+                    fullSize.Height,
+                    settingsAnchorBottom: null);
+                if (Position.X == expectedHostX && Position.Y == expectedHostY)
+                    return;
+            }
         }
 
         var atCompactRest = !_compactAnimActive && _compactProgress <= 0.001 && _showingCompactRest;
