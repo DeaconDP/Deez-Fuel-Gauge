@@ -12,8 +12,11 @@ function Write-Step([string]$Message) {
 }
 
 function Refresh-Path {
-    $env:Path = [System.Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' +
-                [System.Environment]::GetEnvironmentVariable('Path', 'User')
+    $machine = [System.Environment]::GetEnvironmentVariable('Path', 'Machine')
+    $user = [System.Environment]::GetEnvironmentVariable('Path', 'User')
+    $userDotnet = Join-Path $env:USERPROFILE '.dotnet'
+    $parts = @($userDotnet, $machine, $user) | Where-Object { $_ }
+    $env:Path = ($parts -join ';')
 }
 
 function Get-VersionLabel {
@@ -32,12 +35,38 @@ function Get-VersionLabel {
     }
 }
 
-function Test-DotNetSdk {
-    if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
+function Get-DotNetCandidates {
+    $candidates = New-Object System.Collections.Generic.List[string]
+
+    $cmd = Get-Command dotnet -ErrorAction SilentlyContinue
+    if ($cmd -and $cmd.Source) {
+        [void]$candidates.Add($cmd.Source)
+    }
+
+    $programFilesX86 = [Environment]::GetEnvironmentVariable('ProgramFiles(x86)')
+    $known = @(
+        (Join-Path $env:USERPROFILE '.dotnet\dotnet.exe'),
+        (Join-Path $env:ProgramFiles 'dotnet\dotnet.exe')
+    )
+    if ($programFilesX86) {
+        $known += (Join-Path $programFilesX86 'dotnet\dotnet.exe')
+    }
+
+    foreach ($path in $known) {
+        if ($path -and (Test-Path -LiteralPath $path)) {
+            [void]$candidates.Add($path)
+        }
+    }
+
+    $candidates | Select-Object -Unique
+}
+
+function Test-DotNetSdkAt([string]$DotNetExe) {
+    if (-not $DotNetExe -or -not (Test-Path -LiteralPath $DotNetExe)) {
         return $false
     }
 
-    $sdks = dotnet --list-sdks 2>$null
+    $sdks = & $DotNetExe --list-sdks 2>$null
     if (-not $sdks) {
         return $false
     }
@@ -53,24 +82,72 @@ function Test-DotNetSdk {
     return $false
 }
 
-function Install-DotNetSdk {
-    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
-        throw @"
-.NET 8 SDK (or newer) is required but was not found, and winget is not available.
-
-Install the SDK from the page that opens, then double-click run.bat again:
-https://dotnet.microsoft.com/download/dotnet/8.0
-"@
+function Find-DotNetSdk {
+    foreach ($exe in Get-DotNetCandidates) {
+        if (Test-DotNetSdkAt $exe) {
+            return $exe
+        }
     }
 
-    Write-Step 'Installing .NET 8 SDK via winget (one-time)...'
-    winget install --id Microsoft.DotNet.SDK.8 -e `
-        --accept-package-agreements --accept-source-agreements
+    return $null
+}
 
-    Refresh-Path
+function Use-DotNet([string]$DotNetExe) {
+    $dir = Split-Path -Parent $DotNetExe
+    $env:DOTNET_ROOT = $dir
+    if ($env:Path -notlike "$dir;*") {
+        $env:Path = $dir + ';' + $env:Path
+    }
+}
 
-    if (-not (Test-DotNetSdk)) {
-        throw 'SDK install finished, but dotnet is still not on PATH. Close this window, open a new one, and double-click run.bat again.'
+function Open-DotNetDownloadPage {
+    Start-Process 'https://dotnet.microsoft.com/download/dotnet/8.0' -ErrorAction SilentlyContinue | Out-Null
+}
+
+function Install-DotNetSdkUserLocal {
+    $installDir = Join-Path $env:USERPROFILE '.dotnet'
+    $scriptPath = Join-Path $env:TEMP ("dotnet-install-{0}.ps1" -f [guid]::NewGuid().ToString('N'))
+
+    Write-Step 'Installing .NET 8 SDK to your user profile (no admin)...'
+    $ProgressPreference = 'SilentlyContinue'
+    try {
+        Invoke-WebRequest -Uri 'https://dot.net/v1/dotnet-install.ps1' -OutFile $scriptPath -UseBasicParsing
+        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $scriptPath `
+            -Channel 8.0 -InstallDir $installDir -NoPath
+        if ($LASTEXITCODE -ne 0) {
+            throw "dotnet-install.ps1 exited with code $LASTEXITCODE."
+        }
+    }
+    finally {
+        Remove-Item -LiteralPath $scriptPath -Force -ErrorAction SilentlyContinue
+    }
+
+    $dotnet = Join-Path $installDir 'dotnet.exe'
+    if (-not (Test-Path -LiteralPath $dotnet)) {
+        throw "dotnet-install.ps1 finished, but $dotnet was not created."
+    }
+
+    Use-DotNet $dotnet
+    if (-not (Test-DotNetSdkAt $dotnet)) {
+        throw 'User-local SDK install finished, but no .NET 8+ SDK was detected.'
+    }
+
+    return $dotnet
+}
+
+function Install-DotNetSdk {
+    try {
+        return Install-DotNetSdkUserLocal
+    }
+    catch {
+        Open-DotNetDownloadPage
+        throw @"
+.NET 8 SDK (or newer) is required and automatic user-local install failed:
+$($_.Exception.Message)
+
+Install the SDK from the page that opened, then double-click run.bat again:
+https://dotnet.microsoft.com/download/dotnet/8.0
+"@
     }
 }
 
@@ -105,14 +182,17 @@ function Stop-RunningWidget {
 }
 
 try {
-    if (-not (Test-DotNetSdk)) {
-        Install-DotNetSdk
+    Refresh-Path
+    $dotnet = Find-DotNetSdk
+    if (-not $dotnet) {
+        $dotnet = Install-DotNetSdk
     }
+    Use-DotNet $dotnet
 
     Stop-RunningWidget
 
     Write-Step 'Building Deez Fuel Gauge...'
-    dotnet build DeezFuelGauge.sln -c Release --nologo -v q
+    & $dotnet build DeezFuelGauge.sln -c Release --nologo -v q
     if ($LASTEXITCODE -ne 0) {
         throw "Build failed (exit code $LASTEXITCODE)."
     }
