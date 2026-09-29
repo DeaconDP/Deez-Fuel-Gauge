@@ -192,6 +192,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
         _settingsViewModel.AttachHost(this);
         SettingsPanelControl.Initialize(_settingsViewModel, _settings);
         SyncSettingsAndVisibility();
+        ApplyLoginItemFromSettings();
         _isSettingsExpanded = _settings.IsSettingsExpanded;
         UpdateSettingsExpandedState();
         UpdatePinIconState();
@@ -2815,6 +2816,15 @@ public partial class MainWindow : Window, ISettingsPanelHost
         _settings.IsXaiProviderExpanded = true;
         _settings.SettingsExpandedProvider = _settingsViewModel.ExpandedProvider;
         SettingsStore.Save(_settings);
+        ApplyLoginItemFromSettings();
+    }
+
+    private void ApplyLoginItemFromSettings()
+    {
+        if (!LoginItemService.IsSupported)
+            return;
+
+        LoginItemService.SyncDesiredState(_settings.LaunchAtLogin);
     }
 
     protected override void OnClosed(EventArgs e)

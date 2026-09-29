@@ -75,9 +75,11 @@ When compact (mini) mode is on, each enabled source shows as a short code plus p
 
 ## Optional: run at login
 
-**Windows:** build once with `run.bat`, then `Win+R` → `shell:startup` → shortcut to `DeezFuelGauge\bin\Release\net8.0\DeezFuelGauge.exe`.
+Open settings → **Startup** → enable **Start when you sign in**. The app writes a Windows Run entry (or macOS login item) to the executable that is currently running, and rewrites that path on every launch so moves or rebuilds stay healthy.
 
-**macOS:** build once with `run.command`, then System Settings → General → Login Items → add **`Deez Fuel Gauge.app`**.
+**Windows fallback:** `Win+R` → `shell:startup` → shortcut to your built `DeezFuelGauge.exe`.
+
+**macOS fallback:** System Settings → General → Login Items → add **`Deez Fuel Gauge.app`**.
 
 ## Development
 

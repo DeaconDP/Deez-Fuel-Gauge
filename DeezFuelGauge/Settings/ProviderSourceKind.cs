@@ -22,5 +22,6 @@ public enum ProviderSourceKind
     HardwareCpuUsage,
     HardwareGpuUsage,
     HardwareRamUsage,
-    HardwareCpuTemp
+    HardwareCpuTemp,
+    LaunchAtLogin
 }
