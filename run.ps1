@@ -1,6 +1,9 @@
 #Requires -Version 5.1
 [CmdletBinding()]
-param()
+param(
+    # Used by scripts/verify-run-ps1-sdk-install.ps1 so install+build can be proven without a GUI.
+    [switch]$SkipLaunch
+)
 
 $ErrorActionPreference = 'Stop'
 
@@ -58,7 +61,7 @@ function Get-DotNetCandidates {
         }
     }
 
-    $candidates | Select-Object -Unique
+    return @($candidates | Select-Object -Unique)
 }
 
 function Test-DotNetSdkAt([string]$DotNetExe) {
@@ -66,8 +69,8 @@ function Test-DotNetSdkAt([string]$DotNetExe) {
         return $false
     }
 
-    $sdks = & $DotNetExe --list-sdks 2>$null
-    if (-not $sdks) {
+    $sdks = @(& $DotNetExe --list-sdks 2>$null)
+    if ($sdks.Count -eq 0) {
         return $false
     }
 
@@ -83,7 +86,7 @@ function Test-DotNetSdkAt([string]$DotNetExe) {
 }
 
 function Find-DotNetSdk {
-    foreach ($exe in Get-DotNetCandidates) {
+    foreach ($exe in @(Get-DotNetCandidates)) {
         if (Test-DotNetSdkAt $exe) {
             return $exe
         }
@@ -202,8 +205,13 @@ try {
         throw "Expected executable was not found: $exePath"
     }
 
-    Write-Step "Starting Deez Fuel Gauge$(Get-VersionLabel) from $exePath"
-    Start-Process -FilePath $exePath
+    if ($SkipLaunch) {
+        Write-Step "Build ok$(Get-VersionLabel); skip launch ($exePath)"
+    }
+    else {
+        Write-Step "Starting Deez Fuel Gauge$(Get-VersionLabel) from $exePath"
+        Start-Process -FilePath $exePath
+    }
 }
 catch {
     Write-Host ''

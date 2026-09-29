@@ -89,6 +89,18 @@ try {
             Pass 'No hung winget/Burn SDK installer processes'
         }
     }
+
+    # End-to-end: run.ps1 must resolve the user-local SDK and build without machine PATH or winget.
+    Write-Host '>> Smoke: run.ps1 -SkipLaunch with machine dotnet stripped from PATH'
+    $env:Path = ($userDotnet | Split-Path -Parent) + ';' + $env:Path
+    $env:DOTNET_ROOT = Split-Path -Parent $userDotnet
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $RunPs1 -SkipLaunch
+    if ($LASTEXITCODE -ne 0) {
+        Fail "run.ps1 -SkipLaunch failed with exit $LASTEXITCODE under user-local-only PATH"
+    }
+    else {
+        Pass 'run.ps1 -SkipLaunch builds using user-local SDK (no machine PATH)'
+    }
 }
 finally {
     $env:Path = $oldPath
