@@ -122,6 +122,7 @@ public sealed class SettingsPanelViewModel : ViewModelBase
     public bool IsXaiExpanded => ExpandedProvider == SettingsExpandedProvider.Xai;
     public bool IsDiskExpanded => ExpandedProvider == SettingsExpandedProvider.Disk;
     public bool IsHardwareExpanded => ExpandedProvider == SettingsExpandedProvider.Hardware;
+    public bool IsWidgetExpanded => ExpandedProvider == SettingsExpandedProvider.Widget;
 
     public bool ShowCursor
     {
@@ -815,6 +816,15 @@ public sealed class SettingsPanelViewModel : ViewModelBase
             ShowCpuUsage || ShowGpuUsage || ShowRamUsage || ShowCpuTemp
                 ? ProviderConnectionState.Connected
                 : ProviderConnectionState.Off);
+
+        var launchAtLogin = Sections
+            .FirstOrDefault(s => s.ProviderId == SettingsExpandedProvider.Widget)
+            ?.Sources.FirstOrDefault(s => s.Kind == ProviderSourceKind.LaunchAtLogin);
+        SetSectionColor(
+            SettingsExpandedProvider.Widget,
+            launchAtLogin?.IsEnabled == true
+                ? ProviderConnectionState.Connected
+                : ProviderConnectionState.Off);
     }
 
     public async Task ConnectAsync(ProviderSourceKind kind, WidgetSettings settings)
@@ -1058,6 +1068,13 @@ public sealed class SettingsPanelViewModel : ViewModelBase
         else if (section.ProviderId == SettingsExpandedProvider.Hardware)
         {
             section.SummaryStatus = enabled ? "Enabled" : "Off";
+        }
+        else if (section.ProviderId == SettingsExpandedProvider.Widget)
+        {
+            section.SummaryStatus = enabled ? "Launch at login" : "Manual start";
+            var launch = section.Sources.FirstOrDefault(s => s.Kind == ProviderSourceKind.LaunchAtLogin);
+            if (launch is not null)
+                launch.Status = enabled ? "Enabled" : "Off";
         }
 
         NotifyChanged();
@@ -1682,6 +1699,7 @@ public sealed class SettingsPanelViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsXaiExpanded));
         OnPropertyChanged(nameof(IsDiskExpanded));
         OnPropertyChanged(nameof(IsHardwareExpanded));
+        OnPropertyChanged(nameof(IsWidgetExpanded));
     }
 
     private static string BuildWatermark(string label, string? credentialId) =>

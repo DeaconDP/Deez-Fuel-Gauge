@@ -24,6 +24,7 @@ internal static class SettingsSectionMapper
         sections.Add(BuildXaiSection(settings, host));
         sections.Add(BuildDiskSection(settings, host));
         sections.Add(BuildHardwareSection(settings, host));
+        sections.Add(BuildWidgetSection(settings));
 
         foreach (var section in sections)
         {
@@ -73,6 +74,9 @@ internal static class SettingsSectionMapper
                     break;
                 case SettingsExpandedProvider.Hardware:
                     ApplyHardware(section, settings);
+                    break;
+                case SettingsExpandedProvider.Widget:
+                    ApplyWidget(section, settings);
                     break;
             }
         }
@@ -794,6 +798,48 @@ internal static class SettingsSectionMapper
                          || settings.ShowCpuTemp;
         section.MasterEnable = anyEnabled;
         section.SummaryStatus = anyEnabled ? "Enabled" : "Off";
+    }
+
+    private static ProviderSettingsSectionViewModel BuildWidgetSection(WidgetSettings settings)
+    {
+        var launchAtLogin = CreateSource(
+            ProviderSourceKind.LaunchAtLogin,
+            "Start when you sign in",
+            settings.LaunchAtLogin,
+            details: false,
+            status: LoginItemService.IsSupported
+                ? (settings.LaunchAtLogin ? "Enabled" : "Off")
+                : "Not supported on this OS",
+            showConnect: false,
+            showTest: false);
+        launchAtLogin.HasDetailsToggle = false;
+        launchAtLogin.HasEnableToggle = LoginItemService.IsSupported;
+
+        var section = new ProviderSettingsSectionViewModel
+        {
+            ProviderId = SettingsExpandedProvider.Widget,
+            Title = "Startup",
+            ShowMasterEnable = LoginItemService.IsSupported,
+            MasterEnable = settings.LaunchAtLogin,
+            SummaryStatus = LoginItemService.IsSupported
+                ? (settings.LaunchAtLogin ? "Launch at login" : "Manual start")
+                : "Unavailable"
+        };
+        section.Sources.Add(launchAtLogin);
+        return section;
+    }
+
+    private static void ApplyWidget(ProviderSettingsSectionViewModel section, WidgetSettings settings)
+    {
+        var launchAtLogin = section.Sources.First(s => s.Kind == ProviderSourceKind.LaunchAtLogin);
+        settings.LaunchAtLogin = LoginItemService.IsSupported && launchAtLogin.IsEnabled;
+        section.MasterEnable = settings.LaunchAtLogin;
+        section.SummaryStatus = LoginItemService.IsSupported
+            ? (settings.LaunchAtLogin ? "Launch at login" : "Manual start")
+            : "Unavailable";
+        launchAtLogin.Status = LoginItemService.IsSupported
+            ? (settings.LaunchAtLogin ? "Enabled" : "Off")
+            : "Not supported on this OS";
     }
 
     private static string? NullIfEmpty(string? value) =>
