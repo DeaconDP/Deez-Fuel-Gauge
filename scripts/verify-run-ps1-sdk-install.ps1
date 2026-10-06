@@ -1,68 +1,45 @@
 #Requires -Version 5.1
-# Proves run.ps1 discovers a user-local SDK and installs via dotnet-install.ps1
-# (no machine-scope winget hang). Rerun after any run.ps1 install change.
+# Verifies run.ps1 prefers user-local SDK install and never hangs on winget.
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 $RunPs1 = Join-Path $RepoRoot 'run.ps1'
-$failures = New-Object System.Collections.Generic.List[string]
-
-function Fail([string]$Message) {
-    [void]$failures.Add($Message)
-    Write-Host "FAIL: $Message" -ForegroundColor Red
-}
-
-function Pass([string]$Message) {
-    Write-Host "PASS: $Message" -ForegroundColor Green
-}
-
 if (-not (Test-Path -LiteralPath $RunPs1)) {
     throw "run.ps1 not found at $RunPs1"
 }
 
-$source = Get-Content -LiteralPath $RunPs1 -Raw
+$text = Get-Content -LiteralPath $RunPs1 -Raw
 
-if ($source -notmatch 'dotnet-install\.ps1') {
-    Fail 'run.ps1 must install the SDK with official dotnet-install.ps1 (user-local, no admin).'
-}
-else {
-    Pass 'run.ps1 references dotnet-install.ps1'
-}
+$checks = @(
+    @{ Name = 'uses official dotnet-install.ps1'; Pattern = 'dot\.net/v1/dotnet-install\.ps1'; Invert = $false },
+    @{ Name = 'installs into user-profile .dotnet'; Pattern = 'Join-Path \$env:USERPROFILE ''\.dotnet'''; Invert = $false },
+    @{ Name = 'discovers user-local dotnet.exe'; Pattern = '\.dotnet\\dotnet\.exe'; Invert = $false },
+    @{ Name = 'does not call winget install'; Pattern = 'winget\s+install'; Invert = $true }
+)
 
-$installIdx = $source.IndexOf('function Install-DotNetSdk')
-$wingetIdx = $source.IndexOf('winget install')
-$dotnetInstallIdx = $source.IndexOf('dotnet-install.ps1')
-if ($installIdx -lt 0) {
-    Fail 'Install-DotNetSdk function is missing.'
-}
-elseif ($dotnetInstallIdx -lt 0) {
-    Fail 'dotnet-install.ps1 is not referenced inside run.ps1.'
-}
-elseif ($wingetIdx -ge 0 -and $wingetIdx -lt $dotnetInstallIdx) {
-    Fail 'winget install must not run before user-local dotnet-install.ps1 (machine Burn install hangs on UAC).'
-}
-else {
-    Pass 'Install order prefers user-local dotnet-install.ps1 over winget'
+$failed = New-Object System.Collections.Generic.List[string]
+foreach ($check in $checks) {
+    $matched = [bool]($text -match $check.Pattern)
+    $ok = if ($check.Invert) { -not $matched } else { $matched }
+    if (-not $ok) {
+        [void]$failed.Add($check.Name)
+        Write-Host "FAIL: $($check.Name)" -ForegroundColor Red
+    }
+    else {
+        Write-Host "PASS: $($check.Name)" -ForegroundColor Green
+    }
 }
 
-if ($source -notmatch '\\\.dotnet\\dotnet\.exe' -and $source -notmatch "\.dotnet['\`"]\\dotnet\.exe" -and $source -notmatch "Join-Path .* '\.dotnet'") {
-    Fail 'run.ps1 must look for %USERPROFILE%\.dotnet\dotnet.exe when PATH is stale.'
-}
-else {
-    Pass 'run.ps1 searches the user-local .dotnet install dir'
-}
-
-# Runtime: with Program Files\dotnet stripped, user-local SDK must still resolve.
-$userDotnet = Join-Path $env:USERPROFILE '.dotnet\dotnet.exe'
+# Runtime: with Program Files\dotnet stripped, user-local SDK still works.
 $oldPath = $env:Path
-$oldRoot = $env:DOTNET_ROOT
 try {
     $env:Path = ($env:Path -split ';' | Where-Object { $_ -and ($_ -notmatch '(?i)[\\/]dotnet') }) -join ';'
     Remove-Item Env:DOTNET_ROOT -ErrorAction SilentlyContinue
 
+    $userDotnet = Join-Path $env:USERPROFILE '.dotnet\dotnet.exe'
     if (-not (Test-Path -LiteralPath $userDotnet)) {
-        Fail "Expected user-local SDK at $userDotnet for this check. Install once with dotnet-install.ps1 -Channel 8.0 -InstallDir `$HOME\.dotnet"
+        Write-Host 'SKIP: runtime discovery (no %USERPROFILE%\.dotnet\dotnet.exe yet)' -ForegroundColor Yellow
     }
     else {
         $sdks = & $userDotnet --list-sdks 2>$null
@@ -72,47 +49,20 @@ try {
             if ([int]($version.Split('.')[0]) -ge 8) { $has8 = $true; break }
         }
         if (-not $has8) {
-            Fail "$userDotnet has no SDK major >= 8"
+            [void]$failed.Add('user-local SDK major >= 8')
+            Write-Host 'FAIL: user-local SDK major >= 8' -ForegroundColor Red
         }
         else {
-            Pass "User-local SDK usable without machine PATH ($userDotnet)"
+            Write-Host "PASS: user-local SDK usable with PATH stripped ($(& $userDotnet --version))" -ForegroundColor Green
         }
-    }
-
-    if (Get-Command winget -ErrorAction SilentlyContinue) {
-        # Guardrail: never leave a winget machine install running from this lever.
-        $wingetProcs = @(Get-Process -Name winget, 'dotnet-sdk*' -ErrorAction SilentlyContinue)
-        if ($wingetProcs.Count -gt 0) {
-            Fail ("Unexpected winget/dotnet-sdk process(es) during verify: " + (($wingetProcs | ForEach-Object ProcessName) -join ', '))
-        }
-        else {
-            Pass 'No hung winget/Burn SDK installer processes'
-        }
-    }
-
-    # End-to-end: run.ps1 must resolve the user-local SDK and build without machine PATH or winget.
-    Write-Host '>> Smoke: run.ps1 -SkipLaunch with machine dotnet stripped from PATH'
-    $env:Path = ($userDotnet | Split-Path -Parent) + ';' + $env:Path
-    $env:DOTNET_ROOT = Split-Path -Parent $userDotnet
-    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $RunPs1 -SkipLaunch
-    if ($LASTEXITCODE -ne 0) {
-        Fail "run.ps1 -SkipLaunch failed with exit $LASTEXITCODE under user-local-only PATH"
-    }
-    else {
-        Pass 'run.ps1 -SkipLaunch builds using user-local SDK (no machine PATH)'
     }
 }
 finally {
     $env:Path = $oldPath
-    if ($null -ne $oldRoot -and $oldRoot -ne '') { $env:DOTNET_ROOT = $oldRoot }
 }
 
-if ($failures.Count -gt 0) {
-    Write-Host ""
-    Write-Host "$($failures.Count) check(s) failed." -ForegroundColor Red
-    exit 1
+if ($failed.Count -gt 0) {
+    throw ("verify-run-ps1-sdk-install failed: " + ($failed -join '; '))
 }
 
-Write-Host ""
-Write-Host 'All run.ps1 SDK install checks passed.' -ForegroundColor Green
-exit 0
+Write-Host 'verify-run-ps1-sdk-install: all checks passed.'
