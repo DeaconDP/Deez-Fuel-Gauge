@@ -22,7 +22,7 @@ People who live in Cursor (and adjacent AI tools) and want a always-on glance of
 | Windows | Double-click **`run.bat`** |
 | macOS | Double-click **`run.command`** |
 
-Rebuilds from this folder and launches the widget. On Windows, missing .NET can install via winget; on macOS the launcher opens the download page. If **`Deez Fuel Gauge.app`** is blocked after first build, right-click → **Open**. macOS failures log to `~/Library/Logs/DeezFuelGauge/setup.log`.
+Rebuilds from this folder and launches the widget. On Windows, a missing SDK installs to `%USERPROFILE%\.dotnet` via Microsoft’s `dotnet-install.ps1` (no admin). On macOS the launcher opens the download page. If **`Deez Fuel Gauge.app`** is blocked after first build, right-click → **Open**. macOS failures log to `~/Library/Logs/DeezFuelGauge/setup.log`.
 
 ## Features
 
