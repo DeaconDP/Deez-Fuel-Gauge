@@ -169,7 +169,7 @@ public sealed class SettingsPanelViewModelTests
         var viewModel = CreateViewModel();
         viewModel.Load(new WidgetSettings());
 
-        Assert.Equal(9, viewModel.Sections.Count);
+        Assert.Equal(10, viewModel.Sections.Count);
         Assert.Contains(viewModel.Sections, s => s.Title == "OpenAI" && s.Sources.Count == 2);
         Assert.Contains(viewModel.Sections, s => s.Title == "Claude" && s.Sources.Count == 2);
         Assert.Contains(viewModel.Sections, s => s.Title == "fal.ai" && s.Sources.Count == 1);
@@ -180,6 +180,10 @@ public sealed class SettingsPanelViewModelTests
                  && s.Sources.Any(src => src.Kind == ProviderSourceKind.GrokBotLimits
                                          && src.Name == "Grok Bot"));
         Assert.Contains(viewModel.Sections, s => s.Title == "Hardware" && s.Sources.Count == 4);
+        Assert.Contains(
+            viewModel.Sections,
+            s => s.Title == "Startup"
+                 && s.Sources.Any(src => src.Kind == ProviderSourceKind.LaunchAtLogin));
         var cursorSection = viewModel.Sections.First(s => s.Title == "Cursor");
         Assert.Equal(6, cursorSection.Sources.Count);
         Assert.Contains(cursorSection.Sources, s => s.Kind == ProviderSourceKind.OpenAiViaCursor);
@@ -418,6 +422,23 @@ public sealed class SettingsPanelViewModelTests
         var committed = new WidgetSettings();
         viewModel.Commit(committed);
         Assert.Equal("team-synced", committed.Xai.WorkspaceId);
+    }
+
+    [Fact]
+    public void Load_and_Commit_round_trip_preserves_launch_at_login()
+    {
+        var viewModel = CreateViewModel();
+        viewModel.Load(new WidgetSettings { LaunchAtLogin = true });
+
+        var widget = viewModel.Sections.Single(s => s.ProviderId == SettingsExpandedProvider.Widget);
+        var launch = widget.Sources.Single(s => s.Kind == ProviderSourceKind.LaunchAtLogin);
+        Assert.True(launch.IsEnabled);
+
+        launch.IsEnabled = false;
+        var committed = new WidgetSettings { LaunchAtLogin = true };
+        viewModel.Commit(committed);
+
+        Assert.False(committed.LaunchAtLogin);
     }
 
     [Fact]

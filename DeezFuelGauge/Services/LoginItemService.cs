@@ -24,6 +24,25 @@ public static class LoginItemService
         return false;
     }
 
+    /// <summary>
+    /// Converges the OS login item to <paramref name="enabled"/> using this process's
+    /// executable path. Re-runs are safe and heal stale paths after moves or renames.
+    /// </summary>
+    public static void SyncDesiredState(bool enabled)
+    {
+        if (!IsSupported)
+            return;
+
+        var exe = Environment.ProcessPath;
+        if (string.IsNullOrWhiteSpace(exe))
+            return;
+
+        if (enabled && !File.Exists(exe))
+            return;
+
+        SetEnabled(enabled, exe);
+    }
+
     public static void SetEnabled(bool enabled, string executablePath)
     {
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
@@ -36,11 +55,41 @@ public static class LoginItemService
             SetMacOsLoginItem(enabled, executablePath);
     }
 
+    internal static string FormatWindowsRunValue(string executablePath) =>
+        $"\"{executablePath}\"";
+
+    internal static string? ParseWindowsRunValue(string? registeredValue)
+    {
+        if (string.IsNullOrWhiteSpace(registeredValue))
+            return null;
+
+        return registeredValue.Trim().Trim('"');
+    }
+
+    internal static bool NeedsWindowsPathRewrite(
+        string? registeredValue,
+        string currentExecutablePath,
+        Func<string, bool>? fileExists = null)
+    {
+        fileExists ??= File.Exists;
+        var registeredPath = ParseWindowsRunValue(registeredValue);
+        if (registeredPath is null)
+            return true;
+        if (!fileExists(registeredPath))
+            return true;
+
+        return !string.Equals(registeredPath, currentExecutablePath, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static bool IsWindowsLoginItemEnabled()
     {
         using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(WindowsRunKey, writable: false);
-        return key?.GetValue(AppName) is string newValue && !string.IsNullOrWhiteSpace(newValue)
-               || key?.GetValue(LegacyAppName) is string legacyValue && !string.IsNullOrWhiteSpace(legacyValue);
+        var current = key?.GetValue(AppName) as string;
+        if (!string.IsNullOrWhiteSpace(current))
+            return true;
+
+        var legacy = key?.GetValue(LegacyAppName) as string;
+        return !string.IsNullOrWhiteSpace(legacy);
     }
 
     private static void SetWindowsLoginItem(bool enabled, string executablePath)
@@ -54,7 +103,7 @@ public static class LoginItemService
         if (enabled)
         {
             key.DeleteValue(LegacyAppName, throwOnMissingValue: false);
-            key.SetValue(AppName, $"\"{executablePath}\"");
+            key.SetValue(AppName, FormatWindowsRunValue(executablePath));
         }
         else
         {
@@ -81,6 +130,8 @@ public static class LoginItemService
         if (enabled)
         {
             RemoveMacOsLoginItem(AppBranding.LegacyAssemblyName);
+            // Always re-add so a moved/rebuilt .app path replaces a stale login item.
+            RemoveMacOsLoginItem(Path.GetFileNameWithoutExtension(appPath));
             RunProcess("/usr/bin/osascript", [
                 "-e",
                 $"tell application \"System Events\" to make login item at end with properties {{path:\"{appPath}\", hidden:false}}"]);
@@ -90,6 +141,7 @@ public static class LoginItemService
             RunProcess("/usr/bin/osascript", [
                 "-e",
                 $"tell application \"System Events\" to delete login item \"{Path.GetFileNameWithoutExtension(appPath)}\""]);
+            RemoveMacOsLoginItem(AppBranding.LegacyAssemblyName);
         }
     }
 
