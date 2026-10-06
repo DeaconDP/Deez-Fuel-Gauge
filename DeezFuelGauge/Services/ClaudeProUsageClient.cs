@@ -123,7 +123,24 @@ public sealed class ClaudeProUsageClient : IDisposable
         if (utilization is not { } value || double.IsNaN(value) || double.IsInfinity(value))
             return null;
 
-        return value <= 1 ? value * 100 : value;
+        return value is > 0 and < 1 ? value * 100 : value;
+    }
+
+    internal static double? NormalizeUtilization(JsonElement utilizationEl)
+    {
+        if (utilizationEl.ValueKind != JsonValueKind.Number
+            || !utilizationEl.TryGetDouble(out var value)
+            || double.IsNaN(value)
+            || double.IsInfinity(value))
+            return null;
+
+        var raw = utilizationEl.GetRawText();
+        var hasFractionalLiteral = raw.Contains('.')
+                                   || raw.Contains('e', StringComparison.OrdinalIgnoreCase);
+        if (hasFractionalLiteral && value <= 1)
+            return value * 100;
+
+        return value;
     }
 
     internal static string? ParseOrgUuid(JsonElement accountRoot)
@@ -376,7 +393,7 @@ public sealed class ClaudeProUsageClient : IDisposable
             return null;
 
         return utilizationEl.ValueKind == JsonValueKind.Number
-            ? NormalizeUtilization(utilizationEl.GetDouble())
+            ? NormalizeUtilization(utilizationEl)
             : null;
     }
 
