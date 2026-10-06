@@ -16,6 +16,7 @@
         PointerEntered="Window_PointerEntered"
         PointerExited="Window_PointerExited"
         PointerReleased="Window_PointerReleased">
+    <Grid>
     <Border x:Name="PillBorder"
             CornerRadius="10"
             Background="#E6181818"
@@ -1406,4 +1407,11 @@
             </StackPanel>
         </Grid>
     </Border>
+    <Image x:Name="CompactAnimProxy"
+           IsVisible="False"
+           IsHitTestVisible="False"
+           Stretch="Fill"
+           HorizontalAlignment="Left"
+           VerticalAlignment="Top" />
+    </Grid>
 </Window>
