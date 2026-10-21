@@ -76,6 +76,13 @@ public static class CompactPlacement
     {
         if (!goingFull)
         {
+            if (currentRestX == positionX
+                && currentRestY == positionY
+                && !IsVisuallyCompact(boundsWidth, boundsHeight, compactWidth, compactHeight))
+            {
+                return new CompactRestOrigin(positionX, positionY, compactWidth, compactHeight);
+            }
+
             var (x, y) = CollapseEnd(
                 positionX,
                 positionY,
