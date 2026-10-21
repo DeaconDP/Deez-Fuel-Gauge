@@ -9,8 +9,19 @@ public enum LoginItemMoment
 
 public static class LoginItemStartup
 {
-    public static bool ShouldContact(LoginItemMoment moment, bool launchAtLogin, bool macOsSystemEvents) =>
-        true;
+    public static bool ShouldContact(LoginItemMoment moment, bool launchAtLogin, bool macOsSystemEvents)
+    {
+        if (moment == LoginItemMoment.Constructing)
+            return false;
+
+        if (moment == LoginItemMoment.UserChanged)
+            return true;
+
+        if (macOsSystemEvents)
+            return launchAtLogin;
+
+        return true;
+    }
 
     public static void ContactIfNeeded(
         LoginItemMoment moment,
