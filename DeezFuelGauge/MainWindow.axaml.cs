@@ -121,6 +121,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
     private int? _compactRestY;
     private PixelPoint? _expandedPlacement;
     private bool _compactFrameOwnsPosition;
+    private bool? _loginItemApplied;
     private readonly ScaleTransform _compactScale = new(1, 1);
     private CompactScaleHost? _compactScaleHost;
     private int _compactAnimGeneration;
@@ -202,7 +203,6 @@ public partial class MainWindow : Window, ISettingsPanelHost
         _settingsViewModel.AttachHost(this);
         SettingsPanelControl.Initialize(_settingsViewModel, _settings);
         SyncSettingsAndVisibility();
-        ApplyLoginItemFromSettings();
         _isSettingsExpanded = _settings.IsSettingsExpanded;
         UpdateSettingsExpandedState();
         UpdatePinIconState();
@@ -249,6 +249,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
 
         Opened += async (_, _) =>
         {
+            QueueLoginItemSync(LoginItemMoment.WindowShown);
             ApplyInitialPosition();
             _compactSnapNext = true;
             ApplyCompactVisualState();
@@ -3030,15 +3031,24 @@ public partial class MainWindow : Window, ISettingsPanelHost
         _settings.IsXaiProviderExpanded = true;
         _settings.SettingsExpandedProvider = _settingsViewModel.ExpandedProvider;
         SettingsStore.Save(_settings);
-        ApplyLoginItemFromSettings();
+        QueueLoginItemSync(LoginItemMoment.UserChanged);
     }
 
-    private void ApplyLoginItemFromSettings()
+    private void QueueLoginItemSync(LoginItemMoment moment)
     {
         if (!LoginItemService.IsSupported)
             return;
 
-        LoginItemService.SyncDesiredState(_settings.LaunchAtLogin);
+        var enabled = _settings.LaunchAtLogin;
+        if (moment == LoginItemMoment.UserChanged && _loginItemApplied == enabled)
+            return;
+
+        _loginItemApplied = enabled;
+        LoginItemStartup.ContactIfNeeded(
+            moment,
+            enabled,
+            OperatingSystem.IsMacOS(),
+            value => Task.Run(() => LoginItemService.SyncDesiredState(value)));
     }
 
     protected override void OnClosed(EventArgs e)

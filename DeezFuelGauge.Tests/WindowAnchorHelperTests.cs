@@ -375,6 +375,37 @@ public sealed class WindowAnchorHelperTests
     }
 
     [Fact]
+    public void ResolveRestForTransition_keeps_clamped_origin_when_bounds_are_still_full()
+    {
+        var area = (X: 0, Y: 0, Width: 2048, Height: 1104);
+        var (clampedX, clampedY, moved) = PinnedPositionRestore.Resolve(
+            2613,
+            1826,
+            72,
+            38,
+            [area]);
+
+        Assert.True(moved);
+
+        var resolved = CompactPlacement.ResolveRestForTransition(
+            goingFull: false,
+            atCompactRest: false,
+            currentRestX: clampedX,
+            currentRestY: clampedY,
+            positionX: clampedX,
+            positionY: clampedY,
+            boundsWidth: 186,
+            boundsHeight: 433,
+            compactWidth: 72,
+            compactHeight: 38);
+
+        Assert.Equal(clampedX, resolved.X);
+        Assert.Equal(clampedY, resolved.Y);
+        Assert.InRange(resolved.X, area.X, area.X + area.Width - 72);
+        Assert.InRange(resolved.Y, area.Y, area.Y + area.Height - 38);
+    }
+
+    [Fact]
     public void ResolveRestForTransition_collapse_ignores_stale_screen_corner_rest()
     {
         const int expandedX = 400;
