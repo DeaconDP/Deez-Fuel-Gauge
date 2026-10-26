@@ -375,6 +375,37 @@ public sealed class WindowAnchorHelperTests
     }
 
     [Fact]
+    public void ResolveRestForTransition_keeps_clamped_origin_when_bounds_are_still_full()
+    {
+        var area = (X: 0, Y: 0, Width: 2048, Height: 1104);
+        var (clampedX, clampedY, moved) = PinnedPositionRestore.Resolve(
+            2613,
+            1826,
+            72,
+            38,
+            [area]);
+
+        Assert.True(moved);
+
+        var resolved = CompactPlacement.ResolveRestForTransition(
+            goingFull: false,
+            atCompactRest: false,
+            currentRestX: clampedX,
+            currentRestY: clampedY,
+            positionX: clampedX,
+            positionY: clampedY,
+            boundsWidth: 186,
+            boundsHeight: 433,
+            compactWidth: 72,
+            compactHeight: 38);
+
+        Assert.Equal(clampedX, resolved.X);
+        Assert.Equal(clampedY, resolved.Y);
+        Assert.InRange(resolved.X, area.X, area.X + area.Width - 72);
+        Assert.InRange(resolved.Y, area.Y, area.Y + area.Height - 38);
+    }
+
+    [Fact]
     public void ResolveRestForTransition_collapse_ignores_stale_screen_corner_rest()
     {
         const int expandedX = 400;
@@ -516,16 +547,13 @@ public sealed class WindowAnchorHelperTests
     }
 
     [Fact]
-    public void ResolveRestForTransition_collapse_keeps_pin_only_when_frame_is_pill_sized()
+    public void ResolveRestForTransition_collapse_keeps_pin_when_frame_is_pill_sized()
     {
-        // Startup must size the window to the pill before placing it at the pin: collapse
-        // derives the rest from the live frame's bottom-right.
-        var pillSized = CompactPlacement.ResolveRestForTransition(
+        // Startup sizes the window to the pill before placing it at the pin, so collapse
+        // derives the same rest from the live frame's bottom-right.
+        var rest = CompactPlacement.ResolveRestForTransition(
             goingFull: false, atCompactRest: true, 1200, 600, 1200, 600, 72, 31, 72, 31);
-        var fullSized = CompactPlacement.ResolveRestForTransition(
-            goingFull: false, atCompactRest: false, 1200, 600, 1200, 600, 300, 264, 72, 31);
 
-        Assert.Equal((1200, 600), (pillSized.X, pillSized.Y));
-        Assert.Equal((1428, 833), (fullSized.X, fullSized.Y));
+        Assert.Equal((1200, 600), (rest.X, rest.Y));
     }
 }
