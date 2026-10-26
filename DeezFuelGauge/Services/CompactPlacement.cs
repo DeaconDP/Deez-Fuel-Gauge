@@ -128,6 +128,20 @@ public static class CompactPlacement
         return new CompactRestOrigin(x, y, newWidth, newHeight);
     }
 
+    /// <summary>
+    /// Resizes the compact rest for new glance content. Until the first snapshot after a pinned
+    /// restore, keeps the top-left: the saved origin belongs to the data-sized pill, so keeping
+    /// the BR of the placeholder-sized pill would walk the pin on every launch.
+    /// </summary>
+    public static CompactRestOrigin ResizeForGlance(
+        CompactRestOrigin rest,
+        double newWidth,
+        double newHeight,
+        bool keepRestoredOrigin) =>
+        keepRestoredOrigin
+            ? rest with { Width = newWidth, Height = newHeight }
+            : ResizeKeepingBottomRight(rest, newWidth, newHeight);
+
     public static CompactRestOrigin AfterExpandedDrag(
         CompactRestOrigin rest,
         int placedX,
