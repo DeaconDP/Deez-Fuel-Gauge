@@ -121,6 +121,7 @@ public partial class MainWindow : Window, ISettingsPanelHost
     private int? _compactRestY;
     private PixelPoint? _expandedPlacement;
     private bool _compactFrameOwnsPosition;
+    private bool _keepRestoredCompactOrigin;
     private bool? _loginItemApplied;
     private readonly ScaleTransform _compactScale = new(1, 1);
     private CompactScaleHost? _compactScaleHost;
@@ -300,7 +301,16 @@ public partial class MainWindow : Window, ISettingsPanelHost
                     compact.Width,
                     compact.Height,
                     workingAreas);
-                Position = new PixelPoint(x, y);
+                // Saved coords are the pill's top-left. Shrink the window to the pill before
+                // placing it: leaving the full-size frame there makes later BR-keeping
+                // collapse math shift the pill right/down by (full - compact).
+                SizeToContent = SizeToContent.Manual;
+                _desiredSizeToContent = SizeToContent.Manual;
+                ApplyCompactFrame(new CompactAnimSample(compact.Width, compact.Height, x, y), 0);
+                _compactProgress = 0;
+                UpdateLayout();
+                // A clamped pin sits against an edge; let it grow inward (BR) instead.
+                _keepRestoredCompactOrigin = !movedCompact;
                 _compactRestX = x;
                 _compactRestY = y;
                 _initialPositionApplied = true;
@@ -492,12 +502,17 @@ public partial class MainWindow : Window, ISettingsPanelHost
         }, DispatcherPriority.Loaded);
     }
 
+    // At compact rest the pill frame keeps its own BR (UpdateCompactGlance), so a late
+    // SizeChanged must not shift it a second time.
+    private bool IsAtCompactRest() =>
+        _settings.UseCompactMode && _showingCompactRest && _compactProgress <= 0.001;
+
     private void CompensateAnchorIfNeeded()
     {
         var newHeight = Bounds.Height;
         if (!CompactPlacement.ShouldApplyLayoutShift(
                 _pendingAnchorCompensation,
-                _compactAnimActive || _compactFrameOwnsPosition,
+                _compactAnimActive || _compactFrameOwnsPosition || IsAtCompactRest(),
                 _anchorFromHeight,
                 newHeight))
             return;
@@ -1505,6 +1520,9 @@ public partial class MainWindow : Window, ISettingsPanelHost
 
         _compactGlanceDirty = false;
         InvalidateCompactTransitionSizes();
+        var keepRestoredOrigin = _keepRestoredCompactOrigin;
+        if (snapshot is not null)
+            _keepRestoredCompactOrigin = false;
 
         if (_settings.UseCompactMode && _showingCompactRest && !_compactAnimActive)
         {
@@ -1515,10 +1533,11 @@ public partial class MainWindow : Window, ISettingsPanelHost
             if (Math.Abs(currentWidth - size.Width) < 0.5 && Math.Abs(currentHeight - size.Height) < 0.5)
                 return;
 
-            var resized = CompactPlacement.ResizeKeepingBottomRight(
+            var resized = CompactPlacement.ResizeForGlance(
                 new CompactRestOrigin(Position.X, Position.Y, currentWidth, currentHeight),
                 size.Width,
-                size.Height);
+                size.Height,
+                keepRestoredOrigin);
             _compactFrameOwnsPosition = true;
             Width = resized.Width;
             Height = resized.Height;

@@ -518,4 +518,42 @@ public sealed class WindowAnchorHelperTests
         Assert.Equal(2449, resolved.X);
         Assert.Equal(1166, resolved.Y);
     }
+
+    [Fact]
+    public void ResizeForGlance_keeps_the_restored_pin_origin_when_data_grows_the_pill()
+    {
+        // Pin saved at 1200,600 for a 93x122 pill; restore measures the 72x31 placeholder.
+        var restored = new CompactRestOrigin(1200, 600, 72, 31);
+
+        var resized = CompactPlacement.ResizeForGlance(restored, 93, 122, keepRestoredOrigin: true);
+
+        Assert.Equal(1200, resized.X);
+        Assert.Equal(600, resized.Y);
+        Assert.Equal(93, resized.Width);
+        Assert.Equal(122, resized.Height);
+    }
+
+    [Fact]
+    public void ResizeForGlance_keeps_the_bottom_right_after_the_restored_snapshot()
+    {
+        var rest = new CompactRestOrigin(1200, 600, 72, 31);
+
+        var resized = CompactPlacement.ResizeForGlance(rest, 93, 122, keepRestoredOrigin: false);
+
+        Assert.Equal(1179, resized.X);
+        Assert.Equal(509, resized.Y);
+        Assert.Equal(1200 + 72, resized.X + 93);
+        Assert.Equal(600 + 31, resized.Y + 122);
+    }
+
+    [Fact]
+    public void ResolveRestForTransition_collapse_keeps_pin_when_frame_is_pill_sized()
+    {
+        // Startup sizes the window to the pill before placing it at the pin, so collapse
+        // derives the same rest from the live frame's bottom-right.
+        var rest = CompactPlacement.ResolveRestForTransition(
+            goingFull: false, atCompactRest: true, 1200, 600, 1200, 600, 72, 31, 72, 31);
+
+        Assert.Equal((1200, 600), (rest.X, rest.Y));
+    }
 }
