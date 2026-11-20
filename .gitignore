@@ -11,3 +11,4 @@ _buildtest/
 "Deez Fuel Gauge.app/"
 Releases/deez-fuel-gauge-mac-Universal.zip
 scripts/__pycache__/
+.DS_Store
